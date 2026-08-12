@@ -1,0 +1,41 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "seed": "node src/seed.js",
+    "seed:bpharm2023": "node src/seed_bpharm_2023.js",
+    "fix:bpharm2024": "node src/fix_bpharm_2024.js",
+    "fix:bpharm:course": "node src/fix_bpharm_course.js",
+    "upload:photos": "node src/upload_bpharm_photos.js",
+    "cleanup:db": "node src/cleanup_db.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.9.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "moment": "^2.30.1",
+    "mongoose": "^9.3.0",
+    "morgan": "^1.10.1",
+    "multer": "^2.1.1",
+    "sharp": "^0.34.5",
+    "socket.io": "^4.8.3",
+    "streamifier": "^0.1.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
