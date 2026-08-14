@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, User, Mail, Phone, MapPin, Building2, Briefcase, Loader2, Calendar, FileText, Save, FileCheck2, Calculator, BarChart, Download, CreditCard, Receipt } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import IdCardModal, { IdCardFront } from "@/components/IdCardModal";
 
 export default function StudentDetailScreen() {
   const router = useRouter();
@@ -13,6 +14,7 @@ export default function StudentDetailScreen() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("Personal");
+  const [isIdModalOpen, setIsIdModalOpen] = useState(false);
   
   const [studentData, setStudentData] = useState<any>(null);
   const [branches, setBranches] = useState<any[]>([]);
@@ -78,7 +80,7 @@ export default function StudentDetailScreen() {
   const selectedCourse = courses.find(c => c._id === (typeof studentData.selectedProgram === 'object' ? studentData.selectedProgram?._id : studentData.selectedProgram));
   const selectedBranch = branches.find(b => b._id === (typeof studentData.selectedBranch === 'object' ? studentData.selectedBranch?._id : studentData.selectedBranch));
 
-  const tabs = ["Personal", "Academics", "Fees", "Documents", "Performance", "Administration"];
+  const tabs = ["Personal", "Academics", "Fees", "Documents", "Administration"];
 
   // Helper for rendering grids
   const InfoGrid = ({ title, data }: { title?: string, data: {label: string, value: string}[] }) => (
@@ -107,22 +109,16 @@ export default function StudentDetailScreen() {
             </button>
           </Link>
 
-          <div className="flex flex-col items-center text-center">
-            <div className="w-28 h-28 rounded-full border-4 border-white/20 bg-white/10 shadow-xl mb-6 flex items-center justify-center overflow-hidden">
-              {studentData.profilePhoto ? (
-                <img src={studentData.profilePhoto} alt="Avatar" className="w-full h-full object-cover" />
-              ) : (
-                <User className="w-12 h-12 text-white/50" />
-              )}
-            </div>
-            
-            <h1 className="text-xl font-black text-white tracking-tight leading-tight">
-              {studentData.firstName} {studentData.lastName}
-            </h1>
-            
-            <div className="mt-3 bg-white/10 px-4 py-1.5 rounded-full">
-              <p className="text-xs font-bold text-white/70">{studentData.admissionNumber || studentData.studentId || "NO ID"}</p>
-            </div>
+          <div className="flex flex-col items-center justify-center w-full transform scale-90 origin-top">
+            <IdCardFront
+              photoUrl={studentData.profilePhoto || studentData.documents?.studentPhoto || "/placeholder-avatar.jpg"}
+              fullName={`${studentData.firstName || ''} ${studentData.lastName || ''}`.trim()}
+              department={selectedCourse?.name || selectedBranch?.name || "N/A"}
+              designation="Student"
+              mobile={studentData.mobile || studentData.phone || "N/A"}
+              email={studentData.email || "N/A"}
+              address={[studentData.address, studentData.city, studentData.state].filter(Boolean).join(', ') || "N/A"}
+            />
           </div>
         </div>
 
@@ -146,7 +142,7 @@ export default function StudentDetailScreen() {
                 <User className="w-4 h-4" /> Edit Profile
               </button>
             </Link>
-            <button className="w-full py-3 bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex justify-center items-center gap-2 rounded-xl transition-all">
+            <button onClick={() => setIsIdModalOpen(true)} className="w-full py-3 bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex justify-center items-center gap-2 rounded-xl transition-all">
               <Download className="w-4 h-4" /> Print ID Card
             </button>
           </div>
@@ -326,9 +322,13 @@ export default function StudentDetailScreen() {
                   ].map(doc => {
                     const hasDoc = studentData.documents?.[doc.key];
                     return (
-                      <div key={doc.key} className={`p-6 rounded-[2rem] border-2 text-center transition-all ${
-                        hasDoc ? 'bg-emerald-50 border-emerald-500' : 'bg-white border-slate-100 hover:border-slate-200'
-                      }`}>
+                      <div 
+                        key={doc.key} 
+                        onClick={() => hasDoc && window.open(hasDoc, '_blank')}
+                        className={`p-6 rounded-[2rem] border-2 text-center transition-all ${
+                          hasDoc ? 'bg-emerald-50 border-emerald-500 cursor-pointer hover:bg-emerald-100 hover:shadow-md' : 'bg-white border-slate-100'
+                        }`}
+                      >
                         <div className={`w-12 h-12 mx-auto rounded-2xl flex items-center justify-center mb-4 ${
                           hasDoc ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-50 text-slate-400'
                         }`}>
@@ -393,6 +393,14 @@ export default function StudentDetailScreen() {
           </AnimatePresence>
         </div>
       </div>
+
+      <IdCardModal
+        isOpen={isIdModalOpen}
+        onClose={() => setIsIdModalOpen(false)}
+        studentData={studentData}
+        branchName={selectedBranch?.name}
+        courseName={selectedCourse?.name}
+      />
     </div>
   );
 }

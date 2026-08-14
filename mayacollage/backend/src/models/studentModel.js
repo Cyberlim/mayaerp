@@ -6,6 +6,7 @@ const studentSchema = new mongoose.Schema({
     admissionNumber: { type: String, unique: true, sparse: true },
     studentId: { type: String, unique: true, sparse: true },
     password: { type: String, required: true },
+    libraryPin: { type: String }, // Hashed 4-digit PIN for self-checkout
     applicationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Application' },
     
     // Personal Details
@@ -99,7 +100,7 @@ const studentSchema = new mongoose.Schema({
 });
 
 // Pre-save hook to hash password and calculate academic classification
-studentSchema.pre('save', async function(next) {
+studentSchema.pre('save', async function() {
     try {
         // Calculate Academic Classification Fields
         if (!this.admissionYear && this.sessionYear) {
@@ -111,10 +112,17 @@ studentSchema.pre('save', async function(next) {
             const course = await Course.findById(this.selectedProgram);
             
             if (course) {
+                const duration = course.duration || 4; // default to 4 years if not set
+                const endYear = parseInt(this.admissionYear) + duration;
+                const calculatedSession = `${this.admissionYear}-${endYear.toString().slice(-2)}`;
+                
                 if (!this.batch) {
-                    const duration = course.duration || 4; // default to 4 years if not set
-                    const endYear = parseInt(this.admissionYear) + duration;
-                    this.batch = `${this.admissionYear}-${endYear.toString().slice(-2)}`;
+                    this.batch = calculatedSession;
+                }
+                
+                // Automatically set sessionYear so it shows correctly in student app
+                if (!this.sessionYear) {
+                    this.sessionYear = calculatedSession;
                 }
             }
         }
@@ -124,24 +132,34 @@ studentSchema.pre('save', async function(next) {
         }
 
         // Hash Password
-        if (!this.isModified('password')) return next();
-        
-        // Guard against double-hashing: if password is already a bcrypt hash, skip
-        if (this.password && (this.password.startsWith('$2b$') || this.password.startsWith('$2a$'))) {
-            return next();
+        if (this.isModified('password') && this.password) {
+            if (!(this.password.startsWith('$2b$') || this.password.startsWith('$2a$'))) {
+                const salt = await bcrypt.genSalt(10);
+                this.password = await bcrypt.hash(this.password, salt);
+            }
         }
-        
-        const salt = await bcrypt.genSalt(10);
-        this.password = await bcrypt.hash(this.password, salt);
-        next();
+
+        // Hash Library PIN
+        if (this.isModified('libraryPin') && this.libraryPin) {
+            if (!(this.libraryPin.startsWith('$2b$') || this.libraryPin.startsWith('$2a$'))) {
+                const salt = await bcrypt.genSalt(10);
+                this.libraryPin = await bcrypt.hash(this.libraryPin, salt);
+            }
+        }
     } catch (err) {
-        next(err);
+        throw err;
     }
 });
 
 // Method to compare password for login
 studentSchema.methods.comparePassword = async function(candidatePassword) {
     return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Method to compare library pin
+studentSchema.methods.compareLibraryPin = async function(candidatePin) {
+    if (!this.libraryPin) return false;
+    return await bcrypt.compare(candidatePin, this.libraryPin);
 };
 
 export const Student = mongoose.model('Student', studentSchema);

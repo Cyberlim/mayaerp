@@ -5,30 +5,22 @@ import { IssueBook } from "@/models/IssueBook";
 
 export async function POST(req: Request) {
     try {
-        await connectDB();
         const body = await req.json();
-        const { issueId, otp } = body;
         
-        const issue = await IssueBook.findById(issueId);
+        // Proxy to Node.js backend where Socket.io is running
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000/api";
+        const response = await fetch(`${backendUrl}/library/verify`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body)
+        });
         
-        if (!issue) return NextResponse.json({ message: "Issue record not found" }, { status: 404 });
-        if (issue.isVerified) return NextResponse.json({ message: "Already verified" }, { status: 400 });
-        
-        if (issue.otp !== otp) {
-            return NextResponse.json({ message: "Invalid OTP" }, { status: 400 });
-        }
-        
-        issue.isVerified = true;
-        await issue.save();
-        
-        // Update book availability
-        await Book.findByIdAndUpdate(issue.book, { $inc: { available: -1 } });
-        
-        // Note: Socket emission is omitted in the Next.js API route implementation.
-        
-        return NextResponse.json({ message: "Book issued successfully and verified" }, { status: 200 });
+        const data = await response.json();
+        return NextResponse.json(data, { status: response.status });
     } catch (error: any) {
-        console.error("Library Verify POST Error:", error);
+        console.error("Library Verify Proxy Error:", error);
         return NextResponse.json({ message: "Verification error", error: error.message }, { status: 500 });
     }
 }

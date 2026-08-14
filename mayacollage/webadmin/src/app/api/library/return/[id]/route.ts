@@ -5,26 +5,21 @@ import { IssueBook } from "@/models/IssueBook";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
-        await connectDB();
         const { id } = await params;
         
-        const issue = await IssueBook.findById(id);
-        if (!issue || issue.status === 'Returned') {
-            return NextResponse.json({ message: "Invalid issue record" }, { status: 400 });
-        }
+        // Proxy to Node.js backend where Socket.io is running
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000/api";
+        const response = await fetch(`${backendUrl}/library/return/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
         
-        issue.status = 'Returned';
-        issue.returnDate = new Date();
-        await issue.save();
-        
-        // Update book availability
-        await Book.findByIdAndUpdate(issue.book, { $inc: { available: 1 } });
-        
-        // Note: Socket emission is omitted in the Next.js API route implementation.
-        
-        return NextResponse.json({ message: "Book returned successfully" }, { status: 200 });
+        const data = await response.json();
+        return NextResponse.json(data, { status: response.status });
     } catch (error: any) {
-        console.error("Library Return PUT Error:", error);
+        console.error("Library Return Proxy Error:", error);
         return NextResponse.json({ message: "Error returning book", error: error.message }, { status: 500 });
     }
 }

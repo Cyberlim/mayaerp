@@ -340,8 +340,29 @@ export default function CreateStudentPage() {
                     <input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} type="text" className="w-full mt-1 bg-slate-50 border border-slate-100 p-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm" placeholder="123 Student Avenue" />
                   </div>
                   <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Profile Photo URL</label>
-                    <input value={formData.profilePhoto} onChange={e => setFormData({...formData, profilePhoto: e.target.value})} type="url" className="w-full mt-1 bg-slate-50 border border-slate-100 p-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm" placeholder="https://example.com/avatar.jpg" />
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Profile Photo (Optional)</label>
+                    <div className="relative mt-1 flex items-center gap-4">
+                      {formData.profilePhoto && (
+                        <div className="w-14 h-14 shrink-0 rounded-full overflow-hidden border-2 border-white shadow-md bg-slate-100">
+                          <img src={formData.profilePhoto} alt="Profile Preview" className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                      <div className="relative flex-1">
+                        <input 
+                          type="file" 
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => setFormData({...formData, profilePhoto: reader.result as string});
+                              reader.readAsDataURL(file);
+                            }
+                          }} 
+                          className="w-full bg-slate-50 border border-slate-100 py-3 px-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-black file:bg-indigo-50 file:text-indigo-600 hover:file:bg-indigo-100 cursor-pointer" 
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </motion.div>

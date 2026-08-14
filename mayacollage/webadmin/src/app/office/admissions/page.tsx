@@ -18,6 +18,8 @@ export default function AdmissionsDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [courses, setCourses] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
+  const [studentStats, setStudentStats] = useState<any[]>([]);
+  const [selectedCourseFilter, setSelectedCourseFilter] = useState("All Courses");
   
   useEffect(() => {
     fetchData();
@@ -34,6 +36,7 @@ export default function AdmissionsDashboard() {
       const coursesData = await coursesRes.json();
       
       setApplications(Array.isArray(appsData.applications) ? appsData.applications : []);
+      setStudentStats(Array.isArray(appsData.studentCourseStats) ? appsData.studentCourseStats : []);
       setCourses(Array.isArray(coursesData) ? coursesData : []);
     } catch (e) {
       console.error(e);
@@ -43,26 +46,30 @@ export default function AdmissionsDashboard() {
   };
 
   // Calculations
-  const totalApps = applications.length;
-  const admittedApps = applications.filter(a => a.status === 'Approved' || a.status === 'Accepted').length;
-  const enrolledApps = applications.filter(a => a.status === 'Accepted').length;
+  const directEnrolledTotal = studentStats.reduce((sum, s) => sum + (s.filled || 0), 0);
+  const totalApps = applications.length + directEnrolledTotal;
+  const admittedApps = applications.filter(a => a.status === 'Approved' || a.status === 'Accepted').length + directEnrolledTotal;
+  const enrolledApps = applications.filter(a => a.status === 'Accepted').length + directEnrolledTotal;
   const pendingApps = applications.filter(a => a.status === 'Pending' || a.status === 'Reviewed').length;
   
   const totalSeats = courses.reduce((sum, c) => sum + (c.intakeCapacity || 0), 0) || 0;
   const vacantSeats = Math.max(0, totalSeats - enrolledApps);
 
   const courseRows = courses.map(c => {
-    const apps = applications.filter(a => a.selectedProgram === c.name);
+    const apps = applications.filter(a => a.selectedProgram === c.name || a.selectedProgram === c._id);
+    const stat = studentStats.find(s => s.name === c.name);
+    const directEnrolled = stat?.filled || 0;
+    
     const adm = apps.filter(a => a.status === 'Approved' || a.status === 'Accepted').length;
     const enr = apps.filter(a => a.status === 'Accepted').length;
     return {
       id: c._id,
       name: c.name,
       totalSeats: c.intakeCapacity || 0,
-      applications: apps.length,
-      admitted: adm,
-      enrolled: enr,
-      vacant: Math.max(0, (c.intakeCapacity || 0) - enr)
+      applications: apps.length + directEnrolled,
+      admitted: adm + directEnrolled,
+      enrolled: enr + directEnrolled,
+      vacant: Math.max(0, (c.intakeCapacity || 0) - (enr + directEnrolled))
     };
   });
 
@@ -143,9 +150,13 @@ export default function AdmissionsDashboard() {
           <div className="flex-1 md:w-64">
             <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 ml-1">Course / Branch</label>
             <div className="relative">
-              <select className="w-full pl-3 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none appearance-none cursor-pointer">
-                <option>All Courses</option>
-                {courses.map(c => <option key={c._id}>{c.name}</option>)}
+              <select 
+                value={selectedCourseFilter} 
+                onChange={(e) => setSelectedCourseFilter(e.target.value)}
+                className="w-full pl-3 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none appearance-none cursor-pointer"
+              >
+                <option value="All Courses">All Courses</option>
+                {courses.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             </div>
@@ -318,6 +329,80 @@ export default function AdmissionsDashboard() {
         </div>
         
       </div>
+
+      {/* Recent Applications Table */}
+      <div className="mt-6 bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col min-h-[400px]">
+        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+          <h3 className="font-bold text-slate-800 text-lg tracking-tight">Recent Applications</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm whitespace-nowrap">
+            <thead className="bg-slate-50/50">
+              <tr className="text-[11px] font-black uppercase tracking-widest text-slate-500">
+                <th className="px-6 py-4">Applicant Name</th>
+                <th className="px-6 py-4">Program</th>
+                <th className="px-6 py-4">Date Applied</th>
+                <th className="px-6 py-4 text-center">Status</th>
+                <th className="px-6 py-4 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {(() => {
+                const filtered = selectedCourseFilter === "All Courses" 
+                  ? applications 
+                  : applications.filter(a => {
+                      const course = courses.find(c => c._id === selectedCourseFilter);
+                      return a.selectedProgram === selectedCourseFilter || a.selectedProgram === course?.name;
+                    });
+                
+                if (filtered.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={5} className="text-center py-12 text-slate-400 font-medium">No applications found for this filter</td>
+                    </tr>
+                  );
+                }
+
+                return filtered.slice(0, 20).map((app, idx) => (
+                  <tr key={app._id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-6 py-4 font-bold text-slate-700 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-100 text-blue-600 text-xs font-black">
+                        {app.firstName?.substring(0,1)}{app.lastName?.substring(0,1)}
+                      </div>
+                      {app.firstName} {app.lastName}
+                    </td>
+                    <td className="px-6 py-4 font-semibold text-slate-600">
+                      {courses.find(c => c._id === app.selectedProgram)?.name || app.selectedProgram}
+                    </td>
+                    <td className="px-6 py-4 font-semibold text-slate-600">
+                      {app.createdAt ? new Date(app.createdAt).toLocaleDateString() : 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                        app.status === 'Approved' || app.status === 'Accepted' ? 'bg-emerald-100 text-emerald-700' :
+                        app.status === 'Rejected' ? 'bg-rose-100 text-rose-700' :
+                        'bg-amber-100 text-amber-700'
+                      }`}>
+                        {app.status || 'Pending'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <button 
+                        onClick={() => router.push(`/office/admissions/${app._id}`)}
+                        className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-400 hover:text-blue-600 transition-colors inline-flex"
+                        title="Review Application"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ));
+              })()}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
   );
 }

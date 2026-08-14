@@ -10,7 +10,9 @@ import {
   Briefcase,
   Users,
   BookOpen,
-  FlaskConical
+  FlaskConical,
+  LibraryBig,
+  Bus
 } from "lucide-react";
 
 const roles = [

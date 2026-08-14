@@ -3,6 +3,7 @@
 import AdminSidebar from "@/components/AdminSidebar";
 import { Bell, Search } from "lucide-react";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 
 export default function DashboardLayout({
   children,
@@ -10,6 +11,22 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const [userProfile, setUserProfile] = useState<{name: string, role: string, photo: string} | null>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.firstName) {
+          setUserProfile({
+            name: `${data.firstName} ${data.lastName}`,
+            role: data.role,
+            photo: data.profilePhoto || `https://ui-avatars.com/api/?name=${data.firstName}+${data.lastName}&background=f43f5e&color=fff`
+          });
+        }
+      })
+      .catch(err => console.error(err));
+  }, []);
   
   // Do not show sidebar and top header on specific full-screen pages
   const hideSidebarRoutes = [
@@ -54,11 +71,11 @@ export default function DashboardLayout({
             </button>
             <div className="flex items-center gap-3 pl-6 border-l border-slate-200 cursor-pointer group">
               <div className="w-10 h-10 rounded-full bg-slate-200 border-2 border-white shadow-sm overflow-hidden group-hover:ring-2 group-hover:ring-rose-500 transition-all">
-                <img src="https://ui-avatars.com/api/?name=Admin+User&background=f43f5e&color=fff" alt="Profile" />
+                <img src={userProfile?.photo || "https://ui-avatars.com/api/?name=Admin+User&background=f43f5e&color=fff"} alt="Profile" />
               </div>
               <div className="hidden sm:block">
-                <p className="text-sm font-bold text-slate-800 leading-tight">Admin User</p>
-                <p className="text-xs font-semibold text-slate-500">Super Admin</p>
+                <p className="text-sm font-bold text-slate-800 leading-tight">{userProfile?.name || "Admin User"}</p>
+                <p className="text-xs font-semibold text-slate-500">{userProfile?.role || "Super Admin"}</p>
               </div>
             </div>
           </div>

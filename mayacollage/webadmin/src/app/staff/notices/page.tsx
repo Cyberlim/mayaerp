@@ -110,7 +110,7 @@ export default function StaffNoticesScreen() {
                 {/* Left side: Pill and Date */}
                 <div className="flex items-center gap-3 w-48 shrink-0">
                   <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${activeTab === 'inbox' ? 'bg-indigo-50 text-indigo-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                    {activeTab === 'inbox' ? 'From Admin' : 'Sent by You'}
+                    {activeTab === 'inbox' ? (notice.author?.role ? `From ${notice.author.role}` : 'Received') : 'Sent by You'}
                   </span>
                   <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
                     <CalendarIcon className="w-3.5 h-3.5" />
@@ -129,7 +129,7 @@ export default function StaffNoticesScreen() {
                     {activeTab === 'inbox' ? 'Issued By' : 'Target Audience'}
                   </p>
                   <p className="text-xs font-bold text-slate-700 truncate">
-                    {activeTab === 'inbox' ? (notice.author ? `${notice.author.firstName} ${notice.author.lastName}` : 'Admin') : notice.targetClass}
+                    {activeTab === 'inbox' ? (notice.author ? (notice.author.role && !['staff', 'faculty', 'student'].includes(notice.author.role.toLowerCase()) ? notice.author.role.toUpperCase() : `${notice.author.firstName} ${notice.author.lastName}`) : 'ADMIN') : notice.targetClass}
                   </p>
                 </div>
               </div>

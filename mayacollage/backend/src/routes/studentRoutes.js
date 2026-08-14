@@ -16,10 +16,15 @@ import {
 const router = express.Router();
 
 const studentDocsUpload = upload.fields([
+    { name: 'studentPhoto', maxCount: 1 },
     { name: 'aadharCard', maxCount: 1 },
     { name: 'marksheet10', maxCount: 1 },
     { name: 'marksheet12', maxCount: 1 },
-    { name: 'casteCertificate', maxCount: 1 }
+    { name: 'transferCertificate', maxCount: 1 },
+    { name: 'casteCertificate', maxCount: 1 },
+    { name: 'migrationCertificate', maxCount: 1 },
+    { name: 'entranceScoreCard', maxCount: 1 },
+    { name: 'otherDocument', maxCount: 1 }
 ]);
 
 router.post('/', createStudent);

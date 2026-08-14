@@ -30,7 +30,7 @@ const menuItems = [
   { section: "ACADEMICS", items: [
     { name: "Courses", path: "/dashboard/academics", icon: BookOpen },
     { name: "Time Table", path: "/dashboard/academics/timetable", icon: Calendar },
-    { name: "Lab Portal", path: "/lab", icon: Beaker },
+    { name: "Lab Portal", path: "/dashboard/lab", icon: Beaker },
     { name: "Attendance", path: "/dashboard/academics/attendance", icon: CheckSquare },
     { name: "Exams", path: "/dashboard/exams", icon: FileText },
   ]},

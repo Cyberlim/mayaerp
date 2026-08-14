@@ -31,11 +31,13 @@ export async function GET(req: Request) {
         const sentNotices: any[] = [];
 
         for (const n of allNotices) {
-            if (n.author?._id?.toString() === staffId) {
+            // Only put it in 'sentNotices' if the user actually sent it AS a Staff member
+            // (If an Admin tests the staff page, their Admin notices should appear in the inbox, not sent)
+            if (n.author?._id?.toString() === staffId && n.author?.role !== 'Admin' && n.author?.role !== 'Super Admin' && n.author?.role !== 'Office') {
                 sentNotices.push(n);
             } else {
-                // If it's sent by admin, or targeted to Staff/All
-                if (n.author?.role === 'Admin' || n.author?.role === 'Super Admin' || ['Staff', 'All Staff', 'All'].includes(n.targetClass || 'All')) {
+                // If it's sent by admin, office, super admin, or targeted to Staff/All
+                if (n.author?.role === 'Admin' || n.author?.role === 'Super Admin' || n.author?.role === 'Office' || ['Staff', 'All Staff', 'All'].includes(n.targetClass || 'All')) {
                     inboxNotices.push(n);
                 }
             }
@@ -50,7 +52,6 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
     try {
-        await connectDB();
         const cookieStore = await cookies();
         const tokenCookie = cookieStore.get('auth_token');
         if (!tokenCookie || !tokenCookie.value) {
@@ -62,19 +63,27 @@ export async function POST(req: Request) {
         const body = await req.json();
         const { title, description, targetClass, courseId, branchId } = body;
 
-        const newNotice = new Notice({
-            title,
-            description,
-            targetClass: targetClass || 'My Class',
-            courseId: courseId || null,
-            branchId: branchId || null,
-            author: staffId,
+        // Proxy to Node.js backend where Socket.io is running
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000/api";
+        const response = await fetch(`${backendUrl}/notices/create`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                title,
+                description,
+                targetClass: targetClass || 'My Class',
+                courseId: courseId || null,
+                branchId: branchId || null,
+                author: staffId,
+            })
         });
 
-        await newNotice.save();
-        return NextResponse.json({ success: true, notice: newNotice });
+        const data = await response.json();
+        return NextResponse.json({ success: true, notice: data });
     } catch (error) {
-        console.error("Notices API POST Error:", error);
+        console.error("Notices API POST Proxy Error:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
 }

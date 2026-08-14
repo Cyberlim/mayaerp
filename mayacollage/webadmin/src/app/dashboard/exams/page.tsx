@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Plus, Save, Trash2, Calendar, Clock, BookOpen, AlertCircle } from "lucide-react";
+import { Plus, Save, Trash2, Calendar, Clock, BookOpen, AlertCircle, Edit } from "lucide-react";
 
 export default function ExamsDashboard() {
   const [branches, setBranches] = useState<any[]>([]);
@@ -16,6 +16,7 @@ export default function ExamsDashboard() {
   const [examName, setExamName] = useState("");
   
   const [dateSheet, setDateSheet] = useState<any[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
   
   useEffect(() => {
     fetch("/api/branches").then(res => res.json()).then(setBranches);
@@ -43,9 +44,11 @@ export default function ExamsDashboard() {
   }, [selectedBranch, selectedCourse]);
 
   const fetchExams = async () => {
-    if (!selectedBranch || !selectedCourse) return;
     try {
-      const res = await fetch(`/api/exams?branchId=${selectedBranch}&courseId=${selectedCourse}`);
+      let url = `/api/exams?t=${Date.now()}`;
+      if (selectedBranch) url += `&branchId=${selectedBranch}`;
+      if (selectedCourse) url += `&courseId=${selectedCourse}`;
+      const res = await fetch(url);
       setExams(await res.json());
     } catch (e) {}
   };
@@ -88,8 +91,10 @@ export default function ExamsDashboard() {
     }
 
     try {
-      const res = await fetch("/api/exams", {
-        method: "POST",
+      const url = editingId ? `/api/exams?id=${editingId}` : "/api/exams";
+      const method = editingId ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           branchId: selectedBranch,
@@ -100,6 +105,7 @@ export default function ExamsDashboard() {
       });
       if (res.ok) {
         setIsCreating(false);
+        setEditingId(null);
         setExamName("");
         setDateSheet([]);
         fetchExams();
@@ -107,6 +113,15 @@ export default function ExamsDashboard() {
     } catch (e) {
       alert("Error saving exam");
     }
+  };
+
+  const handleEditExam = (exam: any) => {
+    setSelectedBranch(exam.branchId?._id || exam.branchId || "");
+    setSelectedCourse(exam.courseId?._id || exam.courseId || "");
+    setEditingId(exam._id);
+    setExamName(exam.examName);
+    setDateSheet(exam.dateSheet || []);
+    setIsCreating(true);
   };
 
   const handleDeleteExam = async (id: string) => {
@@ -144,17 +159,11 @@ export default function ExamsDashboard() {
         </div>
       </div>
 
-      {!selectedBranch || !selectedCourse ? (
-        <div className="bg-white rounded-[2rem] border border-slate-100 p-20 flex flex-col items-center justify-center text-center">
-          <Calendar className="w-16 h-16 text-slate-200 mb-4" />
-          <h3 className="text-xl font-bold text-slate-400">Select a Branch and Course</h3>
-          <p className="text-slate-400 mt-2">To view or create exam schedules.</p>
-        </div>
-      ) : isCreating ? (
+      {isCreating ? (
         <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-8">
           <div className="flex items-center justify-between mb-8">
-            <h2 className="text-2xl font-black text-slate-800">Create Date Sheet</h2>
-            <button onClick={() => setIsCreating(false)} className="text-slate-400 hover:text-slate-600 font-bold text-sm">Cancel</button>
+            <h2 className="text-2xl font-black text-slate-800">{editingId ? 'Edit Date Sheet' : 'Create Date Sheet'}</h2>
+            <button onClick={() => { setIsCreating(false); setEditingId(null); }} className="text-slate-400 hover:text-slate-600 font-bold text-sm">Cancel</button>
           </div>
 
           <div className="mb-8">
@@ -192,10 +201,7 @@ export default function ExamsDashboard() {
                         <input type="text" readOnly value={row.day} className="w-24 bg-transparent p-2 text-xs font-semibold text-slate-500 outline-none" placeholder="Day" />
                       </td>
                       <td className="p-3">
-                        <select value={row.subject} onChange={e=>handleRowChange(index, 'subject', e.target.value)} className="w-full bg-slate-50 border border-slate-200 p-2 rounded-lg text-xs font-bold outline-none">
-                          <option value="">Select Subject</option>
-                          {subjects.map(s => <option key={s._id} value={s.subjectName}>{s.subjectName}</option>)}
-                        </select>
+                        <input type="text" placeholder="Enter Subject Name" value={row.subject} onChange={e=>handleRowChange(index, 'subject', e.target.value)} className="w-full bg-slate-50 border border-slate-200 p-2 rounded-lg text-xs font-bold outline-none" />
                       </td>
                       <td className="p-3 flex items-center gap-1">
                         <input type="time" value={row.startTime} onChange={e=>handleRowChange(index, 'startTime', e.target.value)} className="w-24 bg-slate-50 border border-slate-200 p-2 rounded-lg text-xs font-bold outline-none" />
@@ -238,7 +244,10 @@ export default function ExamsDashboard() {
               <h3 className="font-black text-blue-900 text-lg">Manage Exam Schedules</h3>
               <p className="text-sm text-blue-700 font-medium mt-1">Create and publish date sheets for this course.</p>
             </div>
-            <button onClick={() => { setIsCreating(true); setDateSheet([]); setExamName(""); }} className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-colors flex items-center gap-2">
+            <button onClick={() => { 
+              if (!selectedBranch || !selectedCourse) return alert("Please select a Branch and Course first to create an exam.");
+              setIsCreating(true); setEditingId(null); setDateSheet([]); setExamName(""); 
+            }} className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-colors flex items-center gap-2">
               <Plus className="w-5 h-5" /> Create New Exam
             </button>
           </div>
@@ -254,9 +263,16 @@ export default function ExamsDashboard() {
               {exams.map(exam => (
                 <div key={exam._id} className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
                   <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                    <h3 className="text-xl font-black text-slate-800">{exam.examName}</h3>
+                    <div>
+                      <h3 className="text-xl font-black text-slate-800">{exam.examName}</h3>
+                      <div className="flex gap-2 mt-1">
+                        {exam.branchId && <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[10px] font-bold tracking-wider uppercase">{exam.branchId.name}</span>}
+                        {exam.courseId && <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold tracking-wider uppercase">{exam.courseId.name}</span>}
+                      </div>
+                    </div>
                     <div className="flex gap-2">
                       <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-black uppercase tracking-wider">{exam.status}</span>
+                      <button onClick={() => handleEditExam(exam)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
                       <button onClick={() => handleDeleteExam(exam._id)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </div>

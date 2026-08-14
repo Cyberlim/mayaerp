@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { GraduationCap, Search, Plus, UserCircle, Trash2, Shield, Loader2, CheckCircle2, Eye, UploadCloud, X } from "lucide-react";
+import { GraduationCap, Search, Plus, UserCircle, Trash2, Shield, Loader2, CheckCircle2, Eye, UploadCloud, X, Building2, Key, Lock, Edit } from "lucide-react";
 import Link from "next/link";
 
 export default function StudentManagementDashboard() {
@@ -19,6 +19,10 @@ export default function StudentManagementDashboard() {
   const [filterSemester, setFilterSemester] = useState("All");
   const [filterSection, setFilterSection] = useState("All");
   const [toastMsg, setToastMsg] = useState("");
+
+  const [passwordModal, setPasswordModal] = useState<{isOpen: boolean, studentId: string, name: string}>({isOpen: false, studentId: "", name: ""});
+  const [newPassword, setNewPassword] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Batch update dialog state
   const [showBatchDialog, setShowBatchDialog] = useState(false);
@@ -70,6 +74,38 @@ export default function StudentManagementDashboard() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassword || newPassword.length < 6) {
+      alert("Password must be at least 6 characters long");
+      return;
+    }
+    
+    setIsChangingPassword(true);
+    try {
+      const res = await fetch(`/api/students/${passwordModal.studentId}/change-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPassword }),
+      });
+      
+      if (res.ok) {
+        setToastMsg("Password updated successfully!");
+        setPasswordModal({ isOpen: false, studentId: "", name: "" });
+        setNewPassword("");
+        setTimeout(() => setToastMsg(""), 3000);
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to update password");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("An error occurred while updating the password");
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -262,7 +298,7 @@ export default function StudentManagementDashboard() {
               <UploadCloud className="w-4 h-4" /> Batch Promote
             </button>
 
-            <Link href="/dashboard/students/create">
+            <Link href="/admissions/new">
               <button className="w-full sm:w-auto flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-500 to-blue-500 text-white font-black rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:shadow-indigo-500/40 hover:-translate-y-0.5 transition-all">
                 <Plus className="w-4 h-4" /> Enroll Student
               </button>
@@ -375,69 +411,133 @@ export default function StudentManagementDashboard() {
             <p className="text-sm text-slate-500 font-medium mt-2">No profiles match your current filters.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            <AnimatePresence>
-              {filteredStudents.map((student, idx) => (
-                <motion.div 
-                  key={student._id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.2 }}
-                  className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden group hover:shadow-xl hover:shadow-slate-200/50 hover:border-indigo-100 transition-all flex flex-col"
-                >
-                  <div className="h-24 bg-gradient-to-r from-indigo-50 to-blue-50 group-hover:from-indigo-100 group-hover:to-blue-100 transition-colors relative">
-                    <div className="absolute top-4 right-4 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full border border-white/40 shadow-sm">
-                      <span className={`text-[9px] font-black uppercase tracking-wider ${student.studentStatus === 'Active' || student.status === 'Active' ? 'text-emerald-600' : 'text-amber-500'}`}>
-                        {student.studentStatus || student.status || 'Active'}
-                      </span>
+          <div className="space-y-16">
+            {Object.entries(
+              filteredStudents.reduce((acc, student) => {
+                const bid = typeof student.selectedBranch === 'object' ? student.selectedBranch?._id : student.selectedBranch;
+                const branchId = bid || 'unassigned_branch';
+                
+                const pid = typeof student.selectedProgram === 'object' ? student.selectedProgram?._id : student.selectedProgram;
+                const courseId = pid || 'unassigned_course';
+                
+                if (!acc[branchId]) acc[branchId] = {};
+                if (!acc[branchId][courseId]) acc[branchId][courseId] = [];
+                acc[branchId][courseId].push(student);
+                return acc;
+              }, {} as Record<string, Record<string, any[]>>)
+            ).map(([branchId, branchCourses]: [string, any]) => {
+              const branchName = branchId === 'unassigned_branch' ? 'Unassigned Branch' : (branches.find(b => b._id === branchId)?.name || 'Unknown Branch');
+              
+              return (
+                <div key={branchId} className="bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-sm">
+                  <div className="flex items-center gap-4 mb-8 pb-4 border-b-2 border-slate-100">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center shadow-lg shadow-slate-900/20">
+                      <Building2 className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h1 className="text-2xl font-black text-slate-900 tracking-tight">{branchName}</h1>
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Branch Overview</p>
                     </div>
                   </div>
-                  
-                  <div className="px-6 pb-6 flex-1 flex flex-col relative -mt-12">
-                    <div className="w-24 h-24 rounded-full border-4 border-white bg-slate-100 shadow-md overflow-hidden mb-4 mx-auto flex items-center justify-center">
-                      {student.profilePhoto ? (
-                        <img src={student.profilePhoto} alt={student.firstName} className="w-full h-full object-cover" />
-                      ) : (
-                        <UserCircle className="w-12 h-12 text-slate-300" />
-                      )}
-                    </div>
-                    
-                    <div className="text-center mb-6">
-                      <h3 className="text-lg font-black text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-1">
-                        {student.firstName} {student.lastName}
-                      </h3>
-                      <p className="text-xs font-bold text-slate-400 mt-1 line-clamp-1">{student.studentId || "No ID"}</p>
-                      {student.batch && (
-                        <div className="mt-3 inline-block px-3 py-1 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600 uppercase tracking-widest mr-2">
-                          Batch {student.batch}
-                        </div>
-                      )}
-                      {student.selectedSemester && (
-                        <div className="mt-3 inline-block px-3 py-1 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600 uppercase tracking-widest">
-                          Sem {student.selectedSemester} {student.selectedSection ? `| ${student.selectedSection}` : ''}
-                        </div>
-                      )}
-                    </div>
 
-                    <div className="mt-auto grid grid-cols-2 gap-3 pt-6 border-t border-slate-50">
-                      <Link href={`/dashboard/students/${student._id}`}>
-                        <button className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-xs rounded-xl transition-colors border border-transparent">
-                          <Eye className="w-4 h-4" /> View Details
-                        </button>
-                      </Link>
-                      <button 
-                        onClick={() => handleDelete(student._id, `${student.firstName} ${student.lastName}`)}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-50 hover:bg-rose-50 text-slate-600 hover:text-rose-600 font-bold text-xs rounded-xl transition-colors border border-transparent"
-                      >
-                        <Trash2 className="w-4 h-4" /> Delete
-                      </button>
-                    </div>
+                  <div className="space-y-12 pl-2 md:pl-6 border-l-2 border-slate-100/50">
+                    {Object.entries(branchCourses).map(([courseId, groupStudents]: [string, any]) => {
+                      const courseName = courseId === 'unassigned_course' ? 'Unassigned Course' : (courses.find(c => c._id === courseId)?.name || 'Unknown Course');
+                      
+                      return (
+                        <div key={courseId} className="relative">
+                          <div className="absolute -left-[1.65rem] md:-left-[1.95rem] top-3 w-3 h-3 bg-indigo-500 rounded-full border-4 border-white shadow-sm"></div>
+                          
+                          <div className="flex items-center gap-3 mb-6">
+                            <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
+                              <GraduationCap className="w-4 h-4 text-indigo-600" />
+                            </div>
+                            <h2 className="text-xl font-black text-slate-800 tracking-tight">{courseName}</h2>
+                            <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-wider">{groupStudents.length} Students</span>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            <AnimatePresence>
+                              {groupStudents.map((student: any) => (
+                                <motion.div 
+                                  key={student._id}
+                                  layout
+                                  initial={{ opacity: 0, scale: 0.95 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.9 }}
+                                  transition={{ duration: 0.2 }}
+                                  className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden group hover:shadow-xl hover:shadow-slate-200/50 hover:border-indigo-100 transition-all flex flex-col"
+                                >
+                                  <div className="h-24 bg-gradient-to-r from-indigo-50 to-blue-50 group-hover:from-indigo-100 group-hover:to-blue-100 transition-colors relative">
+                                    <div className="absolute top-4 right-4 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full border border-white/40 shadow-sm">
+                                      <span className={`text-[9px] font-black uppercase tracking-wider ${student.studentStatus === 'Active' || student.status === 'Active' ? 'text-emerald-600' : 'text-amber-500'}`}>
+                                        {student.studentStatus || student.status || 'Active'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="px-6 pb-6 flex-1 flex flex-col relative -mt-12">
+                                    <div className="w-24 h-24 rounded-full border-4 border-white bg-slate-100 shadow-md overflow-hidden mb-4 mx-auto flex items-center justify-center">
+                                      {student.profilePhoto ? (
+                                        <img src={student.profilePhoto} alt={student.firstName} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <UserCircle className="w-12 h-12 text-slate-300" />
+                                      )}
+                                    </div>
+                                    
+                                    <div className="text-center mb-6">
+                                      <h3 className="text-lg font-black text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-1">
+                                        {student.firstName} {student.lastName}
+                                      </h3>
+                                      <p className="text-xs font-bold text-slate-400 mt-1 line-clamp-1">{student.studentId || "No ID"}</p>
+                                      {student.batch && (
+                                        <div className="mt-3 inline-block px-3 py-1 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600 uppercase tracking-widest mr-2">
+                                          Batch {student.batch}
+                                        </div>
+                                      )}
+                                      {student.selectedSemester && (
+                                        <div className="mt-3 inline-block px-3 py-1 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+                                          Sem {student.selectedSemester} {student.selectedSection ? `| ${student.selectedSection}` : ''}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    <div className="mt-auto grid grid-cols-2 gap-3 pt-6 border-t border-slate-50">
+                                      <Link href={`/dashboard/students/${student._id}`}>
+                                        <button className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-xs rounded-xl transition-colors border border-transparent">
+                                          <Eye className="w-4 h-4" /> View
+                                        </button>
+                                      </Link>
+                                      <Link href={`/dashboard/students/${student._id}/edit`}>
+                                        <button className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-bold text-xs rounded-xl transition-colors border border-transparent">
+                                          <Edit className="w-4 h-4" /> Edit
+                                        </button>
+                                      </Link>
+                                      <button 
+                                        onClick={() => setPasswordModal({ isOpen: true, studentId: student._id, name: `${student.firstName} ${student.lastName}` })}
+                                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-600 font-bold text-xs rounded-xl transition-colors border border-transparent hover:border-amber-200"
+                                      >
+                                        <Key className="w-4 h-4" /> Password
+                                      </button>
+                                      <button 
+                                        onClick={() => handleDelete(student._id, `${student.firstName} ${student.lastName}`)}
+                                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-50 hover:bg-rose-50 text-slate-600 hover:text-rose-600 font-bold text-xs rounded-xl transition-colors border border-transparent"
+                                      >
+                                        <Trash2 className="w-4 h-4" /> Delete
+                                      </button>
+                                    </div>
+                                  </div>
+                                </motion.div>
+                              ))}
+                            </AnimatePresence>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -525,6 +625,77 @@ export default function StudentManagementDashboard() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Change Password Modal */}
+      <AnimatePresence>
+        {passwordModal.isOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                  <Key className="w-5 h-5 text-amber-500" />
+                  Change Password
+                </h3>
+                <button 
+                  onClick={() => setPasswordModal({ isOpen: false, studentId: "", name: "" })}
+                  className="w-8 h-8 flex items-center justify-center bg-white rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors shadow-sm"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              
+              <form onSubmit={handlePasswordChange} className="p-6 space-y-5">
+                <div>
+                  <p className="text-sm font-bold text-slate-500 mb-4">
+                    Setting new password for <span className="text-indigo-600">{passwordModal.name}</span>
+                  </p>
+                  
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">New Password</label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <Lock className="h-4 w-4 text-slate-400" />
+                      </div>
+                      <input 
+                        type="text"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 focus:border-amber-500 rounded-xl outline-none transition-all text-slate-700 font-medium"
+                        placeholder="Enter new password"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4 border-t border-slate-100">
+                  <button 
+                    type="button"
+                    onClick={() => setPasswordModal({ isOpen: false, studentId: "", name: "" })}
+                    className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit"
+                    disabled={isChangingPassword}
+                    className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-colors flex items-center justify-center disabled:opacity-70"
+                  >
+                    {isChangingPassword ? <Loader2 className="w-5 h-5 animate-spin" /> : "Update Password"}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }

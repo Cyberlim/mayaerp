@@ -11,7 +11,8 @@ export default function BookCatalog() {
   const [books, setBooks] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingBook, setEditingBook] = useState<any>(null);
 
   useEffect(() => {
     fetchBooks();
@@ -60,7 +61,10 @@ export default function BookCatalog() {
             />
           </div>
           <button 
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={() => {
+              setEditingBook(null);
+              setIsModalOpen(true);
+            }}
             className="flex-shrink-0 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl shadow-lg shadow-violet-500/30 transition-all flex items-center gap-2 text-sm"
           >
             <Plus className="w-4 h-4" /> Add Book
@@ -83,7 +87,14 @@ export default function BookCatalog() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             <AnimatePresence>
               {filteredBooks.map((book) => (
-                <BookCard key={book._id} book={book} />
+                <BookCard 
+                  key={book._id} 
+                  book={book} 
+                  onEdit={() => {
+                    setEditingBook(book);
+                    setIsModalOpen(true);
+                  }}
+                />
               ))}
             </AnimatePresence>
           </div>
@@ -91,18 +102,23 @@ export default function BookCatalog() {
       </div>
 
       <AddBookModal 
-        isOpen={isAddModalOpen} 
-        onClose={() => setIsAddModalOpen(false)} 
+        isOpen={isModalOpen} 
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingBook(null);
+        }} 
         onSuccess={() => {
-          setIsAddModalOpen(false);
+          setIsModalOpen(false);
+          setEditingBook(null);
           fetchBooks();
         }}
+        initialData={editingBook}
       />
     </div>
   );
 }
 
-function BookCard({ book }: { book: any }) {
+function BookCard({ book, onEdit }: { book: any, onEdit: () => void }) {
   return (
     <motion.div 
       initial={{ opacity: 0, scale: 0.95 }}
@@ -114,8 +130,8 @@ function BookCard({ book }: { book: any }) {
         <div className="w-12 h-16 bg-slate-100 rounded border border-slate-200 flex items-center justify-center text-slate-400 shrink-0 shadow-inner">
           <BookOpen className="w-6 h-6" />
         </div>
-        <button className="text-slate-400 hover:text-slate-700 p-1">
-          <MoreVertical className="w-5 h-5" />
+        <button onClick={onEdit} className="text-slate-400 hover:text-violet-600 p-1 transition-colors">
+          <Edit className="w-4 h-4" />
         </button>
       </div>
       
@@ -156,20 +172,38 @@ function BookCard({ book }: { book: any }) {
   );
 }
 
-function AddBookModal({ isOpen, onClose, onSuccess }: any) {
+function AddBookModal({ isOpen, onClose, onSuccess, initialData }: any) {
   const [formData, setFormData] = useState({
     title: "", author: "", isbn: "", category: "General", total: 1, shelf: ""
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        title: initialData.title || "",
+        author: initialData.author || "",
+        isbn: initialData.isbn || "",
+        category: initialData.category || "General",
+        total: initialData.total || 1,
+        shelf: initialData.shelf || ""
+      });
+    } else {
+      setFormData({
+        title: "", author: "", isbn: "", category: "General", total: 1, shelf: ""
+      });
+    }
+  }, [initialData, isOpen]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
+      const isEdit = !!initialData;
       const res = await fetch("/api/library/books", {
-        method: "POST",
+        method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(isEdit ? { ...formData, _id: initialData._id } : formData)
       });
       if (res.ok) onSuccess();
     } catch (err) {
@@ -190,7 +224,7 @@ function AddBookModal({ isOpen, onClose, onSuccess }: any) {
       >
         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
           <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-            <Library className="text-violet-600 w-5 h-5" /> Add New Book
+            <Library className="text-violet-600 w-5 h-5" /> {initialData ? 'Edit Book' : 'Add New Book'}
           </h2>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
             <X className="w-5 h-5" />
@@ -241,8 +275,8 @@ function AddBookModal({ isOpen, onClose, onSuccess }: any) {
             Cancel
           </button>
           <button type="submit" form="addBookForm" disabled={isSubmitting} className="px-6 py-2.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl shadow-lg shadow-violet-500/30 transition-all flex items-center gap-2 disabled:opacity-70">
-            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Save Book
+            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : (initialData ? <Edit className="w-4 h-4" /> : <Plus className="w-4 h-4" />)}
+            {initialData ? 'Update Book' : 'Save Book'}
           </button>
         </div>
       </motion.div>

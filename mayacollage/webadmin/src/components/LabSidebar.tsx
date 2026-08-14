@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
   Settings,
@@ -13,6 +14,22 @@ import {
 
 export default function LabSidebar() {
   const pathname = usePathname();
+  const [userProfile, setUserProfile] = useState<{name: string, role: string, photo: string} | null>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.firstName) {
+          setUserProfile({
+            name: `${data.firstName} ${data.lastName}`,
+            role: data.role,
+            photo: data.profilePhoto || `https://ui-avatars.com/api/?name=${data.firstName}+${data.lastName}&background=3b82f6&color=fff`
+          });
+        }
+      })
+      .catch(err => console.error(err));
+  }, []);
 
   const menuItems = [
     {
@@ -39,6 +56,15 @@ export default function LabSidebar() {
           <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain bg-white rounded-lg p-0.5 shadow-sm shrink-0" />
           Lab Portal
         </span>
+      </div>
+
+      {/* User Profile display */}
+      <div className="px-6 py-4 border-b border-slate-800 flex items-center gap-3">
+        <img src={userProfile?.photo || "https://ui-avatars.com/api/?name=Lab+Assistant&background=3b82f6&color=fff"} alt="Profile" className="w-10 h-10 rounded-full" />
+        <div>
+          <p className="text-sm font-bold text-white">{userProfile?.name || "Lab Assistant"}</p>
+          <p className="text-xs text-slate-400">{userProfile?.role || "Lab"}</p>
+        </div>
       </div>
 
       <div className="flex-1 py-6 px-4 overflow-y-auto custom-scrollbar flex flex-col gap-1">

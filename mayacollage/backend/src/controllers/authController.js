@@ -55,8 +55,51 @@ export const studentLogin = async (req, res) => {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
-        const isMatch = await bcrypt.compare(password, student.password);
-        console.log('Password match:', isMatch);
+        // Generate password candidates to handle inconsistent DOB formats
+        const passwordCandidates = [password];
+        
+        const cleanPassword = password.trim();
+        if (cleanPassword !== password) {
+            passwordCandidates.push(cleanPassword);
+        }
+        
+        if (/^\d{8}$/.test(cleanPassword)) {
+            // DDMMYYYY
+            const dd = cleanPassword.substring(0, 2);
+            const mm = cleanPassword.substring(2, 4);
+            const yyyy = cleanPassword.substring(4, 8);
+            passwordCandidates.push(`${dd}/${mm}/${yyyy}`);
+            passwordCandidates.push(`${dd}-${mm}-${yyyy}`);
+            
+            // YYYYMMDD
+            const y4 = cleanPassword.substring(0, 4);
+            const m2 = cleanPassword.substring(4, 6);
+            const d2 = cleanPassword.substring(6, 8);
+            passwordCandidates.push(`${y4}-${m2}-${d2}`);
+            passwordCandidates.push(`${d2}/${m2}/${y4}`);
+        }
+        
+        if (cleanPassword.includes('/')) {
+            passwordCandidates.push(cleanPassword.replace(/\//g, ''));
+            passwordCandidates.push(cleanPassword.replace(/\//g, '-'));
+        }
+        
+        if (cleanPassword.includes('-')) {
+            passwordCandidates.push(cleanPassword.replace(/-/g, ''));
+            passwordCandidates.push(cleanPassword.replace(/-/g, '/'));
+        }
+        
+        const uniqueCandidates = [...new Set(passwordCandidates)];
+        console.log('Password candidates to check:', uniqueCandidates);
+        
+        let isMatch = false;
+        for (const candidate of uniqueCandidates) {
+            if (await bcrypt.compare(candidate, student.password)) {
+                isMatch = true;
+                break;
+            }
+        }
+        console.log('Password match status:', isMatch);
 
         if (isMatch) {
             const { password, ...studentData } = student.toObject();

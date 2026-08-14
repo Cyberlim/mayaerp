@@ -306,10 +306,10 @@ export const updateStudentDocuments = async (req, res) => {
             return res.status(400).json({ message: 'documents object is required' });
         }
 
-        // Build a $set map only for non-null document fields
+        // Build a $set map, allowing null or empty strings for deletion
         const docSet = {};
         for (const [key, url] of Object.entries(documents)) {
-            if (url) docSet[`documents.${key}`] = url;
+            docSet[`documents.${key}`] = url;
         }
 
         const student = await Student.findByIdAndUpdate(

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { GraduationCap, Search, Plus, UserCircle, Trash2, Shield, Loader2, CheckCircle2, Eye, UploadCloud, X } from "lucide-react";
+import { GraduationCap, Search, Plus, UserCircle, Trash2, Shield, Loader2, CheckCircle2, Eye, UploadCloud, X, Edit } from "lucide-react";
 import Link from "next/link";
 
 export default function StudentManagementDashboard() {
@@ -262,7 +262,7 @@ export default function StudentManagementDashboard() {
               <UploadCloud className="w-4 h-4" /> Batch Promote
             </button>
 
-            <Link href="/office/students/create">
+            <Link href="/admissions/new">
               <button className="w-full sm:w-auto flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-500 to-blue-500 text-white font-black rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:shadow-indigo-500/40 hover:-translate-y-0.5 transition-all">
                 <Plus className="w-4 h-4" /> Enroll Student
               </button>
@@ -421,17 +421,22 @@ export default function StudentManagementDashboard() {
                       )}
                     </div>
 
-                    <div className="mt-auto grid grid-cols-2 gap-3 pt-6 border-t border-slate-50">
+                    <div className="mt-auto grid grid-cols-3 gap-2 pt-6 border-t border-slate-50">
                       <Link href={`/office/students/${student._id}`}>
-                        <button className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-xs rounded-xl transition-colors border border-transparent">
-                          <Eye className="w-4 h-4" /> View Details
+                        <button className="w-full flex items-center justify-center gap-1 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-[10px] rounded-xl transition-colors border border-transparent">
+                          <Eye className="w-3 h-3" /> View
+                        </button>
+                      </Link>
+                      <Link href={`/office/students/${student._id}/edit`}>
+                        <button className="w-full flex items-center justify-center gap-1 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-bold text-[10px] rounded-xl transition-colors border border-transparent">
+                          <Edit className="w-3 h-3" /> Edit
                         </button>
                       </Link>
                       <button 
                         onClick={() => handleDelete(student._id, `${student.firstName} ${student.lastName}`)}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-50 hover:bg-rose-50 text-slate-600 hover:text-rose-600 font-bold text-xs rounded-xl transition-colors border border-transparent"
+                        className="w-full flex items-center justify-center gap-1 py-2.5 bg-slate-50 hover:bg-rose-50 text-slate-600 hover:text-rose-600 font-bold text-[10px] rounded-xl transition-colors border border-transparent"
                       >
-                        <Trash2 className="w-4 h-4" /> Delete
+                        <Trash2 className="w-3 h-3" /> Delete
                       </button>
                     </div>
                   </div>

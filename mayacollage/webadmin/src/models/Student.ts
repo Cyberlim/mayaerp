@@ -1,10 +1,12 @@
 import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
 
 const studentSchema = new mongoose.Schema({
   enrollmentNumber: { type: String, unique: true, sparse: true },
   admissionNumber: { type: String, unique: true, sparse: true },
   studentId: { type: String, unique: true, sparse: true },
   password: { type: String, required: true },
+  libraryPin: { type: String }, // Hashed 4-digit PIN for library checkouts
   applicationId: { type: mongoose.Schema.Types.ObjectId, ref: "Application" },
   
   // Personal Details
@@ -49,6 +51,10 @@ const studentSchema = new mongoose.Schema({
               total: { type: Number, default: 0 },
               paid: { type: Number, default: 0 }
           },
+          transport: {
+              total: { type: Number, default: 0 },
+              paid: { type: Number, default: 0 }
+          },
           other: {
               total: { type: Number, default: 0 },
               paid: { type: Number, default: 0 }
@@ -73,16 +79,32 @@ studentSchema.pre('save', async function(next) {
             const course = await Course.findById(this.selectedProgram);
             
             if (course) {
+                const duration = course.duration || 4; // default to 4 years if not set
+                const endYear = parseInt(this.admissionYear) + duration;
+                const calculatedSession = `${this.admissionYear}-${endYear.toString().slice(-2)}`;
+                
                 if (!this.batch) {
-                    const duration = course.duration || 4; // default to 4 years if not set
-                    const endYear = parseInt(this.admissionYear) + duration;
-                    this.batch = `${this.admissionYear}-${endYear.toString().slice(-2)}`;
+                    this.batch = calculatedSession;
+                }
+                
+                // Automatically set sessionYear so it shows correctly in student app
+                if (!this.sessionYear) {
+                    this.sessionYear = calculatedSession;
                 }
             }
         }
 
         if (!this.courseYear && this.selectedSemester) {
             this.courseYear = Math.ceil(this.selectedSemester / 2);
+        }
+
+        // Hash Password
+        if (this.isModified('password')) {
+            // Guard against double-hashing
+            if (this.password && !(this.password.startsWith('$2b$') || this.password.startsWith('$2a$'))) {
+                const salt = await bcrypt.genSalt(10);
+                this.password = await bcrypt.hash(this.password, salt);
+            }
         }
 
         next();

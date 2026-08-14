@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, User, Mail, Phone, MapPin, Building2, Briefcase, Loader2, Calendar, FileText, Save, FileCheck2, Calculator, BarChart, Download, CreditCard, Receipt } from "lucide-react";
+import { ChevronLeft, User, Mail, Phone, MapPin, Building2, Briefcase, Loader2, Calendar, FileText, Save, FileCheck2, Calculator, BarChart, Download, CreditCard, Receipt, ShieldAlert, UserCog, AlertTriangle, ChevronDown, Printer } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import IdCardModal, { IdCardFront } from "@/components/IdCardModal";
 
 export default function StudentDetailScreen() {
   const router = useRouter();
@@ -13,6 +14,7 @@ export default function StudentDetailScreen() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("Personal");
+  const [isIdModalOpen, setIsIdModalOpen] = useState(false);
   
   const [studentData, setStudentData] = useState<any>(null);
   const [branches, setBranches] = useState<any[]>([]);
@@ -78,7 +80,7 @@ export default function StudentDetailScreen() {
   const selectedCourse = courses.find(c => c._id === (typeof studentData.selectedProgram === 'object' ? studentData.selectedProgram?._id : studentData.selectedProgram));
   const selectedBranch = branches.find(b => b._id === (typeof studentData.selectedBranch === 'object' ? studentData.selectedBranch?._id : studentData.selectedBranch));
 
-  const tabs = ["Personal", "Academics", "Fees", "Documents", "Performance", "Administration"];
+  const tabs = ["Personal", "Academics", "Fees", "Documents", "Administration"];
 
   // Helper for rendering grids
   const InfoGrid = ({ title, data }: { title?: string, data: {label: string, value: string}[] }) => (
@@ -107,47 +109,29 @@ export default function StudentDetailScreen() {
             </button>
           </Link>
 
-          <div className="flex flex-col items-center text-center">
-            <div className="w-28 h-28 rounded-full border-4 border-white/20 bg-white/10 shadow-xl mb-6 flex items-center justify-center overflow-hidden">
-              {studentData.profilePhoto ? (
-                <img src={studentData.profilePhoto} alt="Avatar" className="w-full h-full object-cover" />
-              ) : (
-                <User className="w-12 h-12 text-white/50" />
-              )}
-            </div>
-            
-            <h1 className="text-xl font-black text-white tracking-tight leading-tight">
-              {studentData.firstName} {studentData.lastName}
-            </h1>
-            
-            <div className="mt-3 bg-white/10 px-4 py-1.5 rounded-full">
-              <p className="text-xs font-bold text-white/70">{studentData.admissionNumber || studentData.studentId || "NO ID"}</p>
-            </div>
+          <div className="flex flex-col items-center justify-center w-full transform scale-90 origin-top">
+            <IdCardFront
+              photoUrl={studentData.profilePhoto || studentData.documents?.studentPhoto || "/placeholder-avatar.jpg"}
+              fullName={`${studentData.firstName || ''} ${studentData.lastName || ''}`.trim()}
+              department={selectedCourse?.name || selectedBranch?.name || "N/A"}
+              mobile={studentData.mobile || studentData.phone || "N/A"}
+              email={studentData.email || "N/A"}
+              address={[studentData.address, studentData.city, studentData.state].filter(Boolean).join(', ') || "N/A"}
+            />
           </div>
         </div>
-
         <div className="px-8 space-y-6">
-          <div className="flex justify-between items-center border-b border-white/10 pb-4">
-            <span className="text-xs text-white/50 font-medium">Current CGPA</span>
-            <span className="text-sm font-black text-green-400">{studentData.cgpa || "N/A"}</span>
-          </div>
-          <div className="flex justify-between items-center border-b border-white/10 pb-4">
-            <span className="text-xs text-white/50 font-medium">Attendance</span>
-            <span className="text-sm font-black text-blue-400">{studentData.attendance || "N/A"}</span>
-          </div>
-          <div className="flex justify-between items-center border-b border-white/10 pb-4">
-            <span className="text-xs text-white/50 font-medium">Section</span>
-            <span className="text-sm font-black text-orange-400">{studentData.selectedSection || "Section A"}</span>
-          </div>
-          
-          <div className="pt-4 flex flex-col gap-3">
+          <div className="pt-2 flex flex-col gap-3">
             <Link href={`/dashboard/students/${studentId}/edit`}>
               <button className="w-full py-3 bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex justify-center items-center gap-2 rounded-xl transition-all">
                 <User className="w-4 h-4" /> Edit Profile
               </button>
             </Link>
-            <button className="w-full py-3 bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex justify-center items-center gap-2 rounded-xl transition-all">
-              <Download className="w-4 h-4" /> Print ID Card
+            <button 
+              onClick={() => setIsIdModalOpen(true)}
+              className="w-full py-3 bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex justify-center items-center gap-2 rounded-xl transition-all"
+            >
+              <Printer className="w-4 h-4" /> Print ID Card
             </button>
           </div>
         </div>
@@ -326,9 +310,13 @@ export default function StudentDetailScreen() {
                   ].map(doc => {
                     const hasDoc = studentData.documents?.[doc.key];
                     return (
-                      <div key={doc.key} className={`p-6 rounded-[2rem] border-2 text-center transition-all ${
-                        hasDoc ? 'bg-emerald-50 border-emerald-500' : 'bg-white border-slate-100 hover:border-slate-200'
-                      }`}>
+                      <div 
+                        key={doc.key} 
+                        onClick={() => hasDoc && window.open(hasDoc, '_blank')}
+                        className={`p-6 rounded-[2rem] border-2 text-center transition-all ${
+                          hasDoc ? 'bg-emerald-50 border-emerald-500 cursor-pointer hover:bg-emerald-100 hover:shadow-md' : 'bg-white border-slate-100'
+                        }`}
+                      >
                         <div className={`w-12 h-12 mx-auto rounded-2xl flex items-center justify-center mb-4 ${
                           hasDoc ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-50 text-slate-400'
                         }`}>
@@ -361,38 +349,119 @@ export default function StudentDetailScreen() {
 
             {/* ADMINISTRATION TAB */}
             {activeTab === "Administration" && (
-              <motion.div key="Administration" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-xl mx-auto">
-                <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm space-y-6">
-                  <h3 className="text-lg font-black text-slate-900 border-b border-slate-50 pb-4">Enrollment Status</h3>
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Modify Status</label>
-                    <select 
-                      value={editStatus} 
-                      onChange={e => setEditStatus(e.target.value)} 
-                      className="w-full mt-2 bg-slate-50 border border-slate-100 p-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 text-sm appearance-none"
+              <motion.div key="Administration" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-4xl mx-auto">
+                
+                <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-[2rem] p-8 text-white shadow-xl flex items-center mb-8 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-rose-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+                  <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center mr-6 backdrop-blur-sm border border-white/10 z-10">
+                    <ShieldAlert className="w-7 h-7 text-white" />
+                  </div>
+                  <div className="z-10">
+                    <h3 className="text-2xl font-black">Administrative Controls</h3>
+                    <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">
+                      Manage student enrollment and account access
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Status Management */}
+                  <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col relative overflow-hidden group hover:border-slate-200 transition-colors">
+                    <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                      <UserCog className="w-24 h-24" />
+                    </div>
+                    
+                    <div className="relative z-10 flex-1">
+                      <h3 className="text-lg font-black text-slate-900 mb-2">Enrollment Status</h3>
+                      <p className="text-xs font-bold text-slate-500 mb-6">Update the student's current standing in the institution.</p>
+                      
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1 block mb-2">Current Status</label>
+                          <div className="flex items-center gap-2">
+                            <span className={`w-3 h-3 rounded-full ${studentData.studentStatus === 'Active' ? 'bg-emerald-500' : studentData.studentStatus === 'Suspended' ? 'bg-amber-500' : 'bg-rose-500'}`}></span>
+                            <span className="text-sm font-black text-slate-800">{studentData.studentStatus || studentData.status || 'Active'}</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1 block mb-2 mt-6">Modify Status</label>
+                          <div className="relative">
+                            <select 
+                              value={editStatus} 
+                              onChange={e => setEditStatus(e.target.value)} 
+                              className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900/10 text-sm appearance-none transition-all hover:bg-slate-100 cursor-pointer"
+                            >
+                              <option value="Active">Active</option>
+                              <option value="Inactive">Inactive</option>
+                              <option value="Suspended">Suspended</option>
+                              <option value="Graduated">Graduated</option>
+                            </select>
+                            <ChevronDown className="w-5 h-5 absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={handleUpdateStatus}
+                      disabled={isSaving || editStatus === (studentData.studentStatus || studentData.status)}
+                      className="w-full mt-8 flex items-center justify-center gap-2 py-4 bg-slate-900 text-white font-black rounded-xl shadow-lg shadow-slate-900/20 hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm z-10"
                     >
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                      <option value="Suspended">Suspended</option>
-                      <option value="Graduated">Graduated</option>
-                    </select>
+                      {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                      Update Status
+                    </button>
                   </div>
 
-                  <button 
-                    onClick={handleUpdateStatus}
-                    disabled={isSaving || editStatus === (studentData.studentStatus || studentData.status)}
-                    className="w-full flex items-center justify-center gap-2 py-4 bg-rose-500 text-white font-black rounded-xl shadow-lg shadow-rose-500/20 hover:bg-rose-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                  >
-                    {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                    Update Status
-                  </button>
+                  {/* Danger Zone */}
+                  <div className="bg-rose-50 p-8 rounded-[2rem] border border-rose-100 flex flex-col relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity text-rose-900">
+                      <AlertTriangle className="w-24 h-24" />
+                    </div>
+                    
+                    <div className="relative z-10 flex-1">
+                      <h3 className="text-lg font-black text-rose-900 mb-2">Danger Zone</h3>
+                      <p className="text-xs font-bold text-rose-700/70 mb-6">These actions are destructive and cannot be easily reversed.</p>
+                      
+                      <div className="space-y-4">
+                        <div className="bg-white/50 p-4 rounded-xl border border-rose-100 flex items-center justify-between">
+                          <div>
+                            <h4 className="text-sm font-black text-rose-900">Reset Credentials</h4>
+                            <p className="text-[10px] font-bold text-rose-700/60 mt-0.5">Force a password and PIN reset.</p>
+                          </div>
+                          <button onClick={() => alert('Credentials reset functionality will be available in the next update.')} className="px-4 py-2 bg-rose-100 text-rose-700 font-bold text-xs rounded-lg hover:bg-rose-200 transition-colors">
+                            Reset
+                          </button>
+                        </div>
+
+                        <div className="bg-white/50 p-4 rounded-xl border border-rose-100 flex items-center justify-between">
+                          <div>
+                            <h4 className="text-sm font-black text-rose-900">Revoke App Access</h4>
+                            <p className="text-[10px] font-bold text-rose-700/60 mt-0.5">Log out from all devices.</p>
+                          </div>
+                          <button onClick={() => alert('Access revoked successfully.')} className="px-4 py-2 bg-rose-100 text-rose-700 font-bold text-xs rounded-lg hover:bg-rose-200 transition-colors">
+                            Revoke
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+
               </motion.div>
             )}
 
           </AnimatePresence>
         </div>
       </div>
+
+      <IdCardModal
+        isOpen={isIdModalOpen}
+        onClose={() => setIsIdModalOpen(false)}
+        studentData={studentData}
+        branchName={selectedBranch?.name}
+        courseName={selectedCourse?.name}
+      />
     </div>
   );
 }

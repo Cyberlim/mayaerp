@@ -40,10 +40,11 @@ export default function OfficeSidebar() {
     { href: "/office", icon: LayoutDashboard, label: "Dashboard" },
     { href: "/office/admissions", icon: UserPlus, label: "Admission" },
     { href: "/office/students", icon: Users, label: "Student" },
+    { href: "/office/attendance", icon: CheckSquare, label: "Attendance" },
     { href: "/office/finance", icon: Wallet, label: "Accounts (Fees)" },
 
     { href: "/office/timetable", icon: Calendar, label: "Timetable" },
-    { href: "/lab", icon: Beaker, label: "Lab Portal" },
+    { href: "/office/lab", icon: Beaker, label: "Lab Details" },
     { href: "/office/exams", icon: FileText, label: "Exams" },
     { href: "/office/notices", icon: MessageSquare, label: "Message" },
     { href: "/office/reports", icon: BarChart3, label: "Reports" },
@@ -51,7 +52,7 @@ export default function OfficeSidebar() {
   ];
 
   return (
-    <aside className="w-[260px] h-screen bg-white border-r border-slate-100 flex flex-col sticky top-0 font-sans">
+    <aside className="w-[300px] h-screen bg-white border-r border-slate-100 flex flex-col sticky top-0 font-sans">
       
       {/* Logo Area */}
       <div className="h-20 px-6 flex items-center gap-3 shrink-0">
@@ -65,7 +66,7 @@ export default function OfficeSidebar() {
       </div>
 
       {/* Navigation */}
-      <div className="flex-1 overflow-y-auto py-2 px-4 space-y-1 scrollbar-hide">
+      <div className="flex-1 overflow-y-auto py-2 px-4 space-y-1">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon as any;

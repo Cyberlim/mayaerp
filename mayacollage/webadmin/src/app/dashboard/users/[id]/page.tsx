@@ -23,15 +23,14 @@ export default function EditUserPage() {
     phone: "",
     address: "",
     dob: "",
+    gender: "",
     role: "Faculty",
-    department: "Academic",
     employeeId: "",
     status: "Active",
     profilePhoto: ""
   });
 
-  const roles = ["Admin", "Staff", "Faculty", "Accountant", "Librarian", "HOD", "Principal"];
-  const departments = ["Academic", "Administration", "Finance", "Library", "HR", "IT Support"];
+  const roles = ["Admin", "Office", "Staff", "Library", "Lab Assistant"];
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -47,8 +46,8 @@ export default function EditUserPage() {
             phone: data.phone || "",
             address: data.address || "",
             dob: data.dob || "",
+            gender: data.gender || "",
             role: data.role || "Faculty",
-            department: data.department || "Academic",
             employeeId: data.employeeId || "",
             status: data.status || "Active",
             profilePhoto: data.profilePhoto || ""
@@ -195,6 +194,15 @@ export default function EditUserPage() {
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Date of Birth</label>
                   <input value={formData.dob} onChange={e => setFormData({...formData, dob: e.target.value})} type="date" className="w-full mt-1 bg-slate-50 border border-slate-100 p-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm" />
                 </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Gender</label>
+                  <select value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})} className="w-full mt-1 bg-slate-50 border border-slate-100 p-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm appearance-none">
+                    <option value="">Select Gender</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
                 <div className="md:col-span-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Home Address</label>
                   <div className="relative mt-1">
@@ -203,10 +211,28 @@ export default function EditUserPage() {
                   </div>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Profile Photo URL (Optional)</label>
-                  <div className="relative mt-1">
-                    <input value={formData.profilePhoto} onChange={e => setFormData({...formData, profilePhoto: e.target.value})} type="url" className="w-full bg-slate-50 border border-slate-100 py-4 pl-10 pr-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm" placeholder="https://example.com/avatar.jpg" />
-                    <ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Profile Photo (Optional)</label>
+                  <div className="relative mt-1 flex items-center gap-4">
+                    {formData.profilePhoto && (
+                      <div className="w-14 h-14 shrink-0 rounded-full overflow-hidden border-2 border-white shadow-md bg-slate-100">
+                        <img src={formData.profilePhoto} alt="Profile Preview" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <div className="relative flex-1">
+                      <input 
+                        type="file" 
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => setFormData({...formData, profilePhoto: reader.result as string});
+                            reader.readAsDataURL(file);
+                          }
+                        }} 
+                        className="w-full bg-slate-50 border border-slate-100 py-3 px-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-black file:bg-rose-50 file:text-rose-600 hover:file:bg-rose-100 cursor-pointer" 
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -225,18 +251,13 @@ export default function EditUserPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Department</label>
-                  <select required value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} className="w-full mt-1 bg-slate-50 border border-slate-100 p-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm appearance-none">
-                    {departments.map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
-                </div>
-                <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Employee ID</label>
                   <div className="relative mt-1">
                     <input required value={formData.employeeId} onChange={e => setFormData({...formData, employeeId: e.target.value})} type="text" className="w-full bg-slate-50 border border-slate-100 py-4 pl-10 pr-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm" placeholder="EMP-2026-001" />
                     <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   </div>
                 </div>
+
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Account Status</label>
                   <select required value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full mt-1 bg-slate-50 border border-slate-100 p-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm appearance-none">

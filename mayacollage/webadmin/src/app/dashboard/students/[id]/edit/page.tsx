@@ -186,7 +186,29 @@ export default function EditStudentFullPage() {
               <InputField label="Date of Birth" value={formData.dob} field="dob" type="date" />
               <InputField label="Gender" value={formData.gender} field="gender" />
               <InputField label="Category" value={formData.category} field="category" />
-              <InputField label="Profile Photo URL" value={formData.profilePhoto} field="profilePhoto" type="url" />
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Profile Photo</label>
+                <div className="relative mt-1 flex items-center gap-3">
+                  {formData.profilePhoto && (
+                    <div className="w-12 h-12 shrink-0 rounded-full overflow-hidden border border-slate-200">
+                      <img src={formData.profilePhoto} alt="Profile" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => setFormData({...formData, profilePhoto: reader.result as string});
+                        reader.readAsDataURL(file);
+                      }
+                    }} 
+                    className="w-full bg-slate-50 border border-slate-100 py-2.5 px-3 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-xs file:mr-2 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-[10px] file:font-black file:bg-indigo-50 file:text-indigo-600 hover:file:bg-indigo-100 cursor-pointer" 
+                  />
+                </div>
+              </div>
               <InputField label="Student ID (Roll No)" value={formData.studentId} field="studentId" disabled />
               <InputField label="Admission No" value={formData.admissionNumber} field="admissionNumber" />
             </div>

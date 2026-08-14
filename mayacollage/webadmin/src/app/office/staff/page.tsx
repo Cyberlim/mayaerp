@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Users, Search, Plus, UserCircle, MoreVertical, Edit2, Trash2, Shield, Loader2, CheckCircle2 } from "lucide-react";
+import { Users, Search, Plus, UserCircle, MoreVertical, Edit2, Trash2, Shield, Loader2, CheckCircle2, Eye } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -204,6 +204,11 @@ export default function UserManagementDashboard() {
                     </div>
 
                     <div className="mt-auto grid grid-cols-2 gap-3 pt-6 border-t border-slate-50">
+                      <Link href={`/office/staff/${user._id}/details`} className="col-span-2">
+                        <button className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-bold text-xs rounded-xl transition-colors">
+                          <Eye className="w-3.5 h-3.5" /> View Details
+                        </button>
+                      </Link>
                       <Link href={`/office/staff/${user._id}`}>
                         <button className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 font-bold text-xs rounded-xl transition-colors border border-transparent hover:border-indigo-100">
                           <Edit2 className="w-3.5 h-3.5" /> Edit

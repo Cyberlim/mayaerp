@@ -1,23 +1,34 @@
 import mongoose from 'mongoose';
-import { Student } from './src/models/studentModel.js';
 import dotenv from 'dotenv';
+import { Student } from './src/models/studentModel.js';
 
 dotenv.config();
 
-async function check() {
-  await mongoose.connect(process.env.MONGO_URI);
-  const students = await Student.find({}, 'email studentId password firstName dob');
-  console.log('Total students:', students.length);
-  students.forEach(s => {
-    console.log(`Student ID: ${s.studentId}, Email: ${s.email}, Name: ${s.firstName}, DOB: ${s.dob}`);
-    // Check if password looks like a hash
-    const isHash = s.password.startsWith('$2');
-    console.log(`  Password is hash: ${isHash}`);
-    if (!isHash) {
-        console.log(`  WARNING: Password is plain text: ${s.password}`);
+async function checkStudents() {
+    try {
+        await mongoose.connect(process.env.MONGO_URI);
+        const students = await Student.find({});
+        
+        console.log("--- STUDENT LOGIN CREDENTIALS ---");
+        for (let student of students) {
+            console.log(`\nName: ${student.firstName} ${student.lastName}`);
+            console.log(`Student ID: ${student.studentId || 'N/A'}`);
+            console.log(`Admission Number: ${student.admissionNumber || 'N/A'}`);
+            console.log(`Email: ${student.email || 'N/A'}`);
+            
+            // Password logic check
+            // For new students, password is dob with hyphens removed
+            const dobClean = student.dob ? student.dob.replace(/-/g, '') : "password123";
+            console.log(`DOB format in DB: ${student.dob}`);
+            console.log(`Expected Password (if unchanged): ${dobClean}`);
+            console.log(`Password Hashed?: ${student.password && student.password.startsWith('$2') ? 'Yes' : 'No'}`);
+        }
+        
+    } catch (error) {
+        console.error('Error:', error);
+    } finally {
+        await mongoose.disconnect();
     }
-  });
-  process.exit();
 }
 
-check();
+checkStudents();

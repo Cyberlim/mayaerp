@@ -35,14 +35,30 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ success: true, count: 0, message: "No students found in this branch/course." });
     }
 
-    // Delete all attendance records for these students in the date range
-    const result = await Attendance.deleteMany({
+    const deleteQuery = {
       student: { $in: studentIds },
       date: {
         $gte: startDate,
         $lte: endDate
       }
-    });
+    };
+
+    // Backup records before deleting
+    const recordsToBackup = await Attendance.find(deleteQuery).lean();
+    if (recordsToBackup.length > 0) {
+      const backupReason = searchParams.get("reason") || "Reset by user";
+      const backupData = recordsToBackup.map(record => ({
+        ...record,
+        _id: undefined, // Let mongoose generate a new ID for the deleted collection
+        deletedAt: new Date(),
+        resetReason: backupReason
+      }));
+      const { DeletedAttendance } = await import("@/models/DeletedAttendance");
+      await DeletedAttendance.insertMany(backupData);
+    }
+
+    // Delete all attendance records for these students in the date range
+    const result = await Attendance.deleteMany(deleteQuery);
 
     return NextResponse.json({ success: true, count: result.deletedCount });
   } catch (error) {

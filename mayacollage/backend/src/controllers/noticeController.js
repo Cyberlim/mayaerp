@@ -17,10 +17,14 @@ export const createNotice = async (req, res) => {
         });
         await notice.save();
 
+        // Populate author before emitting
+        const populatedNotice = await Notice.findById(notice._id)
+            .populate('author', 'firstName lastName role');
+
         // Emit socket event for real-time update
         const io = req.app.get('io');
-        if (io) {
-            io.emit('new_notice', notice);
+        if (io && populatedNotice) {
+            io.emit('new_notice', populatedNotice);
         }
 
         res.status(201).json(notice);
@@ -38,7 +42,7 @@ export const getNotices = async (req, res) => {
         if (author) query.author = author;
 
         const notices = await Notice.find(query)
-            .populate('author', 'firstName lastName')
+            .populate('author', 'firstName lastName role')
             .populate('courseId', 'name')
             .populate('branchId', 'name')
             .populate('studentId', 'firstName lastName studentId')

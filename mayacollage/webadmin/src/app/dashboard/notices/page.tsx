@@ -5,7 +5,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { MessageSquare, Calendar as CalendarIcon, Loader2, Plus, X, Send, ChevronDown, ChevronUp } from "lucide-react";
 
 export default function AdminNoticesScreen() {
-  const [notices, setNotices] = useState<any[]>([]);
+  const [inboxNotices, setInboxNotices] = useState<any[]>([]);
+  const [sentNotices, setSentNotices] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<"inbox" | "sent">("sent");
   const [isLoading, setIsLoading] = useState(true);
   
   // Modal states
@@ -33,7 +35,8 @@ export default function AdminNoticesScreen() {
       const res = await fetch("/api/admin/notices");
       if (res.ok) {
         const data = await res.json();
-        setNotices(data.notices || []);
+        setInboxNotices(data.inboxNotices || []);
+        setSentNotices(data.sentNotices || []);
       }
       
       const [coursesRes, branchesRes] = await Promise.all([
@@ -91,6 +94,7 @@ export default function AdminNoticesScreen() {
       if (res.ok) {
         setIsModalOpen(false);
         setNewNotice({ title: "", description: "", targetType: "All", courseId: "", branchId: "" });
+        setActiveTab("sent");
         fetchData();
       }
     } catch (error) {
@@ -99,6 +103,76 @@ export default function AdminNoticesScreen() {
       setIsSubmitting(false);
     }
   };
+
+  const renderNoticeList = (notices: any[], emptyMessage: string) => (
+    <div className="flex flex-col gap-4">
+      {notices.map((notice, idx) => {
+        const id = notice._id || String(idx);
+        return (
+          <motion.div
+            key={id}
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: idx * 0.05 }}
+            className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden group hover:border-rose-200 transition-colors cursor-pointer"
+            onClick={() => toggleNotice(id)}
+          >
+            <div className="p-5 flex items-center justify-between gap-4">
+              <div className="flex-1 flex flex-col md:flex-row md:items-center gap-3 md:gap-6">
+                <div className="flex items-center gap-3 w-48 shrink-0">
+                  <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${activeTab === 'inbox' ? 'bg-indigo-50 text-indigo-700' : 'bg-rose-50 text-rose-700'}`}>
+                    {activeTab === 'inbox' ? (notice.author?.role ? `From ${notice.author.role}` : 'Received') : 'Sent by You'}
+                  </span>
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
+                    <CalendarIcon className="w-3.5 h-3.5" />
+                    {new Date(notice.createdAt).toLocaleDateString()}
+                  </div>
+                </div>
+                
+                <h3 className="text-base font-black text-slate-800 flex-1 truncate group-hover:text-rose-600 transition-colors">
+                  {notice.title}
+                </h3>
+
+                <div className="w-48 shrink-0 text-left md:text-right">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                    {activeTab === 'inbox' ? 'Issued By' : 'Target Audience'}
+                  </p>
+                  <p className="text-xs font-bold text-slate-700 truncate">
+                    {activeTab === 'inbox' ? (notice.author ? (notice.author.role && !['staff', 'faculty', 'student'].includes(notice.author.role.toLowerCase()) ? notice.author.role.toUpperCase() : `${notice.author.firstName} ${notice.author.lastName}`) : 'ADMIN') : (notice.targetClass || 'All')}
+                  </p>
+                </div>
+              </div>
+
+              <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-rose-50 group-hover:text-rose-600 transition-colors shrink-0">
+                {expandedNotice === id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </div>
+            </div>
+
+            <AnimatePresence>
+              {expandedNotice === id && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden bg-slate-50/50 border-t border-slate-100"
+                >
+                  <div className="p-6 text-sm font-medium text-slate-600 whitespace-pre-wrap leading-relaxed">
+                    {notice.description}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        );
+      })}
+      {notices.length === 0 && (
+        <div className="col-span-full text-center py-12 bg-white rounded-3xl border border-slate-100 shadow-sm">
+          <MessageSquare className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+          <p className="text-slate-500 font-medium">{emptyMessage}</p>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 p-6">
@@ -109,7 +183,7 @@ export default function AdminNoticesScreen() {
             <MessageSquare className="w-6 h-6 text-rose-600" />
           </div>
           <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Admin Notice Board</h1>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Notice Board</h1>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Manage Institutional Announcements</p>
           </div>
         </div>
@@ -123,79 +197,31 @@ export default function AdminNoticesScreen() {
         </button>
       </div>
 
+      {/* Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200">
+        <button 
+          onClick={() => setActiveTab('inbox')}
+          className={`px-6 py-3 font-black text-sm tracking-wide transition-all border-b-2 ${activeTab === 'inbox' ? 'border-rose-600 text-rose-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+        >
+          Inbox ({inboxNotices.length})
+        </button>
+        <button 
+          onClick={() => setActiveTab('sent')}
+          className={`px-6 py-3 font-black text-sm tracking-wide transition-all border-b-2 ${activeTab === 'sent' ? 'border-rose-600 text-rose-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+        >
+          Sent ({sentNotices.length})
+        </button>
+      </div>
+
       {/* Content */}
       {isLoading ? (
         <div className="flex justify-center items-center min-h-[40vh]">
           <Loader2 className="w-10 h-10 text-rose-500 animate-spin" />
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
-          {notices.map((notice, idx) => {
-            const id = notice._id || String(idx);
-            return (
-              <motion.div
-                key={id}
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: idx * 0.05 }}
-                className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden group hover:border-rose-200 transition-colors cursor-pointer"
-                onClick={() => toggleNotice(id)}
-              >
-                <div className="p-5 flex items-center justify-between gap-4">
-                  <div className="flex-1 flex flex-col md:flex-row md:items-center gap-3 md:gap-6">
-                    <div className="flex items-center gap-3 w-48 shrink-0">
-                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
-                        <CalendarIcon className="w-3.5 h-3.5" />
-                        {new Date(notice.createdAt).toLocaleDateString()}
-                      </div>
-                    </div>
-                    
-                    <h3 className="text-base font-black text-slate-800 flex-1 truncate group-hover:text-rose-600 transition-colors">
-                      {notice.title}
-                    </h3>
-
-                    <div className="w-48 shrink-0 text-left md:text-right">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Target Audience</p>
-                      <p className="text-xs font-bold text-slate-700 truncate">{notice.targetClass || 'All'}</p>
-                    </div>
-                    
-                    <div className="w-32 shrink-0 text-left md:text-right">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Author</p>
-                      <p className="text-xs font-bold text-slate-700 truncate">
-                        {notice.author ? `${notice.author.firstName} ${notice.author.lastName}` : 'Unknown'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-rose-50 group-hover:text-rose-600 transition-colors shrink-0">
-                    {expandedNotice === id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </div>
-                </div>
-
-                <AnimatePresence>
-                  {expandedNotice === id && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden bg-slate-50/50 border-t border-slate-100"
-                    >
-                      <div className="p-6 text-sm font-medium text-slate-600 whitespace-pre-wrap leading-relaxed">
-                        {notice.description}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            );
-          })}
-          {notices.length === 0 && (
-            <div className="col-span-full text-center py-12 bg-white rounded-3xl border border-slate-100 shadow-sm">
-              <MessageSquare className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-              <p className="text-slate-500 font-medium">No notices published yet.</p>
-            </div>
-          )}
-        </div>
+        activeTab === 'inbox' 
+          ? renderNoticeList(inboxNotices, "No notices from staff/others.") 
+          : renderNoticeList(sentNotices, "You haven't published any notices yet.")
       )}
 
       {/* Modal */}

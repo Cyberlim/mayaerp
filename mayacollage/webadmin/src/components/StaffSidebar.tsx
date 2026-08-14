@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
 import { 
   LayoutDashboard, 
   Users,
@@ -17,6 +18,23 @@ import {
 
 export default function StaffSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [userProfile, setUserProfile] = useState<{name: string, role: string, photo: string} | null>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.firstName) {
+          setUserProfile({
+            name: `${data.firstName} ${data.lastName}`,
+            role: data.role,
+            photo: data.profilePhoto || `https://ui-avatars.com/api/?name=${data.firstName}+${data.lastName}&background=ffffff&color=10B981&bold=true`
+          });
+        }
+      })
+      .catch(err => console.error(err));
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -86,12 +104,12 @@ export default function StaffSidebar() {
       <div className="relative mt-auto p-6 z-10 bg-[#059669] mx-4 mb-4 rounded-3xl overflow-hidden shadow-inner flex flex-col items-center group">
         <div className="w-16 h-16 rounded-full bg-white/20 p-1 mb-3">
           <img 
-            src="https://ui-avatars.com/api/?name=Staff+Member&background=ffffff&color=10B981&bold=true" 
+            src={userProfile?.photo || "https://ui-avatars.com/api/?name=Staff+Member&background=ffffff&color=10B981&bold=true"} 
             alt="Profile" 
             className="w-full h-full rounded-full object-cover"
           />
         </div>
-        <span className="text-sm font-bold tracking-wider uppercase mb-3">Faculty Member</span>
+        <span className="text-sm font-bold tracking-wider uppercase mb-3">{userProfile?.name || "Faculty Member"}</span>
         
         <button 
           onClick={handleLogout}

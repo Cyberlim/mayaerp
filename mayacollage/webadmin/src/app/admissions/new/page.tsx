@@ -90,6 +90,7 @@ export default function StandaloneNewApplication() {
     batch: "",
     semester: "",
     year: "",
+    sessionYear: "2024-2025",
     category: "General",
     statementOfPurpose: "",
   });
@@ -354,6 +355,7 @@ export default function StandaloneNewApplication() {
                     <InputGroup icon={<CalendarDays />} label="Batch" name="batch" placeholder="e.g. 2024-2028" value={formData.batch} onChange={handleChange} />
                     <InputGroup icon={<Book />} label="Semester" name="semester" placeholder="e.g. 1" value={formData.semester} onChange={handleChange} />
                     <InputGroup icon={<Calendar />} label="Year" name="year" placeholder="e.g. 1st Year" value={formData.year} onChange={handleChange} />
+                    <InputGroup icon={<Calendar />} label="Session Year" name="sessionYear" placeholder="e.g. 2024-2025" value={formData.sessionYear} onChange={handleChange} />
                     
                     <DropdownGroup icon={<User />} label="Category" name="category" options={["General", "OBC", "SC/ST", "Management Quota"]} value={formData.category} onChange={handleChange} />
 

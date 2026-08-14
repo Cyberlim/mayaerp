@@ -8,7 +8,9 @@ import {
   ChevronLeft,
   AtSign,
   Lock,
-  Loader2
+  Loader2,
+  Eye,
+  EyeOff
 } from "lucide-react";
 
 function LoginContent() {
@@ -21,9 +23,20 @@ function LoginContent() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
+    const savedEmail = localStorage.getItem("mayaerp_email");
+    const savedPassword = localStorage.getItem("mayaerp_password");
+    if (savedEmail) {
+      setEmail(savedEmail);
+      setRememberMe(true);
+    }
+    if (savedPassword) {
+      setPassword(savedPassword);
+    }
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -44,6 +57,14 @@ function LoginContent() {
         setError(data.error || "Failed to authenticate");
         setIsLoading(false);
         return;
+      }
+
+      if (rememberMe) {
+        localStorage.setItem("mayaerp_email", email);
+        localStorage.setItem("mayaerp_password", password);
+      } else {
+        localStorage.removeItem("mayaerp_email");
+        localStorage.removeItem("mayaerp_password");
       }
 
       // Use the actual role from the database for redirection
@@ -192,13 +213,20 @@ function LoginContent() {
               <Lock className="h-5 w-5 text-rose-500" />
             </div>
             <input
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full pl-14 pr-6 py-4 bg-white border-2 border-slate-100 focus:border-rose-500 rounded-2xl shadow-[0_8px_15px_rgba(0,0,0,0.02)] outline-none transition-all text-slate-800 placeholder-slate-400"
+              className="w-full pl-14 pr-12 py-4 bg-white border-2 border-slate-100 focus:border-rose-500 rounded-2xl shadow-[0_8px_15px_rgba(0,0,0,0.02)] outline-none transition-all text-slate-800 placeholder-slate-400"
               placeholder="Password"
               required
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute inset-y-0 right-0 pr-5 flex items-center text-slate-400 hover:text-rose-500 transition-colors"
+            >
+              {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+            </button>
           </motion.div>
 
           {error && (
@@ -219,7 +247,12 @@ function LoginContent() {
             className="flex items-center justify-between my-2"
           >
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 border-slate-300" />
+              <input 
+                type="checkbox" 
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 border-slate-300" 
+              />
               <span className="text-sm text-slate-500">Remember me</span>
             </label>
             <button type="button" className="text-sm font-bold text-rose-600 hover:text-rose-500">

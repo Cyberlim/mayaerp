@@ -102,9 +102,9 @@ const calculateFine = async (issue) => {
         const diffTime = Math.abs(now.getTime() - due.getTime());
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         
-        if (diffDays > 10) {
+        if (diffDays > 0) {
             const settings = await LibrarySettings.findOne() || { fineRatePerDay: 5 };
-            return (diffDays - 10) * settings.fineRatePerDay;
+            return diffDays * settings.fineRatePerDay;
         }
     }
     return 0;
@@ -274,5 +274,108 @@ export const seedOverdue = async (req, res) => {
         res.status(200).json({ message: 'Seeded 4 overdue books for 2024CSAI20' });
     } catch (error) {
         res.status(500).json({ message: 'Seeding failed', error: error.message });
+    }
+};
+
+// Set Library PIN
+export const setLibraryPin = async (req, res) => {
+    try {
+        const { studentId, pin } = req.body;
+        if (!studentId || !pin || pin.length !== 4 || isNaN(pin)) {
+            return res.status(400).json({ message: 'Valid 4-digit PIN is required' });
+        }
+
+        const student = await Student.findById(studentId);
+        if (!student) return res.status(404).json({ message: 'Student not found' });
+
+        student.libraryPin = pin;
+        await student.save();
+
+        res.status(200).json({ message: 'Library PIN updated successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to set Library PIN', error: error.message });
+    }
+};
+
+// Verify Library PIN
+export const verifyLibraryPin = async (req, res) => {
+    try {
+        const { studentId, pin } = req.body;
+        if (!studentId || !pin) {
+            return res.status(400).json({ message: 'Student ID and PIN are required' });
+        }
+
+        const student = await Student.findById(studentId);
+        if (!student) return res.status(404).json({ message: 'Student not found' });
+
+        const isMatch = await student.compareLibraryPin(pin);
+        if (isMatch) {
+            res.status(200).json({ verified: true, message: 'PIN verified successfully' });
+        } else {
+            res.status(400).json({ verified: false, message: 'Invalid PIN' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: 'PIN verification failed', error: error.message });
+    }
+};
+
+// Self-checkout book using Library PIN
+export const issueBookSelf = async (req, res) => {
+    try {
+        const { studentId, bookId, pin } = req.body;
+        if (!studentId || !bookId || !pin) {
+            return res.status(400).json({ message: 'Student ID, Book ID, and PIN are required' });
+        }
+
+        const student = await Student.findById(studentId);
+        if (!student) return res.status(404).json({ message: 'Student not found' });
+
+        // Verify PIN
+        const isMatch = await student.compareLibraryPin(pin);
+        if (!isMatch) {
+            return res.status(400).json({ message: 'Invalid Library PIN' });
+        }
+
+        // Check if book exists and is available
+        const bookDoc = await Book.findById(bookId);
+        if (!bookDoc || bookDoc.available <= 0) {
+            return res.status(400).json({ message: 'Book not available' });
+        }
+
+        // Check if student already has 5 active issues
+        const activeIssues = await IssueBook.countDocuments({ 
+            student: studentId, 
+            isVerified: true, 
+            status: { $in: ['Active', 'Overdue'] } 
+        });
+        if (activeIssues >= 5) {
+            return res.status(400).json({ message: 'You have reached the maximum limit of 5 active issued books' });
+        }
+
+        // Issue duration from settings
+        const settings = await LibrarySettings.findOne() || { issueDurationDays: 14 };
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + settings.issueDurationDays);
+
+        // Create issue record
+        const issue = new IssueBook({
+            student: studentId,
+            book: bookId,
+            dueDate,
+            isVerified: true,
+            status: 'Active'
+        });
+
+        await issue.save();
+
+        // Update book availability
+        await Book.findByIdAndUpdate(bookId, { $inc: { available: -1 } });
+
+        res.status(201).json({ 
+            message: 'Book issued successfully', 
+            issue 
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to self-checkout book', error: error.message });
     }
 };
