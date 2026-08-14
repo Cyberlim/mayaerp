@@ -14,6 +14,10 @@ export default function DashboardLayout({
   const [userProfile, setUserProfile] = useState<{name: string, role: string, photo: string} | null>(null);
 
   useEffect(() => {
+    document.title = "Maya Admin | ERP Portal";
+  }, []);
+
+  useEffect(() => {
     fetch('/api/auth/me')
       .then(res => res.json())
       .then(data => {

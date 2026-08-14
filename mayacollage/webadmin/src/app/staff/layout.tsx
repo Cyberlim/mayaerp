@@ -1,5 +1,10 @@
 import StaffSidebar from "@/components/StaffSidebar";
 
+export const metadata = {
+  title: "Maya Staff | ERP Portal",
+  description: "Maya Staff Portal",
+};
+
 export default function StaffLayout({
   children,
 }: {

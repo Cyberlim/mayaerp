@@ -1,5 +1,10 @@
 import OfficeSidebar from "@/components/OfficeSidebar";
 
+export const metadata = {
+  title: "Maya Office | ERP Portal",
+  description: "Maya Office Portal",
+};
+
 export default function OfficeLayout({
   children,
 }: {

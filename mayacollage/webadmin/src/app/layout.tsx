@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Maya Staff",
-  description: "Maya ERP Staff Portal",
+  title: "Maya ERP",
+  description: "Maya ERP System",
 };
 
 export default function RootLayout({
