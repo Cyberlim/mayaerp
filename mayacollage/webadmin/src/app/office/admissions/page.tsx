@@ -13,6 +13,8 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
 
+import { getSocket } from "@/lib/socket";
+
 export default function AdmissionsDashboard() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
@@ -23,6 +25,15 @@ export default function AdmissionsDashboard() {
   
   useEffect(() => {
     fetchData();
+
+    const socket = getSocket();
+    socket.on('application_updated', () => {
+      fetchData();
+    });
+
+    return () => {
+      socket.off('application_updated');
+    };
   }, []);
 
   const fetchData = async () => {

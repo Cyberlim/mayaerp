@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageSquare, Calendar as CalendarIcon, Loader2, Plus, X, Send, ChevronDown, ChevronUp } from "lucide-react";
 
+import { getSocket } from "@/lib/socket";
+
 export default function AdminNoticesScreen() {
   const [inboxNotices, setInboxNotices] = useState<any[]>([]);
   const [sentNotices, setSentNotices] = useState<any[]>([]);
@@ -27,6 +29,15 @@ export default function AdminNoticesScreen() {
 
   useEffect(() => {
     fetchData();
+
+    const socket = getSocket();
+    socket.on('new_notice', () => {
+      fetchData();
+    });
+
+    return () => {
+      socket.off('new_notice');
+    };
   }, []);
 
   async function fetchData() {

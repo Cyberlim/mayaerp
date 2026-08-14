@@ -22,6 +22,10 @@ export const createApplication = async (req, res) => {
         const newApplication = new Application(applicationData);
         await newApplication.save();
 
+        if (req.io) {
+            req.io.emit('application_updated', newApplication);
+        }
+
         res.status(201).json({
             message: 'Application submitted successfully',
             application: newApplication
@@ -91,6 +95,10 @@ export const updateApplication = async (req, res) => {
             return res.status(404).json({ message: 'Application not found' });
         }
 
+        if (req.io) {
+            req.io.emit('application_updated', updatedApplication);
+        }
+
         res.status(200).json({
             message: 'Application updated successfully',
             application: updatedApplication
@@ -109,6 +117,10 @@ export const deleteApplication = async (req, res) => {
         const deletedApplication = await Application.findByIdAndDelete(req.params.id);
         if (!deletedApplication) {
             return res.status(404).json({ message: 'Application not found' });
+        }
+
+        if (req.io) {
+            req.io.emit('application_updated', deletedApplication);
         }
         res.status(200).json({ message: 'Application deleted successfully' });
     } catch (error) {
