@@ -8,7 +8,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         const { id } = await params;
         
         // Proxy to Node.js backend where Socket.io is running
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000/api";
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "https://mayaerp.onrender.com/api";
         const response = await fetch(`${backendUrl}/library/return/${id}`, {
             method: 'PUT',
             headers: {

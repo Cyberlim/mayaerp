@@ -61,7 +61,7 @@ export async function POST(req: Request) {
         const { title, description, targetClass, courseId, branchId } = body;
 
         // Proxy to Node.js backend where Socket.io is running
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000/api";
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "https://mayaerp.onrender.com/api";
         const response = await fetch(`${backendUrl}/notices/create`, {
             method: 'POST',
             headers: {
