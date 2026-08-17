@@ -32,6 +32,7 @@ const menuItems = [
     { name: "Time Table", path: "/dashboard/academics/timetable", icon: Calendar },
     { name: "Lab Portal", path: "/dashboard/lab", icon: Beaker },
     { name: "Attendance", path: "/dashboard/academics/attendance", icon: CheckSquare },
+    { name: "Batch Promote", path: "/dashboard/students/promote", icon: GraduationCap },
     { name: "Exams", path: "/dashboard/exams", icon: FileText },
   ]},
   { section: "ADMINISTRATION", items: [

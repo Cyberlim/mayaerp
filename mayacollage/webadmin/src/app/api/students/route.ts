@@ -22,6 +22,13 @@ export async function GET(request: Request) {
     if (selectedProgram) query.selectedProgram = selectedProgram;
     if (selectedBranch) query.selectedBranch = selectedBranch;
     if (batch) query.batch = batch;
+    const sessionYear = searchParams.get("sessionYear");
+    if (sessionYear) {
+      query.$or = [
+        { sessionYear: { $regex: sessionYear, $options: "i" } },
+        { batch: sessionYear }
+      ];
+    }
     if (courseYear) query.courseYear = Number(courseYear);
     if (selectedSemester) query.selectedSemester = Number(selectedSemester);
     if (selectedSection) query.selectedSection = selectedSection;

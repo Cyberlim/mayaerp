@@ -135,9 +135,16 @@ export const createStudent = async (req, res) => {
 
 export const getAllStudents = async (req, res) => {
     try {
-        const students = await Student.find()
+        const { selectedBranch, selectedProgram, sessionYear } = req.query;
+        let query = {};
+        
+        if (selectedBranch) query.selectedBranch = selectedBranch;
+        if (selectedProgram) query.selectedProgram = selectedProgram;
+        if (sessionYear) query.sessionYear = sessionYear;
+
+        const students = await Student.find(query)
             .populate('selectedBranch', 'name')
-            .populate('selectedProgram', 'name')
+            .populate('selectedProgram', 'name code')
             .sort({ createdAt: -1 });
         res.status(200).json(students);
     } catch (error) {

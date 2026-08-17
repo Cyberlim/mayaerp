@@ -11,7 +11,12 @@ export async function PUT(request: Request) {
     const { sessionYear, selectedProgram, selectedBranch, newSemester } = body;
 
     let query: any = {};
-    if (sessionYear) query.sessionYear = sessionYear;
+    if (sessionYear) {
+      query.$or = [
+        { sessionYear: { $regex: sessionYear, $options: "i" } },
+        { batch: sessionYear }
+      ];
+    }
     if (selectedProgram) query.selectedProgram = selectedProgram;
     if (selectedBranch) query.selectedBranch = selectedBranch;
 
