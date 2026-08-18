@@ -35,6 +35,9 @@ import { Server } from 'socket.io';
 // Initialize dotenv
 dotenv.config();
 
+import mongoose from 'mongoose';
+import { Student } from './models/studentModel.js';
+
 // Connect to Database
 connectDB();
 
@@ -73,6 +76,29 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => console.log('User disconnected'));
+});
+
+// MongoDB Change Streams for Real-Time Updates
+mongoose.connection.once('open', () => {
+    console.log('Database connected, initializing change streams...');
+    
+    // Watch Student Collection
+    const studentStream = Student.watch([], { fullDocument: 'updateLookup' });
+    
+    studentStream.on('change', (change) => {
+        if (['insert', 'update', 'replace'].includes(change.operationType)) {
+            // Emit to all connected clients
+            io.emit('student_updated', {
+                type: change.operationType,
+                studentId: change.documentKey._id,
+                data: change.fullDocument
+            });
+        } else if (change.operationType === 'delete') {
+            io.emit('student_deleted', {
+                studentId: change.documentKey._id
+            });
+        }
+    });
 });
 
 // Routes

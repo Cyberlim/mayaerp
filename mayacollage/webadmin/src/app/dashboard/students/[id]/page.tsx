@@ -6,6 +6,7 @@ import { ChevronLeft, User, Mail, Phone, MapPin, Building2, Briefcase, Loader2, 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import IdCardModal, { IdCardFront } from "@/components/IdCardModal";
+import { useSocket } from "@/components/SocketProvider";
 
 export default function StudentDetailScreen() {
   const router = useRouter();
@@ -38,6 +39,28 @@ export default function StudentDetailScreen() {
     }).catch(console.error).finally(() => setIsLoading(false));
   }, [studentId]);
 
+  const socket = useSocket();
+
+  useEffect(() => {
+    if (!socket) return;
+    
+    const handleStudentUpdated = (payload: any) => {
+      if (payload.studentId === studentId && payload.data) {
+        console.log("Real-time update received:", payload);
+        setStudentData(payload.data);
+        if (payload.data.studentStatus || payload.data.status) {
+           setEditStatus(payload.data.studentStatus || payload.data.status || "Active");
+        }
+      }
+    };
+    
+    socket.on('student_updated', handleStudentUpdated);
+    
+    return () => {
+      socket.off('student_updated', handleStudentUpdated);
+    };
+  }, [socket, studentId]);
+
   const handleUpdateStatus = async () => {
     if (!studentData) return;
     setIsSaving(true);
@@ -59,6 +82,67 @@ export default function StudentDetailScreen() {
       setIsSaving(false);
     }
   };
+
+  const handleDeleteDocument = async (docKey: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Are you sure you want to delete this document?")) return;
+    
+    const payload = docKey === 'studentPhoto'
+      ? { profilePhoto: "", applicantPhoto: "", documents: { ...studentData.documents, studentPhoto: "" } }
+      : { documents: { ...studentData.documents, [docKey]: "" } };
+      
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/students/${studentId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setStudentData(updated);
+      } else {
+        alert("Failed to delete document");
+      }
+    } catch(e) {
+      console.error(e);
+      alert("Error deleting document");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleUploadDocument = (docKey: string, file: File) => {
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64Data = reader.result;
+      const payload = docKey === 'studentPhoto' 
+        ? { profilePhoto: base64Data, applicantPhoto: base64Data, documents: { ...studentData.documents, studentPhoto: base64Data } }
+        : { documents: { ...studentData.documents, [docKey]: base64Data } };
+        
+      setIsSaving(true);
+      try {
+        const res = await fetch(`/api/students/${studentId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          setStudentData(updated);
+        } else {
+          alert("Failed to upload document");
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Error uploading document");
+      } finally {
+        setIsSaving(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
 
   if (isLoading) {
     return (
@@ -308,24 +392,65 @@ export default function StudentDetailScreen() {
                     {key: 'transferCertificate', label: 'Transfer Certificate', icon: FileCheck2},
                     {key: 'casteCertificate', label: 'Caste Certificate', icon: FileText},
                   ].map(doc => {
-                    const hasDoc = studentData.documents?.[doc.key];
+                    const hasDoc = doc.key === 'studentPhoto' 
+                      ? (studentData.profilePhoto || studentData.applicantPhoto || studentData.documents?.[doc.key]) 
+                      : studentData.documents?.[doc.key];
+                      
                     return (
                       <div 
                         key={doc.key} 
-                        onClick={() => hasDoc && window.open(hasDoc, '_blank')}
-                        className={`p-6 rounded-[2rem] border-2 text-center transition-all ${
-                          hasDoc ? 'bg-emerald-50 border-emerald-500 cursor-pointer hover:bg-emerald-100 hover:shadow-md' : 'bg-white border-slate-100'
+                        className={`p-6 rounded-[2rem] border-2 text-center transition-all relative group ${
+                          hasDoc ? 'bg-emerald-50 border-emerald-500 hover:bg-emerald-100/50 hover:shadow-md' : 'bg-white border-slate-100'
                         }`}
                       >
-                        <div className={`w-12 h-12 mx-auto rounded-2xl flex items-center justify-center mb-4 ${
-                          hasDoc ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-50 text-slate-400'
-                        }`}>
-                          <doc.icon className="w-6 h-6" />
+                        {/* Removed invisible hover actions, now explicitly at the bottom */}
+                        <div 
+                          className="relative z-0 cursor-pointer"
+                          onClick={() => hasDoc && window.open(hasDoc, '_blank')}
+                        >
+                          {hasDoc && doc.key === 'studentPhoto' ? (
+                            <div className="w-16 h-16 mx-auto rounded-2xl overflow-hidden mb-4 border-2 border-emerald-100 shadow-sm">
+                               <img src={hasDoc} alt={doc.label} className="w-full h-full object-cover" />
+                            </div>
+                          ) : (
+                            <div className={`w-12 h-12 mx-auto rounded-2xl flex items-center justify-center mb-4 ${
+                              hasDoc ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-50 text-slate-400'
+                            }`}>
+                              <doc.icon className="w-6 h-6" />
+                            </div>
+                          )}
+                          
+                          <h4 className="text-xs font-black text-slate-800 mb-1">{doc.label}</h4>
+                          <p className={`text-[10px] font-bold uppercase tracking-widest ${hasDoc ? 'text-emerald-600' : 'text-slate-400'}`}>
+                            {hasDoc ? 'Uploaded' : 'Pending'}
+                          </p>
                         </div>
-                        <h4 className="text-xs font-black text-slate-800 mb-1">{doc.label}</h4>
-                        <p className={`text-[10px] font-bold uppercase tracking-widest ${hasDoc ? 'text-emerald-600' : 'text-slate-400'}`}>
-                          {hasDoc ? 'Uploaded' : 'Pending'}
-                        </p>
+
+                        {/* Always visible action buttons */}
+                        <div className="mt-5 pt-4 border-t border-slate-100/50 flex items-center justify-center gap-2">
+                            <label className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-indigo-100 hover:text-indigo-700 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                                {hasDoc ? 'Update' : 'Upload'}
+                                <input 
+                                  type="file" 
+                                  className="hidden" 
+                                  accept={doc.key === 'studentPhoto' ? "image/*" : "application/pdf,image/*"}
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) handleUploadDocument(doc.key, file);
+                                  }}
+                                />
+                            </label>
+                            {hasDoc && (
+                                <button 
+                                  onClick={(e) => handleDeleteDocument(doc.key, e)}
+                                  className="flex items-center justify-center px-4 py-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors"
+                                  title="Delete Document"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                                </button>
+                            )}
+                        </div>
                       </div>
                     );
                   })}

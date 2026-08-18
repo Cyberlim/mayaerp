@@ -6,6 +6,7 @@ import { ChevronLeft, User, Mail, Phone, MapPin, Building2, Briefcase, Loader2, 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import IdCardModal, { IdCardFront } from "@/components/IdCardModal";
+import { useSocket } from "@/components/SocketProvider";
 
 export default function StudentDetailScreen() {
   const router = useRouter();
@@ -37,6 +38,28 @@ export default function StudentDetailScreen() {
       }
     }).catch(console.error).finally(() => setIsLoading(false));
   }, [studentId]);
+
+  const socket = useSocket();
+
+  useEffect(() => {
+    if (!socket) return;
+    
+    const handleStudentUpdated = (payload: any) => {
+      if (payload.studentId === studentId && payload.data) {
+        console.log("Real-time update received:", payload);
+        setStudentData(payload.data);
+        if (payload.data.studentStatus || payload.data.status) {
+           setEditStatus(payload.data.studentStatus || payload.data.status || "Active");
+        }
+      }
+    };
+    
+    socket.on('student_updated', handleStudentUpdated);
+    
+    return () => {
+      socket.off('student_updated', handleStudentUpdated);
+    };
+  }, [socket, studentId]);
 
   const handleUpdateStatus = async () => {
     if (!studentData) return;

@@ -190,8 +190,18 @@ export default function EditStudentFullPage() {
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Profile Photo</label>
                 <div className="relative mt-1 flex items-center gap-3">
                   {formData.profilePhoto && (
-                    <div className="w-12 h-12 shrink-0 rounded-full overflow-hidden border border-slate-200">
-                      <img src={formData.profilePhoto} alt="Profile" className="w-full h-full object-cover" />
+                    <div className="relative shrink-0 group">
+                      <div className="w-12 h-12 rounded-full overflow-hidden border border-slate-200 shadow-sm">
+                        <img src={formData.profilePhoto} alt="Profile" className="w-full h-full object-cover" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({...formData, profilePhoto: ""})}
+                        className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-rose-600"
+                        title="Remove Photo"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                      </button>
                     </div>
                   )}
                   <input 

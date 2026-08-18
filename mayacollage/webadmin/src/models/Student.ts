@@ -62,6 +62,20 @@ const studentSchema = new mongoose.Schema({
       }]
   },
 
+  // Documents (Cloudinary URLs or Base64)
+  documents: {
+      studentPhoto:         { type: String },
+      marksheet10:          { type: String },
+      marksheet12:          { type: String },
+      transferCertificate:  { type: String },
+      aadharCard:           { type: String },
+      casteCertificate:     { type: String },
+      migrationCertificate: { type: String },
+      entranceScoreCard:    { type: String },
+      otherDocument:        { type: String },
+  },
+  documentsLastUpdated: { type: Date },
+
   status: { type: String, default: "Approved" },
   studentStatus: { type: String, enum: ["Active", "Inactive", "Graduated", "Suspended"], default: "Active" },
   createdAt: { type: Date, default: Date.now },

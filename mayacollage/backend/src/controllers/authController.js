@@ -84,6 +84,12 @@ export const studentLogin = async (req, res) => {
             passwordCandidates.push(cleanPassword.replace(/\//g, '-'));
         }
         
+        if (/^\d{2}[\/-]\d{2}[\/-]\d{4}$/.test(cleanPassword)) {
+            const parts = cleanPassword.split(/[\/-]/);
+            passwordCandidates.push(`${parts[2]}-${parts[1]}-${parts[0]}`); // YYYY-MM-DD
+            passwordCandidates.push(`${parts[2]}/${parts[1]}/${parts[0]}`); // YYYY/MM/DD
+        }
+        
         if (cleanPassword.includes('-')) {
             passwordCandidates.push(cleanPassword.replace(/-/g, ''));
             passwordCandidates.push(cleanPassword.replace(/-/g, '/'));
@@ -99,6 +105,18 @@ export const studentLogin = async (req, res) => {
                 break;
             }
         }
+        
+        // Manual fallback: Check if the plain-text password exactly matches the DOB in the database
+        if (!isMatch && student.dob) {
+            for (const candidate of uniqueCandidates) {
+                if (candidate === student.dob) {
+                    isMatch = true;
+                    console.log('Password matched using manual DOB fallback!');
+                    break;
+                }
+            }
+        }
+        
         console.log('Password match status:', isMatch);
 
         if (isMatch) {
