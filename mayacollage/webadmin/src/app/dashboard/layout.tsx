@@ -14,7 +14,7 @@ export default function DashboardLayout({
   const [userProfile, setUserProfile] = useState<{name: string, role: string, photo: string} | null>(null);
 
   useEffect(() => {
-    document.title = "Maya Admin | ERP Portal";
+    document.title = "Admin Portal | Maya ERP";
   }, []);
 
   useEffect(() => {

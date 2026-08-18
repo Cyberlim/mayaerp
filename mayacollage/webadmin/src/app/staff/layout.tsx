@@ -1,7 +1,7 @@
 import StaffSidebar from "@/components/StaffSidebar";
 
 export const metadata = {
-  title: "Maya Staff | ERP Portal",
+  title: "Staff Portal | Maya ERP",
   description: "Maya Staff Portal",
 };
 

@@ -1,7 +1,7 @@
 import OfficeSidebar from "@/components/OfficeSidebar";
 
 export const metadata = {
-  title: "Maya Office | ERP Portal",
+  title: "Office Portal | Maya ERP",
   description: "Maya Office Portal",
 };
 

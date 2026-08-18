@@ -1,7 +1,7 @@
 import LabSidebar from "@/components/LabSidebar";
 
 export const metadata = {
-  title: "Lab Portal - Maya ERP",
+  title: "Lab Portal | Maya ERP",
   description: "Laboratory management and inventory system",
 };
 

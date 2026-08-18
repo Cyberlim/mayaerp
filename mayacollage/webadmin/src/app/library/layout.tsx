@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import LibrarySidebar from "@/components/LibrarySidebar";
 
 export const metadata: Metadata = {
-  title: "Maya Library | Admin Portal",
+  title: "Library Portal | Maya ERP",
   description: "Library management system for Maya ERP",
 };
 
