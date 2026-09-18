@@ -10,52 +10,41 @@ export async function POST(req: Request) {
     try {
         await connectDB();
         const body = await req.json();
-        const { busId, studentId, stopName, customFare, paymentStatus = 'Pending' } = body;
-        
+        const { busId, studentId, markPaid, paymentMode = 'Cash' } = body;
+
         if (!busId || !studentId) {
-            return NextResponse.json({ message: 'Bus ID and Student ID are required' }, { status: 400 });
+            return NextResponse.json({ message: "Bus ID and Student ID are required" }, { status: 400 });
         }
 
         const bus = await Bus.findById(busId);
-        if (!bus) return NextResponse.json({ message: 'Bus not found' }, { status: 404 });
-        if (bus.filled >= bus.capacity) return NextResponse.json({ message: 'Bus is already full to capacity' }, { status: 400 });
-        
-        // Check if student is already assigned to ANY bus
-        const existingBusAssignment = await Bus.findOne({
-            'students.student': studentId
-        });
-        
-        if (existingBusAssignment) {
-            return NextResponse.json({ 
-                message: `Student is already assigned to Fleet ${existingBusAssignment.busNo} (${existingBusAssignment.routeName}). Please unassign them first.` 
-            }, { status: 400 });
+        if (!bus) {
+            return NextResponse.json({ message: "Bus not found" }, { status: 404 });
         }
 
-        const stop = bus.stops.find((s: any) => s.stationName === stopName);
-        const fare = customFare !== undefined && customFare !== null && customFare !== "" 
-            ? Number(customFare) 
-            : (stop ? Number(stop.price) || 0 : 0);
-
-        const isPaid = paymentStatus === 'Paid';
-
-        // 1. Add to Bus
-        bus.students.push({
-            student: studentId,
-            stopName: stopName || (bus.stops[0]?.stationName || 'Main Station'),
-            fare: fare,
-            paymentStatus: isPaid ? 'Paid' : 'Pending',
-            paymentDate: isPaid ? new Date() : undefined,
-            transactionId: isPaid ? `TRN-BUS-${Date.now().toString().slice(-6)}` : undefined
+        const studentEntry = bus.students.find((s: any) => {
+            const sid = s.student?._id ? s.student._id.toString() : s.student?.toString();
+            return sid === studentId;
         });
-        
-        bus.filled = bus.students.length;
+
+        if (!studentEntry) {
+            return NextResponse.json({ message: "Student is not assigned to this bus" }, { status: 404 });
+        }
+
+        const fare = Number(studentEntry.fare) || 0;
+        const willBePaid = Boolean(markPaid);
+
+        // 1. Update Bus record
+        studentEntry.paymentStatus = willBePaid ? 'Paid' : 'Pending';
+        studentEntry.paymentDate = willBePaid ? new Date() : undefined;
+        if (willBePaid && !studentEntry.transactionId) {
+            studentEntry.transactionId = `TRN-BUS-${Date.now().toString().slice(-6)}`;
+        }
         await bus.save();
-        
-        // 2. Update Student Fees in MongoDB
+
+        // 2. Update Student document in MongoDB
         const student = await Student.findById(studentId);
         if (student) {
             const currentYearNum = Number(student.courseYear) || 1;
-            
             if (!student.fees) {
                 student.fees = { isConfigured: true, years: [] };
             }
@@ -64,27 +53,28 @@ export async function POST(req: Request) {
                     year: currentYearNum,
                     tuition: { total: 0, paid: 0 },
                     exam: { total: 0, paid: 0 },
-                    transport: { total: fare, paid: isPaid ? fare : 0 },
+                    transport: { total: fare, paid: willBePaid ? fare : 0 },
                     other: { total: 0, paid: 0 }
                 }];
             } else {
-                // Find or add current year
                 let yearObj = student.fees.years.find((y: any) => y.year === currentYearNum);
                 if (!yearObj) {
                     yearObj = {
                         year: currentYearNum,
                         tuition: { total: 0, paid: 0 },
                         exam: { total: 0, paid: 0 },
-                        transport: { total: fare, paid: isPaid ? fare : 0 },
+                        transport: { total: fare, paid: willBePaid ? fare : 0 },
                         other: { total: 0, paid: 0 }
                     };
                     student.fees.years.push(yearObj);
                 } else {
                     if (!yearObj.transport) {
-                        yearObj.transport = { total: fare, paid: isPaid ? fare : 0 };
+                        yearObj.transport = { total: fare, paid: willBePaid ? fare : 0 };
                     } else {
-                        yearObj.transport.total = fare;
-                        yearObj.transport.paid = isPaid ? fare : 0;
+                        if (!yearObj.transport.total || yearObj.transport.total === 0) {
+                            yearObj.transport.total = fare;
+                        }
+                        yearObj.transport.paid = willBePaid ? (yearObj.transport.total || fare) : 0;
                     }
                 }
             }
@@ -93,8 +83,8 @@ export async function POST(req: Request) {
             student.markModified('fees');
             await student.save();
 
-            // 3. If paid, create FeeTransaction
-            if (isPaid && fare > 0) {
+            // 3. Record transaction if paid
+            if (willBePaid && fare > 0) {
                 try {
                     await FeeTransaction.create({
                         transactionId: `TXN-TRN-${Date.now().toString().slice(-8)}`,
@@ -104,29 +94,29 @@ export async function POST(req: Request) {
                         amount: fare,
                         type: 'Credit',
                         category: 'Transport Fee',
-                        paymentMode: 'Cash',
-                        description: `Transport Fee for Bus ${bus.busNo} (${stopName})`,
+                        paymentMode: paymentMode,
+                        description: `Transport Fee for Bus ${bus.busNo} (${studentEntry.stopName || 'Route Stop'})`,
                         date: new Date()
                     });
                 } catch (txErr) {
-                    console.error("FeeTransaction error:", txErr);
+                    console.error("FeeTransaction record error:", txErr);
                 }
             }
         }
-        
+
         const updatedBus = await Bus.findById(busId).populate({
             path: 'students.student',
             select: 'firstName lastName email mobile studentId admissionNumber selectedBranch selectedProgram fees courseYear'
         });
-        
+
         return NextResponse.json({
             success: true,
-            message: `Student successfully assigned to Bus ${bus.busNo} at ${stopName} (Fare: ₹${fare})!`,
+            message: willBePaid ? `Transport fee marked as PAID for student!` : `Transport fee marked as UNPAID (Pending).`,
             bus: updatedBus
         }, { status: 200 });
 
     } catch (error: any) {
-        console.error("Transport POST Assign Student Error:", error);
-        return NextResponse.json({ message: "Failed to assign student", error: error.message }, { status: 500 });
+        console.error("Transport Toggle Payment Error:", error);
+        return NextResponse.json({ message: "Error updating transport payment", error: error.message }, { status: 500 });
     }
 }
