@@ -1,8 +1,51 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, User, Mail, Phone, MapPin, Building2, Briefcase, Loader2, Calendar, FileText, Save, FileCheck2, Calculator, BarChart, Download, CreditCard, Receipt, ShieldAlert, UserCog, AlertTriangle, ChevronDown, Printer } from "lucide-react";
+import { 
+  ChevronLeft, 
+  User, 
+  Mail, 
+  Phone, 
+  MapPin, 
+  Building2, 
+  Briefcase, 
+  Loader2, 
+  Calendar, 
+  FileText, 
+  Save, 
+  FileCheck2, 
+  Calculator, 
+  BarChart, 
+  Download, 
+  CreditCard, 
+  Receipt, 
+  ShieldAlert, 
+  UserCog, 
+  AlertTriangle, 
+  ChevronDown, 
+  Printer,
+  Plus,
+  Edit3,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  Sparkles,
+  Check,
+  Trash2,
+  GraduationCap,
+  DollarSign,
+  X,
+  BadgeCheck,
+  Copy,
+  ExternalLink,
+  RefreshCw,
+  Undo2,
+  BookOpen,
+  Award,
+  Fingerprint,
+  HeartHandshake
+} from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import IdCardModal, { IdCardFront } from "@/components/IdCardModal";
@@ -14,29 +57,77 @@ export default function StudentDetailScreen() {
   const studentId = params.id as string;
 
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("Personal");
+  const [activeTab, setActiveTab] = useState<"Personal" | "Academics" | "Fees" | "Documents" | "Administration">("Personal");
   const [isIdModalOpen, setIsIdModalOpen] = useState(false);
   
   const [studentData, setStudentData] = useState<any>(null);
   const [branches, setBranches] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
 
   const [isSaving, setIsSaving] = useState(false);
   const [editStatus, setEditStatus] = useState("");
+  const [toastMsg, setToastMsg] = useState("");
 
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/branches").then(res => res.json()),
-      fetch("/api/courses").then(res => res.json()),
-      fetch(`/api/students/${studentId}`).then(res => res.json())
-    ]).then(([branchesData, coursesData, student]) => {
+  // Quick Edit States: Personal Details
+  const [isEditingPersonal, setIsEditingPersonal] = useState(false);
+  const [personalForm, setPersonalForm] = useState<any>({});
+  const [isSavingPersonal, setIsSavingPersonal] = useState(false);
+
+  // Quick Edit States: Academics Details
+  const [isEditingAcademics, setIsEditingAcademics] = useState(false);
+  const [academicsForm, setAcademicsForm] = useState<any>({});
+  const [isSavingAcademics, setIsSavingAcademics] = useState(false);
+
+  // Fee Payment Modal State
+  const [isPayFeeModalOpen, setIsPayFeeModalOpen] = useState(false);
+  const [payFeeForm, setPayFeeForm] = useState({
+    year: 1,
+    category: "tuition" as "tuition" | "exam" | "transport" | "other",
+    amount: "",
+    paymentMethod: "Cash",
+    transactionId: "",
+    paymentDate: new Date().toISOString().split("T")[0],
+    notes: ""
+  });
+  const [isSubmittingFeePay, setIsSubmittingFeePay] = useState(false);
+
+  // Edit Fee Structure Modal State
+  const [isEditFeeModalOpen, setIsEditFeeModalOpen] = useState(false);
+  const [editFeeYears, setEditFeeYears] = useState<any[]>([]);
+  const [isSavingFeeEdit, setIsSavingFeeEdit] = useState(false);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(""), 3500);
+  };
+
+  const fetchStudentData = async () => {
+    try {
+      const [branchesData, coursesData, student, txnsData] = await Promise.all([
+        fetch("/api/branches").then(res => res.json()).catch(() => []),
+        fetch("/api/courses").then(res => res.json()).catch(() => []),
+        fetch(`/api/students/${studentId}`).then(res => res.json()).catch(() => null),
+        fetch(`/api/finance/transactions?studentId=${studentId}`).then(res => res.json()).catch(() => [])
+      ]);
+
       setBranches(Array.isArray(branchesData) ? branchesData : []);
       setCourses(Array.isArray(coursesData) ? coursesData : []);
+      setTransactions(Array.isArray(txnsData) ? txnsData : []);
+
       if (student && !student.error) {
         setStudentData(student);
         setEditStatus(student.studentStatus || student.status || "Active");
       }
-    }).catch(console.error).finally(() => setIsLoading(false));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStudentData();
   }, [studentId]);
 
   const socket = useSocket();
@@ -46,7 +137,6 @@ export default function StudentDetailScreen() {
     
     const handleStudentUpdated = (payload: any) => {
       if (payload.studentId === studentId && payload.data) {
-        console.log("Real-time update received:", payload);
         setStudentData(payload.data);
         if (payload.data.studentStatus || payload.data.status) {
            setEditStatus(payload.data.studentStatus || payload.data.status || "Active");
@@ -61,6 +151,101 @@ export default function StudentDetailScreen() {
     };
   }, [socket, studentId]);
 
+  // Handle Quick Edit Personal Details
+  const handleStartEditPersonal = () => {
+    setPersonalForm({
+      firstName: studentData.firstName || "",
+      middleName: studentData.middleName || "",
+      lastName: studentData.lastName || "",
+      dob: studentData.dob || "",
+      gender: studentData.gender || "Male",
+      category: studentData.category || "General",
+      admissionNumber: studentData.admissionNumber || "",
+      studentId: studentData.studentId || "",
+      enrollmentNumber: studentData.enrollmentNumber || "",
+      aadharNumber: studentData.aadharNumber || "",
+      religion: studentData.religion || "",
+      email: studentData.email || "",
+      mobile: studentData.mobile || studentData.phone || studentData.mobileNumber || "",
+      parentMobile: studentData.parentMobile || "",
+      alternateMobile: studentData.alternateMobile || "",
+      address: studentData.address || "",
+      city: studentData.city || "",
+      state: studentData.state || "",
+      pinCode: studentData.pinCode || ""
+    });
+    setIsEditingPersonal(true);
+  };
+
+  const handleSavePersonal = async () => {
+    setIsSavingPersonal(true);
+    try {
+      const res = await fetch(`/api/students/${studentId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(personalForm)
+      });
+      const updated = await res.json();
+      if (res.ok && !updated.error) {
+        setStudentData(updated);
+        setIsEditingPersonal(false);
+        showToast("Personal details updated and saved successfully!");
+      } else {
+        alert(updated.error || "Failed to update personal details.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error saving personal details.");
+    } finally {
+      setIsSavingPersonal(false);
+    }
+  };
+
+  // Handle Quick Edit Academics Details
+  const handleStartEditAcademics = () => {
+    setAcademicsForm({
+      selectedProgram: typeof studentData.selectedProgram === 'object' ? studentData.selectedProgram?._id : (studentData.selectedProgram || ""),
+      selectedBranch: typeof studentData.selectedBranch === 'object' ? studentData.selectedBranch?._id : (studentData.selectedBranch || ""),
+      sessionYear: studentData.sessionYear || "",
+      selectedSemester: studentData.selectedSemester || 1,
+      selectedSection: studentData.selectedSection || "",
+      batch: studentData.batch || "",
+      entryType: studentData.entryType || "Direct",
+      highestQualification: studentData.highestQualification || "",
+      boardUniversity: studentData.boardUniversity || "",
+      institutionName: studentData.institutionName || "",
+      percentageCGPA: studentData.percentageCGPA || "",
+      yearOfPassing: studentData.yearOfPassing || "",
+      entranceExam: studentData.entranceExam || "",
+      entranceScore: studentData.entranceScore || ""
+    });
+    setIsEditingAcademics(true);
+  };
+
+  const handleSaveAcademics = async () => {
+    setIsSavingAcademics(true);
+    try {
+      const res = await fetch(`/api/students/${studentId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(academicsForm)
+      });
+      const updated = await res.json();
+      if (res.ok && !updated.error) {
+        setStudentData(updated);
+        setIsEditingAcademics(false);
+        showToast("Academic details updated and saved successfully!");
+      } else {
+        alert(updated.error || "Failed to update academic details.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error saving academic details.");
+    } finally {
+      setIsSavingAcademics(false);
+    }
+  };
+
   const handleUpdateStatus = async () => {
     if (!studentData) return;
     setIsSaving(true);
@@ -73,7 +258,7 @@ export default function StudentDetailScreen() {
       if (res.ok) {
         const updated = await res.json();
         setStudentData(updated);
-        alert("Status updated successfully!");
+        showToast("Student status updated successfully!");
       }
     } catch (e) {
       console.error(e);
@@ -101,8 +286,7 @@ export default function StudentDetailScreen() {
       if (res.ok) {
         const updated = await res.json();
         setStudentData(updated);
-      } else {
-        alert("Failed to delete document");
+        showToast("Document deleted successfully");
       }
     } catch(e) {
       console.error(e);
@@ -130,8 +314,7 @@ export default function StudentDetailScreen() {
         if (res.ok) {
           const updated = await res.json();
           setStudentData(updated);
-        } else {
-          alert("Failed to upload document");
+          showToast("Document uploaded successfully");
         }
       } catch (e) {
         console.error(e);
@@ -143,20 +326,269 @@ export default function StudentDetailScreen() {
     reader.readAsDataURL(file);
   };
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', { 
+      style: 'currency', 
+      currency: 'INR', 
+      maximumFractionDigits: 0 
+    }).format(amount || 0);
+  };
+
+  // Student Fee Calculations
+  const feeSummary = useMemo(() => {
+    const isConfigured = Boolean(studentData?.fees?.isConfigured && studentData?.fees?.years?.length > 0);
+    let total = 0;
+    let paid = 0;
+
+    if (isConfigured && studentData?.fees?.years) {
+      studentData.fees.years.forEach((fy: any) => {
+        total += (Number(fy.tuition?.total) || 0) + (Number(fy.exam?.total) || 0) + (Number(fy.transport?.total) || 0) + (Number(fy.other?.total) || 0);
+        paid += (Number(fy.tuition?.paid) || 0) + (Number(fy.exam?.paid) || 0) + (Number(fy.transport?.paid) || 0) + (Number(fy.other?.paid) || 0);
+      });
+    }
+
+    const balance = Math.max(0, total - paid);
+    let status: "not_configured" | "paid" | "partial" | "unpaid" = "not_configured";
+    
+    if (isConfigured) {
+      if (total === 0 || paid >= total) status = "paid";
+      else if (paid > 0) status = "partial";
+      else status = "unpaid";
+    }
+
+    const percentage = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+
+    return { isConfigured, total, paid, balance, status, percentage };
+  }, [studentData]);
+
+  // Open Edit Fee Modal
+  const handleOpenEditFeeModal = () => {
+    const selectedCourse = courses.find(c => c._id === (typeof studentData.selectedProgram === 'object' ? studentData.selectedProgram?._id : studentData.selectedProgram));
+    const duration = selectedCourse?.durationYears || 4;
+
+    if (studentData.fees?.isConfigured && Array.isArray(studentData.fees?.years) && studentData.fees.years.length > 0) {
+      const clonedYears = studentData.fees.years.map((y: any, idx: number) => ({
+        year: y.year || idx + 1,
+        tuition: { total: y.tuition?.total || 0, paid: y.tuition?.paid || 0 },
+        exam: { total: y.exam?.total || 0, paid: y.exam?.paid || 0 },
+        transport: { total: y.transport?.total || 0, paid: y.transport?.paid || 0 },
+        other: { total: y.other?.total || 0, paid: y.other?.paid || 0 }
+      }));
+      setEditFeeYears(clonedYears);
+    } else {
+      const defaultTuition = selectedCourse?.tuitionFee ? Math.round(selectedCourse.tuitionFee / duration) : 0;
+      const initialYears = Array.from({ length: duration }).map((_, idx) => ({
+        year: idx + 1,
+        tuition: { total: defaultTuition, paid: 0 },
+        exam: { total: 0, paid: 0 },
+        transport: { total: 0, paid: 0 },
+        other: { total: 0, paid: 0 }
+      }));
+      setEditFeeYears(initialYears);
+    }
+
+    setIsEditFeeModalOpen(true);
+  };
+
+  // Open Add Fee Payment Modal
+  const handleOpenPayFeeModal = (defaultYear = 1, defaultCategory: "tuition" | "exam" | "transport" | "other" = "tuition") => {
+    setPayFeeForm({
+      year: defaultYear,
+      category: defaultCategory,
+      amount: feeSummary.balance > 0 ? String(feeSummary.balance) : "",
+      paymentMethod: "Cash",
+      transactionId: `FEE-${Date.now().toString().slice(-6)}`,
+      paymentDate: new Date().toISOString().split("T")[0],
+      notes: ""
+    });
+    setIsPayFeeModalOpen(true);
+  };
+
+  // Submit Fee Payment
+  const handleSubmitFeePayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payFeeForm.amount || Number(payFeeForm.amount) <= 0) {
+      alert("Please enter a valid amount.");
+      return;
+    }
+
+    setIsSubmittingFeePay(true);
+    try {
+      const res = await fetch("/api/finance/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId,
+          amount: Number(payFeeForm.amount),
+          paymentDate: payFeeForm.paymentDate,
+          paymentMethod: payFeeForm.paymentMethod,
+          transactionId: payFeeForm.transactionId,
+          year: Number(payFeeForm.year),
+          category: payFeeForm.category,
+          notes: payFeeForm.notes
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast("Fee payment recorded successfully!");
+        setIsPayFeeModalOpen(false);
+        if (data.student) setStudentData(data.student);
+        fetchStudentData();
+      } else {
+        alert(data.error || "Failed to record payment.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error recording payment.");
+    } finally {
+      setIsSubmittingFeePay(false);
+    }
+  };
+
+  // Handle Edit Fee Field Changes
+  const handleEditFeeChange = (yearIndex: number, category: "tuition" | "exam" | "transport" | "other", field: "total" | "paid", value: string) => {
+    const numVal = Math.max(0, Number(value) || 0);
+    const updated = [...editFeeYears];
+    updated[yearIndex] = {
+      ...updated[yearIndex],
+      [category]: {
+        ...updated[yearIndex][category],
+        [field]: numVal
+      }
+    };
+    setEditFeeYears(updated);
+  };
+
+  const handleQuickMarkCategoryPaid = (yearIndex: number, category: "tuition" | "exam" | "transport" | "other") => {
+    const updated = [...editFeeYears];
+    const totalVal = updated[yearIndex][category]?.total || 0;
+    updated[yearIndex] = {
+      ...updated[yearIndex],
+      [category]: {
+        ...updated[yearIndex][category],
+        paid: totalVal
+      }
+    };
+    setEditFeeYears(updated);
+  };
+
+  const handleQuickMarkYearPaid = (yearIndex: number) => {
+    const updated = [...editFeeYears];
+    const yr = updated[yearIndex];
+    updated[yearIndex] = {
+      ...yr,
+      tuition: { ...yr.tuition, paid: yr.tuition.total },
+      exam: { ...yr.exam, paid: yr.exam.total },
+      transport: { ...yr.transport, paid: yr.transport.total },
+      other: { ...yr.other, paid: yr.other.total }
+    };
+    setEditFeeYears(updated);
+  };
+
+  const handleMarkAllAsPaid = () => {
+    const updated = editFeeYears.map(yr => ({
+      ...yr,
+      tuition: { ...yr.tuition, paid: yr.tuition.total },
+      exam: { ...yr.exam, paid: yr.exam.total },
+      transport: { ...yr.transport, paid: yr.transport.total },
+      other: { ...yr.other, paid: yr.other.total }
+    }));
+    setEditFeeYears(updated);
+  };
+
+  const handleResetAllPaid = () => {
+    const updated = editFeeYears.map(yr => ({
+      ...yr,
+      tuition: { ...yr.tuition, paid: 0 },
+      exam: { ...yr.exam, paid: 0 },
+      transport: { ...yr.transport, paid: 0 },
+      other: { ...yr.other, paid: 0 }
+    }));
+    setEditFeeYears(updated);
+  };
+
+  const handleAddAcademicYear = () => {
+    const nextYearNum = editFeeYears.length + 1;
+    setEditFeeYears([
+      ...editFeeYears,
+      {
+        year: nextYearNum,
+        tuition: { total: 0, paid: 0 },
+        exam: { total: 0, paid: 0 },
+        transport: { total: 0, paid: 0 },
+        other: { total: 0, paid: 0 }
+      }
+    ]);
+  };
+
+  const handleRemoveAcademicYear = (index: number) => {
+    if (editFeeYears.length <= 1) return;
+    const updated = editFeeYears.filter((_, i) => i !== index).map((y, idx) => ({ ...y, year: idx + 1 }));
+    setEditFeeYears(updated);
+  };
+
+  const handleSaveStudentFeeStructure = async () => {
+    setIsSavingFeeEdit(true);
+    try {
+      const payload = {
+        fees: {
+          isConfigured: true,
+          years: editFeeYears
+        }
+      };
+
+      const res = await fetch(`/api/students/${studentId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const updatedStudent = await res.json();
+      if (res.ok && !updatedStudent.error) {
+        setStudentData(updatedStudent);
+        showToast("Fee structure and payment status saved to database!");
+        setIsEditFeeModalOpen(false);
+      } else {
+        alert(updatedStudent.error || "Failed to update fees.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error saving fee structure.");
+    } finally {
+      setIsSavingFeeEdit(false);
+    }
+  };
+
+  const editModalTotals = useMemo(() => {
+    let total = 0;
+    let paid = 0;
+    editFeeYears.forEach(y => {
+      total += (Number(y.tuition?.total) || 0) + (Number(y.exam?.total) || 0) + (Number(y.transport?.total) || 0) + (Number(y.other?.total) || 0);
+      paid += (Number(y.tuition?.paid) || 0) + (Number(y.exam?.paid) || 0) + (Number(y.transport?.paid) || 0) + (Number(y.other?.paid) || 0);
+    });
+    return { total, paid, balance: Math.max(0, total - paid) };
+  }, [editFeeYears]);
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#F8F6F6] flex justify-center items-center">
-        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+      <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-center items-center">
+        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mb-4" />
+        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Loading Student Profile...</p>
       </div>
     );
   }
 
   if (!studentData) {
     return (
-      <div className="min-h-screen flex flex-col justify-center items-center bg-[#F8F6F6]">
-        <h2 className="text-xl font-bold">Student not found.</h2>
-        <Link href="/dashboard/students"><button className="mt-4 text-indigo-500 font-bold">Go Back</button></Link>
+      <div className="min-h-screen flex flex-col justify-center items-center bg-[#F8FAFC]">
+        <AlertCircle className="w-12 h-12 text-slate-300 mb-3" />
+        <h2 className="text-xl font-bold text-slate-800">Student not found.</h2>
+        <Link href="/dashboard/students">
+          <button className="mt-4 px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl text-xs">
+            Return to Student Directory
+          </button>
+        </Link>
       </div>
     );
   }
@@ -164,226 +596,1094 @@ export default function StudentDetailScreen() {
   const selectedCourse = courses.find(c => c._id === (typeof studentData.selectedProgram === 'object' ? studentData.selectedProgram?._id : studentData.selectedProgram));
   const selectedBranch = branches.find(b => b._id === (typeof studentData.selectedBranch === 'object' ? studentData.selectedBranch?._id : studentData.selectedBranch));
 
-  const tabs = ["Personal", "Academics", "Fees", "Documents", "Administration"];
+  const tabs: Array<"Personal" | "Academics" | "Fees" | "Documents" | "Administration"> = [
+    "Personal", 
+    "Academics", 
+    "Fees", 
+    "Documents", 
+    "Administration"
+  ];
 
-  // Helper for rendering grids
-  const InfoGrid = ({ title, data }: { title?: string, data: {label: string, value: string}[] }) => (
-    <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 mb-8 overflow-hidden">
-      {title && <h3 className="text-lg font-black text-slate-800 mb-6 border-b border-slate-50 pb-4">{title}</h3>}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-        {data.map(item => (
-          <div key={item.label}>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{item.label}</p>
-            <p className="text-sm font-bold text-slate-800">{item.value || "N/A"}</p>
-          </div>
-        ))}
+  // Modern Key-Value List Row Component
+  const DetailListRow = ({ icon: Icon, label, value, badge, isCopyable }: { icon?: any, label: string, value: any, badge?: string, isCopyable?: boolean }) => {
+    return (
+      <div className="py-3.5 px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1 hover:bg-slate-50/80 transition-colors rounded-xl group">
+        <div className="flex items-center gap-3">
+          {Icon && (
+            <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 group-hover:text-indigo-600 group-hover:bg-indigo-50 transition-colors shrink-0">
+              <Icon className="w-3.5 h-3.5" />
+            </div>
+          )}
+          <span className="text-xs font-bold text-slate-500">{label}</span>
+        </div>
+        <div className="flex items-center gap-2 pl-10 sm:pl-0">
+          {badge ? (
+            <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 text-xs font-black rounded-md border border-indigo-100">
+              {badge}
+            </span>
+          ) : (
+            <span className="text-xs font-black text-slate-900">
+              {value || <span className="text-slate-400 font-normal italic">Not specified</span>}
+            </span>
+          )}
+          {isCopyable && value && (
+            <button 
+              onClick={() => { navigator.clipboard.writeText(String(value)); showToast(`Copied ${label} to clipboard!`); }}
+              title="Copy to clipboard"
+              className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-indigo-600 transition-opacity"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
-    <div className="min-h-screen bg-[#F8F6F6] flex flex-col md:flex-row font-sans text-slate-800">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row font-sans text-slate-800">
       
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toastMsg && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20, scale: 0.95 }} 
+            animate={{ opacity: 1, y: 0, scale: 1 }} 
+            exit={{ opacity: 0, y: -20, scale: 0.95 }} 
+            className="fixed top-8 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-6 py-3.5 rounded-2xl font-bold shadow-2xl flex items-center gap-3 border border-slate-700"
+          >
+            <CheckCircle2 className="w-5 h-5 text-emerald-400" /> 
+            <span>{toastMsg}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* LEFT PROFILE SIDEBAR */}
-      <div className="w-full md:w-[320px] bg-[#1E1E2D] flex flex-col z-10 sticky top-0 md:h-screen shadow-2xl overflow-y-auto">
-        <div className="p-8">
+      <div className="w-full md:w-[330px] bg-slate-900 flex flex-col z-10 sticky top-0 md:h-screen shadow-2xl overflow-y-auto border-r border-slate-800 text-white">
+        <div className="p-6">
           <Link href="/dashboard/students">
-            <button className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-white font-bold text-xs transition-colors mb-10 w-fit">
-              <ChevronLeft className="w-4 h-4" /> Back
+            <button className="flex items-center gap-2 px-3.5 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-white font-bold text-xs transition-colors mb-6 w-fit">
+              <ChevronLeft className="w-4 h-4" /> Student Directory
             </button>
           </Link>
 
-          <div className="flex flex-col items-center justify-center w-full transform scale-90 origin-top">
-            <IdCardFront
-              photoUrl={studentData.profilePhoto || studentData.documents?.studentPhoto || "/placeholder-avatar.jpg"}
-              fullName={`${studentData.firstName || ''} ${studentData.lastName || ''}`.trim()}
-              department={selectedCourse?.name || selectedBranch?.name || "N/A"}
-              mobile={studentData.mobile || studentData.phone || "N/A"}
-              email={studentData.email || "N/A"}
-              address={[studentData.address, studentData.city, studentData.state].filter(Boolean).join(', ') || "N/A"}
-            />
+          {/* Student Dossier Badge & Photo */}
+          <div className="bg-slate-800/80 rounded-2xl p-5 border border-slate-700/60 mb-6 text-center">
+            <div className="w-24 h-24 rounded-2xl bg-indigo-500/20 border-2 border-indigo-400/40 mx-auto overflow-hidden flex items-center justify-center font-black text-2xl text-indigo-300 mb-3 shadow-lg">
+              {studentData.profilePhoto || studentData.documents?.studentPhoto ? (
+                <img 
+                  src={studentData.profilePhoto || studentData.documents?.studentPhoto} 
+                  alt="" 
+                  className="w-full h-full object-cover" 
+                />
+              ) : (
+                <span>{studentData.firstName?.[0]}{studentData.lastName?.[0]}</span>
+              )}
+            </div>
+
+            <h2 className="text-base font-black text-white leading-tight">
+              {studentData.firstName} {studentData.lastName}
+            </h2>
+            <p className="text-xs font-bold text-indigo-400 mt-0.5">
+              {studentData.admissionNumber || studentData.studentId || "No Admission ID"}
+            </p>
+
+            <div className="mt-3 flex justify-center">
+              <span className={`px-3 py-1 text-[10px] font-black uppercase rounded-full border ${
+                studentData.studentStatus === 'Active' || studentData.status === 'Active'
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                  : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+              }`}>
+                ● {studentData.studentStatus || studentData.status || 'Active'} Profile
+              </span>
+            </div>
           </div>
-        </div>
-        <div className="px-8 space-y-6">
-          <div className="pt-2 flex flex-col gap-3">
-            <Link href={`/dashboard/students/${studentId}/edit`}>
-              <button className="w-full py-3 bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex justify-center items-center gap-2 rounded-xl transition-all">
-                <User className="w-4 h-4" /> Edit Profile
-              </button>
-            </Link>
+
+          {/* Quick Info Grid */}
+          <div className="bg-slate-800/40 rounded-2xl p-4 border border-slate-700/40 space-y-2.5 text-xs font-semibold mb-6">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400 text-[11px]">Program</span>
+              <span className="font-bold text-white text-right line-clamp-1 max-w-[150px]">{selectedCourse?.name || "N/A"}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400 text-[11px]">Branch</span>
+              <span className="font-bold text-white text-right">{selectedBranch?.name || "N/A"}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400 text-[11px]">Semester</span>
+              <span className="font-bold text-white">Sem {studentData.selectedSemester || 1}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400 text-[11px]">Batch</span>
+              <span className="font-bold text-white">{studentData.batch || studentData.sessionYear || "N/A"}</span>
+            </div>
+            <div className="flex justify-between items-center pt-2 border-t border-slate-700/60">
+              <span className="text-slate-400 text-[11px]">Fee Status</span>
+              <span className={`font-black text-xs ${
+                feeSummary.status === 'paid' ? 'text-emerald-400' : feeSummary.status === 'partial' ? 'text-amber-400' : 'text-rose-400'
+              }`}>
+                {feeSummary.status === 'paid' ? 'Cleared' : feeSummary.status === 'partial' ? `Due ${formatCurrency(feeSummary.balance)}` : 'Unpaid'}
+              </span>
+            </div>
+          </div>
+
+          {/* Sidebar Action Buttons */}
+          <div className="space-y-2.5">
+            <button 
+              onClick={() => handleOpenPayFeeModal()}
+              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex justify-center items-center gap-2 rounded-xl transition-all shadow-md shadow-indigo-600/25"
+            >
+              <Plus className="w-4 h-4" /> Record Fee Payment
+            </button>
+
+            <button 
+              onClick={() => {
+                setActiveTab("Personal");
+                handleStartEditPersonal();
+              }}
+              className="w-full py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex justify-center items-center gap-2 rounded-xl transition-all"
+            >
+              <Edit3 className="w-4 h-4" /> Quick Edit Details
+            </button>
+
             <button 
               onClick={() => setIsIdModalOpen(true)}
-              className="w-full py-3 bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex justify-center items-center gap-2 rounded-xl transition-all"
+              className="w-full py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex justify-center items-center gap-2 rounded-xl transition-all"
             >
-              <Printer className="w-4 h-4" /> Print ID Card
+              <Printer className="w-4 h-4" /> Print Student ID Card
             </button>
           </div>
         </div>
       </div>
 
-      {/* RIGHT PANEL */}
+      {/* RIGHT MAIN PANEL */}
       <div className="flex-1 flex flex-col min-h-screen">
         
         {/* TAB BAR */}
-        <div className="bg-white border-b border-slate-200 px-8 py-4 flex gap-6 overflow-x-auto sticky top-0 z-10 shadow-sm">
-          {tabs.map(tab => (
+        <div className="bg-white border-b border-slate-200 px-8 py-3.5 flex gap-6 overflow-x-auto sticky top-0 z-10 shadow-sm items-center justify-between">
+          <div className="flex items-center gap-6 overflow-x-auto">
+            {tabs.map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`whitespace-nowrap px-4 py-2 font-black text-xs uppercase tracking-wider transition-all border-b-2 flex items-center gap-1.5 ${
+                  activeTab === tab 
+                  ? "border-indigo-600 text-indigo-600 font-black" 
+                  : "border-transparent text-slate-400 hover:text-slate-600"
+                }`}
+              >
+                {tab === "Personal" && <User className="w-3.5 h-3.5" />}
+                {tab === "Academics" && <GraduationCap className="w-3.5 h-3.5" />}
+                {tab === "Fees" && <Receipt className="w-3.5 h-3.5" />}
+                {tab === "Documents" && <FileCheck2 className="w-3.5 h-3.5" />}
+                {tab === "Administration" && <ShieldAlert className="w-3.5 h-3.5" />}
+                <span>{tab}</span>
+                {tab === "Fees" && (
+                  <span className={`px-2 py-0.5 text-[10px] rounded-full font-black ${
+                    feeSummary.status === "paid" 
+                      ? "bg-emerald-100 text-emerald-700" 
+                      : feeSummary.status === "partial" 
+                      ? "bg-amber-100 text-amber-700" 
+                      : "bg-rose-100 text-rose-700"
+                  }`}>
+                    {feeSummary.status === "paid" ? "Paid" : feeSummary.status === "partial" ? "Due" : "Unpaid"}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Quick Edit button on top bar if on Personal or Academics */}
+          {activeTab === "Personal" && (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`whitespace-nowrap px-4 py-2 font-black text-sm transition-all border-b-2 ${
-                activeTab === tab 
-                ? "border-rose-500 text-rose-500" 
-                : "border-transparent text-slate-400 hover:text-slate-600"
+              onClick={() => isEditingPersonal ? setIsEditingPersonal(false) : handleStartEditPersonal()}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+                isEditingPersonal 
+                  ? "bg-slate-200 text-slate-700 hover:bg-slate-300" 
+                  : "bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white border border-indigo-100"
               }`}
             >
-              {tab}
+              {isEditingPersonal ? <Undo2 className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
+              {isEditingPersonal ? "Cancel Edit" : "Edit Personal Info"}
             </button>
-          ))}
+          )}
+
+          {activeTab === "Academics" && (
+            <button
+              onClick={() => isEditingAcademics ? setIsEditingAcademics(false) : handleStartEditAcademics()}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+                isEditingAcademics 
+                  ? "bg-slate-200 text-slate-700 hover:bg-slate-300" 
+                  : "bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white border border-indigo-100"
+              }`}
+            >
+              {isEditingAcademics ? <Undo2 className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
+              {isEditingAcademics ? "Cancel Edit" : "Edit Academic Info"}
+            </button>
+          )}
         </div>
 
         {/* TAB CONTENT */}
-        <div className="flex-1 p-8 lg:p-12 overflow-y-auto">
+        <div className="flex-1 p-6 lg:p-10 overflow-y-auto">
           <AnimatePresence mode="wait">
             
-            {/* PERSONAL TAB */}
+            {/* ================================================================= */}
+            {/* 1. PERSONAL DETAILS TAB (LIST VIEW & QUICK EDIT)                  */}
+            {/* ================================================================= */}
             {activeTab === "Personal" && (
-              <motion.div key="Personal" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-4xl mx-auto">
-                <InfoGrid data={[
-                  {label: "FULL NAME", value: `${studentData.firstName || ''} ${studentData.lastName || ''}`},
-                  {label: "DATE OF BIRTH", value: studentData.dob},
-                  {label: "GENDER", value: studentData.gender},
-                  {label: "CATEGORY", value: studentData.category || "General"},
-                  {label: "ADMISSION NO", value: studentData.admissionNumber},
-                  {label: "STUDENT ID", value: studentData.studentId},
-                ]} />
-
-                <InfoGrid data={[
-                  {label: "EMAIL ADDRESS", value: studentData.email},
-                  {label: "PHONE NUMBER", value: studentData.phone || studentData.mobile},
-                  {label: "ALT NUMBER", value: studentData.alternateMobile},
-                  {label: "CITY", value: studentData.city},
-                  {label: "STATE", value: studentData.state},
-                  {label: "PIN CODE", value: studentData.pinCode},
-                ]} />
-
-                <InfoGrid data={[
-                  {label: "FULL ADDRESS", value: studentData.address},
-                ]} />
-              </motion.div>
-            )}
-
-            {/* ACADEMICS TAB */}
-            {activeTab === "Academics" && (
-              <motion.div key="Academics" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-4xl mx-auto">
-                <InfoGrid title="Current Program Details" data={[
-                  {label: "BRANCH", value: selectedBranch?.name},
-                  {label: "COURSE", value: selectedCourse?.name},
-                  {label: "SESSION", value: studentData.sessionYear},
-                  {label: "SEMESTER", value: studentData.selectedSemester?.toString()},
-                  {label: "SECTION", value: studentData.selectedSection},
-                ]} />
-
-                <InfoGrid title="Previous Qualifications" data={[
-                  {label: "HIGHEST LEVEL", value: studentData.highestQualification},
-                  {label: "BOARD/UNIVERSITY", value: studentData.boardUniversity},
-                  {label: "INSTITUTION", value: studentData.institutionName},
-                  {label: "PERCENTAGE/CGPA", value: studentData.percentageCGPA?.toString()},
-                  {label: "YEAR OF PASSING", value: studentData.yearOfPassing?.toString()},
-                ]} />
-
-                <InfoGrid title="Subject Entrance Scores" data={[
-                  {label: "SUBJECT 1", value: studentData.subjectMarks?.subject1},
-                  {label: "SUBJECT 2", value: studentData.subjectMarks?.subject2},
-                  {label: "SUBJECT 3", value: studentData.subjectMarks?.subject3},
-                  {label: "ENTRANCE SCORE", value: studentData.entranceScore},
-                ]} />
-
-                <InfoGrid title="Statement of Purpose" data={[
-                  {label: "SOP SUMMARY", value: studentData.statementOfPurpose || "No statement provided."},
-                ]} />
-              </motion.div>
-            )}
-
-            {/* FEES TAB */}
-            {activeTab === "Fees" && (
-              <motion.div key="Fees" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-4xl mx-auto space-y-6">
-                {(!studentData.fees || !studentData.fees.isConfigured) ? (
-                  <div className="bg-white p-12 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col items-center justify-center text-center">
-                    <Receipt className="w-16 h-16 text-slate-300 mb-4" />
-                    <h3 className="text-xl font-black text-slate-800">Fees Not Configured</h3>
-                    <p className="text-sm font-medium text-slate-500 mt-2 max-w-sm">
-                      Fees are not updated by admin. Please configure the fee structure for this student.
+              <motion.div key="Personal" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-4xl mx-auto space-y-6">
+                
+                {/* Mode Indicator / Header */}
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900">Personal Details</h3>
+                    <p className="text-xs font-semibold text-slate-400">
+                      {isEditingPersonal ? "Editing personal information directly on this page" : "Official identity, demographics and contact records"}
                     </p>
                   </div>
-                ) : (
-                  <>
-                    <div className="space-y-6 max-h-[600px] overflow-y-auto pr-2">
-                      {studentData.fees.years?.map((fy: any) => (
-                        <div key={fy.year} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
-                          <h4 className="text-lg font-black text-slate-800 mb-4 border-b border-slate-50 pb-2">Year {fy.year}</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {[
-                              { title: "Tuition Fee", total: fy.tuition?.total || 0, paid: fy.tuition?.paid || 0, color: "bg-blue-500", icon: Calculator },
-                              { title: "Exam Fee", total: fy.exam?.total || 0, paid: fy.exam?.paid || 0, color: "bg-purple-500", icon: FileText },
-                              { title: "Other Charges", total: fy.other?.total || 0, paid: fy.other?.paid || 0, color: "bg-orange-500", icon: Receipt },
-                            ].map(fee => (
-                              <div key={fee.title} className="bg-slate-50 p-4 rounded-xl flex items-center justify-between border border-slate-100">
-                                <div className="flex items-center gap-3">
-                                  <div className={`w-10 h-10 rounded-xl ${fee.color} bg-opacity-10 flex items-center justify-center`}>
-                                    <fee.icon className={`w-5 h-5 ${fee.color.replace('bg-', 'text-')}`} />
-                                  </div>
-                                  <div>
-                                    <h4 className="text-xs font-black text-slate-800">{fee.title}</h4>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Paid: ₹{fee.paid}</p>
-                                  </div>
-                                </div>
-                                <div className="text-sm font-black text-slate-900">₹{fee.total}</div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                  {!isEditingPersonal && (
+                    <button 
+                      onClick={handleStartEditPersonal}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center gap-1.5"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" /> Quick Edit & Save
+                    </button>
+                  )}
+                </div>
+
+                {/* EDIT MODE: PERSONAL DETAILS FORM */}
+                {isEditingPersonal ? (
+                  <div className="bg-white p-7 rounded-3xl border border-indigo-100 shadow-xl space-y-6">
+                    <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse"></span>
+                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-wider">Edit Personal Profile</h4>
+                      </div>
+                      <span className="text-xs font-bold text-slate-400">Make changes and click Save</span>
                     </div>
 
-                    <div className="mt-8 bg-gradient-to-r from-[#6B0F3A] to-rose-600 rounded-[2rem] p-8 text-white shadow-xl flex flex-col md:flex-row items-center gap-6 justify-between">
-                      <div className="flex items-center gap-6">
-                        <CreditCard className="w-12 h-12 opacity-80" />
+                    {/* Section 1: Names & Identity */}
+                    <div className="space-y-4">
+                      <h5 className="text-xs font-black text-indigo-600 uppercase tracking-wider">Identity & Identification</h5>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
-                          <p className="text-xs font-bold uppercase tracking-widest opacity-80">Total Assigned (All Years)</p>
-                          <p className="text-4xl font-black mt-1">
-                            ₹{studentData.fees.years?.reduce((sum: number, fy: any) => sum + (fy.tuition?.total || 0) + (fy.exam?.total || 0) + (fy.other?.total || 0), 0) || 0}
-                          </p>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">First Name *</label>
+                          <input 
+                            type="text"
+                            required
+                            value={personalForm.firstName || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, firstName: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Middle Name</label>
+                          <input 
+                            type="text"
+                            value={personalForm.middleName || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, middleName: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Last Name *</label>
+                          <input 
+                            type="text"
+                            required
+                            value={personalForm.lastName || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, lastName: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          />
                         </div>
                       </div>
-                      <div className="text-right">
-                          <p className="text-xs font-bold uppercase tracking-widest opacity-80">Total Paid (All Years)</p>
-                          <p className="text-2xl font-black mt-1 text-emerald-300">
-                            ₹{studentData.fees.years?.reduce((sum: number, fy: any) => sum + (fy.tuition?.paid || 0) + (fy.exam?.paid || 0) + (fy.other?.paid || 0), 0) || 0}
-                          </p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Date of Birth</label>
+                          <input 
+                            type="date"
+                            value={personalForm.dob || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, dob: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Gender</label>
+                          <select 
+                            value={personalForm.gender || "Male"}
+                            onChange={e => setPersonalForm({ ...personalForm, gender: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          >
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Category / Social</label>
+                          <input 
+                            type="text"
+                            placeholder="e.g. General, OBC, SC, ST"
+                            value={personalForm.category || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, category: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Admission Number</label>
+                          <input 
+                            type="text"
+                            value={personalForm.admissionNumber || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, admissionNumber: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Student ID / Roll No</label>
+                          <input 
+                            type="text"
+                            value={personalForm.studentId || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, studentId: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Aadhar Card Number</label>
+                          <input 
+                            type="text"
+                            placeholder="12 digit number"
+                            value={personalForm.aadharNumber || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, aadharNumber: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          />
+                        </div>
                       </div>
                     </div>
-                  </>
+
+                    {/* Section 2: Contact Numbers & Email */}
+                    <div className="space-y-4 pt-4 border-t border-slate-100">
+                      <h5 className="text-xs font-black text-indigo-600 uppercase tracking-wider">Contact & Communication</h5>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Email Address</label>
+                          <input 
+                            type="email"
+                            value={personalForm.email || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, email: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Primary Mobile Number</label>
+                          <input 
+                            type="text"
+                            value={personalForm.mobile || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, mobile: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Parent / Guardian Phone</label>
+                          <input 
+                            type="text"
+                            value={personalForm.parentMobile || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, parentMobile: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Alternate Phone</label>
+                          <input 
+                            type="text"
+                            value={personalForm.alternateMobile || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, alternateMobile: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Section 3: Address */}
+                    <div className="space-y-4 pt-4 border-t border-slate-100">
+                      <h5 className="text-xs font-black text-indigo-600 uppercase tracking-wider">Address Details</h5>
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Full Street Address</label>
+                        <textarea 
+                          rows={2}
+                          value={personalForm.address || ""}
+                          onChange={e => setPersonalForm({ ...personalForm, address: e.target.value })}
+                          className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-semibold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none resize-none"
+                        ></textarea>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">City</label>
+                          <input 
+                            type="text"
+                            value={personalForm.city || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, city: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">State</label>
+                          <input 
+                            type="text"
+                            value={personalForm.state || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, state: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">PIN Code</label>
+                          <input 
+                            type="text"
+                            value={personalForm.pinCode || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, pinCode: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Form Buttons */}
+                    <div className="pt-4 border-t border-slate-100 flex justify-end items-center gap-3">
+                      <button 
+                        type="button" 
+                        onClick={() => setIsEditingPersonal(false)}
+                        className="px-5 py-2.5 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-100 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        type="button" 
+                        disabled={isSavingPersonal}
+                        onClick={handleSavePersonal}
+                        className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-lg shadow-indigo-600/25 transition-all flex items-center gap-2 disabled:opacity-50"
+                      >
+                        {isSavingPersonal ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        Save Personal Details
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* VIEW MODE: BEAUTIFUL EXECUTIVE LIST VIEW */
+                  <div className="space-y-6">
+                    
+                    {/* List Group 1: Identity & Enrolment */}
+                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+                      <div className="flex justify-between items-center pb-3 mb-2 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <Fingerprint className="w-4 h-4 text-indigo-600" />
+                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Identity & Basic Records</h4>
+                        </div>
+                        <button 
+                          onClick={handleStartEditPersonal}
+                          className="text-[11px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                        >
+                          <Edit3 className="w-3 h-3" /> Edit
+                        </button>
+                      </div>
+                      <div className="divide-y divide-slate-50">
+                        <DetailListRow icon={User} label="Full Legal Name" value={`${studentData.firstName || ''} ${studentData.middleName ? studentData.middleName + ' ' : ''}${studentData.lastName || ''}`.trim()} />
+                        <DetailListRow icon={BadgeCheck} label="Admission Number" value={studentData.admissionNumber} isCopyable={true} />
+                        <DetailListRow icon={FileText} label="Student ID / Roll No" value={studentData.studentId} isCopyable={true} />
+                        <DetailListRow icon={Calendar} label="Date of Birth" value={studentData.dob} />
+                        <DetailListRow icon={User} label="Gender" value={studentData.gender} />
+                        <DetailListRow icon={Award} label="Category / Quota" value={studentData.category || "General"} />
+                        <DetailListRow icon={Fingerprint} label="Aadhar Number" value={studentData.aadharNumber} isCopyable={true} />
+                      </div>
+                    </div>
+
+                    {/* List Group 2: Contact Details */}
+                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+                      <div className="flex justify-between items-center pb-3 mb-2 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <Phone className="w-4 h-4 text-indigo-600" />
+                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Contact & Communication</h4>
+                        </div>
+                        <button 
+                          onClick={handleStartEditPersonal}
+                          className="text-[11px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                        >
+                          <Edit3 className="w-3 h-3" /> Edit
+                        </button>
+                      </div>
+                      <div className="divide-y divide-slate-50">
+                        <DetailListRow icon={Mail} label="Email Address" value={studentData.email} isCopyable={true} />
+                        <DetailListRow icon={Phone} label="Primary Mobile" value={studentData.phone || studentData.mobile || studentData.mobileNumber} isCopyable={true} />
+                        <DetailListRow icon={Phone} label="Parent / Guardian Mobile" value={studentData.parentMobile} isCopyable={true} />
+                        <DetailListRow icon={Phone} label="Alternate Phone" value={studentData.alternateMobile} isCopyable={true} />
+                      </div>
+                    </div>
+
+                    {/* List Group 3: Residential Address */}
+                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+                      <div className="flex justify-between items-center pb-3 mb-2 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-indigo-600" />
+                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Address & Location</h4>
+                        </div>
+                        <button 
+                          onClick={handleStartEditPersonal}
+                          className="text-[11px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                        >
+                          <Edit3 className="w-3 h-3" /> Edit
+                        </button>
+                      </div>
+                      <div className="divide-y divide-slate-50">
+                        <DetailListRow icon={MapPin} label="Permanent Street Address" value={studentData.address} />
+                        <DetailListRow icon={Building2} label="City / Town" value={studentData.city} />
+                        <DetailListRow icon={MapPin} label="State / Province" value={studentData.state} />
+                        <DetailListRow icon={MapPin} label="Postal PIN Code" value={studentData.pinCode} />
+                      </div>
+                    </div>
+
+                  </div>
                 )}
               </motion.div>
             )}
 
-            {/* DOCUMENTS TAB */}
-            {activeTab === "Documents" && (
-              <motion.div key="Documents" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-4xl mx-auto">
+            {/* ================================================================= */}
+            {/* 2. ACADEMICS DETAILS TAB (LIST VIEW & QUICK EDIT)                 */}
+            {/* ================================================================= */}
+            {activeTab === "Academics" && (
+              <motion.div key="Academics" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-4xl mx-auto space-y-6">
                 
-                <div className="bg-gradient-to-br from-[#1B3E5F] to-[#2E6B9E] rounded-[2rem] p-8 text-white shadow-xl flex items-center mb-8">
+                {/* Header */}
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900">Academic Dossier</h3>
+                    <p className="text-xs font-semibold text-slate-400">
+                      {isEditingAcademics ? "Editing academic enrollment setup directly on this page" : "Program enrollment, semester status and qualification records"}
+                    </p>
+                  </div>
+                  {!isEditingAcademics && (
+                    <button 
+                      onClick={handleStartEditAcademics}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center gap-1.5"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" /> Quick Edit & Save
+                    </button>
+                  )}
+                </div>
+
+                {/* EDIT MODE: ACADEMICS FORM */}
+                {isEditingAcademics ? (
+                  <div className="bg-white p-7 rounded-3xl border border-indigo-100 shadow-xl space-y-6">
+                    <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse"></span>
+                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-wider">Edit Academic Setup</h4>
+                      </div>
+                      <span className="text-xs font-bold text-slate-400">Update program, branch or semester</span>
+                    </div>
+
+                    {/* Program & Branch dropdowns */}
+                    <div className="space-y-4">
+                      <h5 className="text-xs font-black text-indigo-600 uppercase tracking-wider">Program & Enrollment</h5>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Course / Program *</label>
+                          <select 
+                            value={academicsForm.selectedProgram || ""}
+                            onChange={e => setAcademicsForm({ ...academicsForm, selectedProgram: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          >
+                            <option value="">-- Select Course --</option>
+                            {courses.map(c => (
+                              <option key={c._id} value={c._id}>{c.name} ({c.code})</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Branch / Department *</label>
+                          <select 
+                            value={academicsForm.selectedBranch || ""}
+                            onChange={e => setAcademicsForm({ ...academicsForm, selectedBranch: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          >
+                            <option value="">-- Select Branch --</option>
+                            {branches.map(b => (
+                              <option key={b._id} value={b._id}>{b.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Current Semester</label>
+                          <select 
+                            value={academicsForm.selectedSemester || 1}
+                            onChange={e => setAcademicsForm({ ...academicsForm, selectedSemester: Number(e.target.value) })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          >
+                            {[1,2,3,4,5,6,7,8,9,10].map(s => (
+                              <option key={s} value={s}>Semester {s}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Assigned Section</label>
+                          <input 
+                            type="text"
+                            placeholder="e.g. A, B"
+                            value={academicsForm.selectedSection || ""}
+                            onChange={e => setAcademicsForm({ ...academicsForm, selectedSection: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Batch</label>
+                          <input 
+                            type="text"
+                            placeholder="e.g. 2024-2028"
+                            value={academicsForm.batch || ""}
+                            onChange={e => setAcademicsForm({ ...academicsForm, batch: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Session Year</label>
+                          <input 
+                            type="text"
+                            placeholder="e.g. 2026-2027"
+                            value={academicsForm.sessionYear || ""}
+                            onChange={e => setAcademicsForm({ ...academicsForm, sessionYear: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Admission Entry Type</label>
+                        <select 
+                          value={academicsForm.entryType || "Direct"}
+                          onChange={e => setAcademicsForm({ ...academicsForm, entryType: e.target.value })}
+                          className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                        >
+                          <option value="Direct">Direct Entry (Year 1)</option>
+                          <option value="Lateral">Lateral Entry (Year 2)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Prior Qualifications */}
+                    <div className="space-y-4 pt-4 border-t border-slate-100">
+                      <h5 className="text-xs font-black text-indigo-600 uppercase tracking-wider">Prior Qualification Records</h5>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Highest Qualification</label>
+                          <input 
+                            type="text"
+                            placeholder="e.g. 12th Standard, Diploma"
+                            value={academicsForm.highestQualification || ""}
+                            onChange={e => setAcademicsForm({ ...academicsForm, highestQualification: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Board / University</label>
+                          <input 
+                            type="text"
+                            placeholder="e.g. CBSE, State Board"
+                            value={academicsForm.boardUniversity || ""}
+                            onChange={e => setAcademicsForm({ ...academicsForm, boardUniversity: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Institution Name</label>
+                          <input 
+                            type="text"
+                            placeholder="Previous School / College"
+                            value={academicsForm.institutionName || ""}
+                            onChange={e => setAcademicsForm({ ...academicsForm, institutionName: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Percentage / CGPA</label>
+                            <input 
+                              type="text"
+                              placeholder="e.g. 85.5%"
+                              value={academicsForm.percentageCGPA || ""}
+                              onChange={e => setAcademicsForm({ ...academicsForm, percentageCGPA: e.target.value })}
+                              className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Passing Year</label>
+                            <input 
+                              type="text"
+                              placeholder="e.g. 2024"
+                              value={academicsForm.yearOfPassing || ""}
+                              onChange={e => setAcademicsForm({ ...academicsForm, yearOfPassing: e.target.value })}
+                              className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="pt-4 border-t border-slate-100 flex justify-end items-center gap-3">
+                      <button 
+                        type="button" 
+                        onClick={() => setIsEditingAcademics(false)}
+                        className="px-5 py-2.5 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-100 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        type="button" 
+                        disabled={isSavingAcademics}
+                        onClick={handleSaveAcademics}
+                        className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-lg shadow-indigo-600/25 transition-all flex items-center gap-2 disabled:opacity-50"
+                      >
+                        {isSavingAcademics ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        Save Academic Setup
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* VIEW MODE: BEAUTIFUL EXECUTIVE ACADEMICS LIST VIEW */
+                  <div className="space-y-6">
+                    
+                    {/* List Group 1: Program & Enrolment */}
+                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+                      <div className="flex justify-between items-center pb-3 mb-2 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <GraduationCap className="w-4 h-4 text-indigo-600" />
+                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Current Program Enrollment</h4>
+                        </div>
+                        <button 
+                          onClick={handleStartEditAcademics}
+                          className="text-[11px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                        >
+                          <Edit3 className="w-3 h-3" /> Edit
+                        </button>
+                      </div>
+                      <div className="divide-y divide-slate-50">
+                        <DetailListRow icon={BookOpen} label="Course / Degree Program" value={selectedCourse?.name ? `${selectedCourse.name} (${selectedCourse.code})` : null} />
+                        <DetailListRow icon={Building2} label="Branch / Department" value={selectedBranch?.name} />
+                        <DetailListRow icon={Clock} label="Current Semester" value={studentData.selectedSemester ? `Semester ${studentData.selectedSemester}` : null} />
+                        <DetailListRow icon={BadgeCheck} label="Assigned Section" value={studentData.selectedSection ? `Section ${studentData.selectedSection}` : null} />
+                        <DetailListRow icon={Calendar} label="Batch" value={studentData.batch} />
+                        <DetailListRow icon={Calendar} label="Session Year" value={studentData.sessionYear} />
+                        <DetailListRow icon={Award} label="Entry Type" value={studentData.entryType || "Direct Entry"} />
+                      </div>
+                    </div>
+
+                    {/* List Group 2: Prior Qualification */}
+                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+                      <div className="flex justify-between items-center pb-3 mb-2 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <Award className="w-4 h-4 text-indigo-600" />
+                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Past Academic Qualifications</h4>
+                        </div>
+                        <button 
+                          onClick={handleStartEditAcademics}
+                          className="text-[11px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                        >
+                          <Edit3 className="w-3 h-3" /> Edit
+                        </button>
+                      </div>
+                      <div className="divide-y divide-slate-50">
+                        <DetailListRow icon={FileText} label="Highest Qualification" value={studentData.highestQualification} />
+                        <DetailListRow icon={Building2} label="Board / University" value={studentData.boardUniversity} />
+                        <DetailListRow icon={Building2} label="Institution Name" value={studentData.institutionName} />
+                        <DetailListRow icon={Calculator} label="Percentage / CGPA" value={studentData.percentageCGPA ? `${studentData.percentageCGPA}%` : null} />
+                        <DetailListRow icon={Calendar} label="Year of Passing" value={studentData.yearOfPassing?.toString()} />
+                      </div>
+                    </div>
+
+                    {/* List Group 3: Entrance Assessment */}
+                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+                      <div className="flex justify-between items-center pb-3 mb-2 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Entrance Exam & Assessment</h4>
+                        </div>
+                        <button 
+                          onClick={handleStartEditAcademics}
+                          className="text-[11px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                        >
+                          <Edit3 className="w-3 h-3" /> Edit
+                        </button>
+                      </div>
+                      <div className="divide-y divide-slate-50">
+                        <DetailListRow icon={FileText} label="Entrance Exam" value={studentData.entranceExam || "Direct Admission"} />
+                        <DetailListRow icon={Award} label="Entrance Score" value={studentData.entranceScore?.toString()} />
+                        <DetailListRow icon={Check} label="Subject 1 Marks" value={studentData.subjectMarks?.subject1} />
+                        <DetailListRow icon={Check} label="Subject 2 Marks" value={studentData.subjectMarks?.subject2} />
+                        <DetailListRow icon={Check} label="Subject 3 Marks" value={studentData.subjectMarks?.subject3} />
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {/* ================================================================= */}
+            {/* 3. FEES TAB (FULLY INTERACTIVE & EDITABLE)                        */}
+            {/* ================================================================= */}
+            {activeTab === "Fees" && (
+              <motion.div key="Fees" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-4xl mx-auto space-y-6">
+                
+                {/* Top Financial Dashboard Hero */}
+                <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm relative overflow-hidden">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-6 border-b border-slate-100">
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Institutional Ledger</span>
+                      <h3 className="text-2xl font-black text-slate-900 mt-1">Student Fee Dossier</h3>
+                      <p className="text-xs font-bold text-slate-500 mt-0.5">
+                        Manage fee structure, log payments and update status directly into the database.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button 
+                        onClick={() => handleOpenPayFeeModal()}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-lg shadow-indigo-600/25 transition-all"
+                      >
+                        <Plus className="w-4 h-4" /> Add Fee / Collect
+                      </button>
+
+                      <button 
+                        onClick={handleOpenEditFeeModal}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl border border-slate-200 transition-all"
+                      >
+                        <Edit3 className="w-4 h-4 text-slate-600" /> Edit Fee Structure
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Summary Metric Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mt-6">
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Structured</span>
+                      <div className="text-2xl font-black text-slate-900 mt-1">{formatCurrency(feeSummary.total)}</div>
+                      <span className="text-[11px] font-semibold text-slate-400">All Academic Years</span>
+                    </div>
+
+                    <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Total Paid</span>
+                      <div className="text-2xl font-black text-emerald-600 mt-1">{formatCurrency(feeSummary.paid)}</div>
+                      <span className="text-[11px] font-semibold text-emerald-700">{feeSummary.percentage}% Completed</span>
+                    </div>
+
+                    <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-amber-600">Outstanding Due</span>
+                      <div className="text-2xl font-black text-amber-600 mt-1">{formatCurrency(feeSummary.balance)}</div>
+                      <span className="text-[11px] font-semibold text-amber-700">
+                        {feeSummary.balance === 0 ? "Account Cleared" : "Payment Pending"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  {feeSummary.isConfigured && (
+                    <div className="mt-6">
+                      <div className="flex justify-between items-center text-xs font-bold text-slate-500 mb-1.5">
+                        <span>Payment Clearance Progress</span>
+                        <span>{feeSummary.percentage}% Cleared</span>
+                      </div>
+                      <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                        <div 
+                          className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                          style={{ width: `${feeSummary.percentage}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* IF NOT CONFIGURED BANNER */}
+                {!feeSummary.isConfigured ? (
+                  <div className="bg-white p-12 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center justify-center text-center">
+                    <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 mb-4 border border-indigo-100">
+                      <Receipt className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-xl font-black text-slate-800">Fees Not Configured</h3>
+                    <p className="text-sm font-medium text-slate-500 mt-2 max-w-sm">
+                      Fee breakdown has not been set up for this student. Click below to initialize and configure the fee structure.
+                    </p>
+                    <button
+                      onClick={handleOpenEditFeeModal}
+                      className="mt-6 px-6 py-3 bg-indigo-600 text-white font-black text-xs rounded-xl shadow-lg shadow-indigo-600/25 hover:bg-indigo-700 transition-all flex items-center gap-2"
+                    >
+                      <Sparkles className="w-4 h-4" /> Configure Fee Structure Now
+                    </button>
+                  </div>
+                ) : (
+                  /* YEAR-BY-YEAR DETAILED CARDS */
+                  <div className="space-y-5">
+                    <div className="flex justify-between items-center px-1">
+                      <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider">Academic Year Breakdown</h4>
+                      <button 
+                        onClick={handleOpenEditFeeModal}
+                        className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" /> Modify All Years
+                      </button>
+                    </div>
+
+                    {studentData.fees.years?.map((fy: any) => {
+                      const yrTotal = (Number(fy.tuition?.total) || 0) + (Number(fy.exam?.total) || 0) + (Number(fy.transport?.total) || 0) + (Number(fy.other?.total) || 0);
+                      const yrPaid = (Number(fy.tuition?.paid) || 0) + (Number(fy.exam?.paid) || 0) + (Number(fy.transport?.paid) || 0) + (Number(fy.other?.paid) || 0);
+                      const yrDue = Math.max(0, yrTotal - yrPaid);
+
+                      return (
+                        <div key={fy.year} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+                          
+                          {/* Year Header */}
+                          <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                            <div className="flex items-center gap-3">
+                              <span className="w-8 h-8 rounded-xl bg-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-sm">
+                                {fy.year}
+                              </span>
+                              <div>
+                                <h5 className="font-black text-slate-900 text-sm">Academic Year {fy.year}</h5>
+                                <div className="text-xs font-semibold text-slate-400">
+                                  Total: {formatCurrency(yrTotal)} • Paid: {formatCurrency(yrPaid)}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {yrDue === 0 ? (
+                                <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-wider rounded-full border border-emerald-100 flex items-center gap-1">
+                                  <Check className="w-3 h-3 text-emerald-600" /> Fully Paid
+                                </span>
+                              ) : (
+                                <span className="px-3 py-1 bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-wider rounded-full border border-amber-100">
+                                  Due: {formatCurrency(yrDue)}
+                                </span>
+                              )}
+
+                              <button 
+                                onClick={() => handleOpenPayFeeModal(fy.year)}
+                                className="px-3 py-1 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white rounded-lg text-xs font-bold transition-all border border-indigo-100 hover:border-indigo-600"
+                              >
+                                + Collect
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 4 Category Blocks */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            {[
+                              { title: "Tuition Fee", total: fy.tuition?.total || 0, paid: fy.tuition?.paid || 0, icon: Calculator },
+                              { title: "Exam Fee", total: fy.exam?.total || 0, paid: fy.exam?.paid || 0, icon: FileText },
+                              { title: "Transport Fee", total: fy.transport?.total || 0, paid: fy.transport?.paid || 0, icon: Building2 },
+                              { title: "Other Fee", total: fy.other?.total || 0, paid: fy.other?.paid || 0, icon: Receipt },
+                            ].map(cat => {
+                              const catDue = Math.max(0, cat.total - cat.paid);
+                              return (
+                                <div key={cat.title} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-slate-800">{cat.title}</span>
+                                    {catDue === 0 && cat.total > 0 ? (
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                    ) : catDue > 0 ? (
+                                      <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                    ) : null}
+                                  </div>
+                                  <div className="text-sm font-black text-slate-900">{formatCurrency(cat.total)}</div>
+                                  <div className="text-[11px] font-semibold flex justify-between">
+                                    <span className="text-emerald-600">Paid: {formatCurrency(cat.paid)}</span>
+                                    {catDue > 0 && <span className="text-amber-600">Due: {formatCurrency(catDue)}</span>}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* RECENT FEE TRANSACTIONS FOR THIS STUDENT */}
+                {transactions.length > 0 && (
+                  <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider">Payment Receipts & History</h4>
+                      <span className="text-xs font-bold text-slate-400">{transactions.length} Receipts</span>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            <th className="p-3">Receipt / Txn ID</th>
+                            <th className="p-3">Date</th>
+                            <th className="p-3">Method</th>
+                            <th className="p-3 text-right">Amount</th>
+                            <th className="p-3 text-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="text-xs divide-y divide-slate-50">
+                          {transactions.map(txn => (
+                            <tr key={txn._id} className="hover:bg-slate-50/60">
+                              <td className="p-3 font-bold text-slate-700">{txn.transactionId}</td>
+                              <td className="p-3 text-slate-500">
+                                {txn.paymentDate ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(txn.paymentDate)) : "-"}
+                              </td>
+                              <td className="p-3 font-semibold text-slate-600">{txn.paymentMethod || "Cash"}</td>
+                              <td className="p-3 text-right font-black text-emerald-600">{formatCurrency(txn.amount)}</td>
+                              <td className="p-3 text-center">
+                                <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase rounded-full">
+                                  {txn.status || "Completed"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+              </motion.div>
+            )}
+
+            {/* ================================================================= */}
+            {/* 4. DOCUMENTS TAB                                                  */}
+            {/* ================================================================= */}
+            {activeTab === "Documents" && (
+              <motion.div key="Documents" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-4xl mx-auto space-y-6">
+                
+                <div className="bg-gradient-to-br from-[#1B3E5F] to-[#2E6B9E] rounded-3xl p-8 text-white shadow-xl flex items-center">
                   <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center mr-6">
                     <FileCheck2 className="w-7 h-7 text-white" />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-black">Document Status</h3>
+                    <h3 className="text-2xl font-black">Document Dossier</h3>
                     <p className="text-xs font-bold text-white/70 mt-1 uppercase tracking-widest">
-                      Documents uploaded via student portal
+                      Certificates, marksheets and verification files
                     </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
                   {[
                     {key: 'studentPhoto', label: 'Student Photo', icon: User},
                     {key: 'marksheet10', label: '10th Marksheet', icon: FileText},
@@ -399,21 +1699,20 @@ export default function StudentDetailScreen() {
                     return (
                       <div 
                         key={doc.key} 
-                        className={`p-6 rounded-[2rem] border-2 text-center transition-all relative group ${
-                          hasDoc ? 'bg-emerald-50 border-emerald-500 hover:bg-emerald-100/50 hover:shadow-md' : 'bg-white border-slate-100'
+                        className={`p-6 rounded-3xl border text-center transition-all relative ${
+                          hasDoc ? 'bg-emerald-50/50 border-emerald-300' : 'bg-white border-slate-100'
                         }`}
                       >
-                        {/* Removed invisible hover actions, now explicitly at the bottom */}
                         <div 
-                          className="relative z-0 cursor-pointer"
+                          className="cursor-pointer"
                           onClick={() => hasDoc && window.open(hasDoc, '_blank')}
                         >
                           {hasDoc && doc.key === 'studentPhoto' ? (
-                            <div className="w-16 h-16 mx-auto rounded-2xl overflow-hidden mb-4 border-2 border-emerald-100 shadow-sm">
+                            <div className="w-16 h-16 mx-auto rounded-2xl overflow-hidden mb-3 border-2 border-emerald-200 shadow-sm">
                                <img src={hasDoc} alt={doc.label} className="w-full h-full object-cover" />
                             </div>
                           ) : (
-                            <div className={`w-12 h-12 mx-auto rounded-2xl flex items-center justify-center mb-4 ${
+                            <div className={`w-12 h-12 mx-auto rounded-2xl flex items-center justify-center mb-3 ${
                               hasDoc ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-50 text-slate-400'
                             }`}>
                               <doc.icon className="w-6 h-6" />
@@ -426,10 +1725,8 @@ export default function StudentDetailScreen() {
                           </p>
                         </div>
 
-                        {/* Always visible action buttons */}
-                        <div className="mt-5 pt-4 border-t border-slate-100/50 flex items-center justify-center gap-2">
-                            <label className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-indigo-100 hover:text-indigo-700 transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-center gap-2">
+                            <label className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer hover:bg-indigo-100 transition-colors">
                                 {hasDoc ? 'Update' : 'Upload'}
                                 <input 
                                   type="file" 
@@ -444,10 +1741,10 @@ export default function StudentDetailScreen() {
                             {hasDoc && (
                                 <button 
                                   onClick={(e) => handleDeleteDocument(doc.key, e)}
-                                  className="flex items-center justify-center px-4 py-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors"
+                                  className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors"
                                   title="Delete Document"
                                 >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                             )}
                         </div>
@@ -459,71 +1756,52 @@ export default function StudentDetailScreen() {
               </motion.div>
             )}
 
-            {/* PERFORMANCE TAB */}
-            {activeTab === "Performance" && (
-              <motion.div key="Performance" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-4xl mx-auto text-center py-20">
-                <div className="w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <BarChart className="w-10 h-10 text-indigo-500" />
-                </div>
-                <h3 className="text-2xl font-black text-slate-900">Performance Metrics</h3>
-                <p className="text-sm font-medium text-slate-500 mt-2 max-w-md mx-auto">
-                  Grades, attendance charts, and semester-wise performance insights will be displayed here once academic records are integrated.
-                </p>
-              </motion.div>
-            )}
-
-            {/* ADMINISTRATION TAB */}
+            {/* ================================================================= */}
+            {/* 5. ADMINISTRATION TAB                                             */}
+            {/* ================================================================= */}
             {activeTab === "Administration" && (
-              <motion.div key="Administration" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-4xl mx-auto">
+              <motion.div key="Administration" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-4xl mx-auto space-y-6">
                 
-                <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-[2rem] p-8 text-white shadow-xl flex items-center mb-8 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-rose-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-                  <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center mr-6 backdrop-blur-sm border border-white/10 z-10">
+                <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 text-white shadow-xl flex items-center">
+                  <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center mr-6">
                     <ShieldAlert className="w-7 h-7 text-white" />
                   </div>
-                  <div className="z-10">
+                  <div>
                     <h3 className="text-2xl font-black">Administrative Controls</h3>
                     <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">
-                      Manage student enrollment and account access
+                      Manage student enrollment standing and account privileges
                     </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Status Management */}
-                  <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col relative overflow-hidden group hover:border-slate-200 transition-colors">
-                    <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
-                      <UserCog className="w-24 h-24" />
-                    </div>
-                    
-                    <div className="relative z-10 flex-1">
-                      <h3 className="text-lg font-black text-slate-900 mb-2">Enrollment Status</h3>
-                      <p className="text-xs font-bold text-slate-500 mb-6">Update the student's current standing in the institution.</p>
+                  <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-1">Enrollment Standing</h4>
+                      <p className="text-xs font-semibold text-slate-400 mb-6">Modify the student's status across the ERP platform.</p>
                       
                       <div className="space-y-4">
                         <div>
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1 block mb-2">Current Status</label>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1 block mb-1.5">Current Status</label>
                           <div className="flex items-center gap-2">
-                            <span className={`w-3 h-3 rounded-full ${studentData.studentStatus === 'Active' ? 'bg-emerald-500' : studentData.studentStatus === 'Suspended' ? 'bg-amber-500' : 'bg-rose-500'}`}></span>
+                            <span className={`w-3 h-3 rounded-full ${studentData.studentStatus === 'Active' ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
                             <span className="text-sm font-black text-slate-800">{studentData.studentStatus || studentData.status || 'Active'}</span>
                           </div>
                         </div>
 
                         <div>
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1 block mb-2 mt-6">Modify Status</label>
-                          <div className="relative">
-                            <select 
-                              value={editStatus} 
-                              onChange={e => setEditStatus(e.target.value)} 
-                              className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900/10 text-sm appearance-none transition-all hover:bg-slate-100 cursor-pointer"
-                            >
-                              <option value="Active">Active</option>
-                              <option value="Inactive">Inactive</option>
-                              <option value="Suspended">Suspended</option>
-                              <option value="Graduated">Graduated</option>
-                            </select>
-                            <ChevronDown className="w-5 h-5 absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                          </div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1 block mb-1.5">Select New Status</label>
+                          <select 
+                            value={editStatus} 
+                            onChange={e => setEditStatus(e.target.value)} 
+                            className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          >
+                            <option value="Active">Active</option>
+                            <option value="Inactive">Inactive</option>
+                            <option value="Suspended">Suspended</option>
+                            <option value="Graduated">Graduated</option>
+                          </select>
                         </div>
                       </div>
                     </div>
@@ -531,41 +1809,30 @@ export default function StudentDetailScreen() {
                     <button 
                       onClick={handleUpdateStatus}
                       disabled={isSaving || editStatus === (studentData.studentStatus || studentData.status)}
-                      className="w-full mt-8 flex items-center justify-center gap-2 py-4 bg-slate-900 text-white font-black rounded-xl shadow-lg shadow-slate-900/20 hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm z-10"
+                      className="w-full mt-6 py-3 bg-slate-900 text-white font-black text-xs rounded-xl shadow-md hover:bg-slate-800 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                     >
-                      {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                      {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                       Update Status
                     </button>
                   </div>
 
                   {/* Danger Zone */}
-                  <div className="bg-rose-50 p-8 rounded-[2rem] border border-rose-100 flex flex-col relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity text-rose-900">
-                      <AlertTriangle className="w-24 h-24" />
-                    </div>
-                    
-                    <div className="relative z-10 flex-1">
-                      <h3 className="text-lg font-black text-rose-900 mb-2">Danger Zone</h3>
-                      <p className="text-xs font-bold text-rose-700/70 mb-6">These actions are destructive and cannot be easily reversed.</p>
+                  <div className="bg-rose-50/60 p-6 rounded-3xl border border-rose-100 flex flex-col justify-between">
+                    <div>
+                      <h4 className="text-sm font-black text-rose-900 uppercase tracking-wider mb-1">Access Management</h4>
+                      <p className="text-xs font-semibold text-rose-700/60 mb-6">Manage login credentials and system authorizations.</p>
                       
-                      <div className="space-y-4">
-                        <div className="bg-white/50 p-4 rounded-xl border border-rose-100 flex items-center justify-between">
+                      <div className="space-y-3">
+                        <div className="bg-white p-3.5 rounded-2xl border border-rose-100 flex items-center justify-between">
                           <div>
-                            <h4 className="text-sm font-black text-rose-900">Reset Credentials</h4>
-                            <p className="text-[10px] font-bold text-rose-700/60 mt-0.5">Force a password and PIN reset.</p>
+                            <h5 className="text-xs font-black text-rose-900">Reset Portal Password</h5>
+                            <p className="text-[10px] font-semibold text-rose-600">Send password reset token</p>
                           </div>
-                          <button onClick={() => alert('Credentials reset functionality will be available in the next update.')} className="px-4 py-2 bg-rose-100 text-rose-700 font-bold text-xs rounded-lg hover:bg-rose-200 transition-colors">
+                          <button 
+                            onClick={() => alert('Password reset token dispatched to student registered email.')} 
+                            className="px-3 py-1.5 bg-rose-100 text-rose-800 font-bold text-xs rounded-lg hover:bg-rose-200 transition-colors"
+                          >
                             Reset
-                          </button>
-                        </div>
-
-                        <div className="bg-white/50 p-4 rounded-xl border border-rose-100 flex items-center justify-between">
-                          <div>
-                            <h4 className="text-sm font-black text-rose-900">Revoke App Access</h4>
-                            <p className="text-[10px] font-bold text-rose-700/60 mt-0.5">Log out from all devices.</p>
-                          </div>
-                          <button onClick={() => alert('Access revoked successfully.')} className="px-4 py-2 bg-rose-100 text-rose-700 font-bold text-xs rounded-lg hover:bg-rose-200 transition-colors">
-                            Revoke
                           </button>
                         </div>
                       </div>
@@ -580,6 +1847,461 @@ export default function StudentDetailScreen() {
         </div>
       </div>
 
+      {/* ========================================================================= */}
+      {/* MODAL 1: RECORD FEE PAYMENT                                               */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {isPayFeeModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+              onClick={() => setIsPayFeeModalOpen(false)}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }} 
+              animate={{ opacity: 1, scale: 1, y: 0 }} 
+              exit={{ opacity: 0, scale: 0.95, y: 20 }} 
+              className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden z-10"
+            >
+              <div className="px-7 py-5 border-b border-slate-100 flex justify-between items-center bg-indigo-50/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center">
+                    <Receipt className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-slate-900 text-base">Record Fee Payment</h3>
+                    <p className="text-xs font-bold text-slate-400">
+                      {studentData.firstName} {studentData.lastName} ({studentData.admissionNumber || studentData.studentId})
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsPayFeeModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white text-slate-400 hover:text-slate-600 flex items-center justify-center border border-slate-100"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmitFeePayment} className="p-7 space-y-4">
+                
+                {/* Academic Year & Category */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Academic Year</label>
+                    <select 
+                      value={payFeeForm.year}
+                      onChange={e => setPayFeeForm({ ...payFeeForm, year: Number(e.target.value) })}
+                      className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                    >
+                      <option value={1}>Year 1</option>
+                      <option value={2}>Year 2</option>
+                      <option value={3}>Year 3</option>
+                      <option value={4}>Year 4</option>
+                      <option value={5}>Year 5</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Fee Category</label>
+                    <select 
+                      value={payFeeForm.category}
+                      onChange={e => setPayFeeForm({ ...payFeeForm, category: e.target.value as any })}
+                      className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                    >
+                      <option value="tuition">Tuition Fee</option>
+                      <option value="exam">Examination Fee</option>
+                      <option value="transport">Transport Fee</option>
+                      <option value="other">Other / Misc Fee</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Amount */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">
+                      Payment Amount (₹) <span className="text-rose-500">*</span>
+                    </label>
+                    {feeSummary.balance > 0 && (
+                      <button 
+                        type="button" 
+                        onClick={() => setPayFeeForm({ ...payFeeForm, amount: String(feeSummary.balance) })}
+                        className="text-[11px] font-black text-indigo-600 hover:underline flex items-center gap-1"
+                      >
+                        <Sparkles className="w-3 h-3" /> Fill Due (₹{feeSummary.balance})
+                      </button>
+                    )}
+                  </div>
+                  <input 
+                    type="number"
+                    required
+                    min="1"
+                    placeholder="e.g. 35000"
+                    value={payFeeForm.amount}
+                    onChange={e => setPayFeeForm({ ...payFeeForm, amount: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 p-3.5 rounded-xl font-black text-slate-800 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                </div>
+
+                {/* Payment Method & Date */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Payment Mode</label>
+                    <select 
+                      value={payFeeForm.paymentMethod}
+                      onChange={e => setPayFeeForm({ ...payFeeForm, paymentMethod: e.target.value })}
+                      className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                    >
+                      <option value="Cash">Cash</option>
+                      <option value="Online">Online / UPI</option>
+                      <option value="Bank Transfer">Bank Transfer / NEFT</option>
+                      <option value="Cheque">Cheque</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Payment Date</label>
+                    <input 
+                      type="date"
+                      required
+                      value={payFeeForm.paymentDate}
+                      onChange={e => setPayFeeForm({ ...payFeeForm, paymentDate: e.target.value })}
+                      className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Receipt / Txn ID */}
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Receipt / Txn ID</label>
+                  <input 
+                    type="text"
+                    value={payFeeForm.transactionId}
+                    onChange={e => setPayFeeForm({ ...payFeeForm, transactionId: e.target.value })}
+                    className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                  />
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Remarks / Note</label>
+                  <textarea 
+                    value={payFeeForm.notes}
+                    onChange={e => setPayFeeForm({ ...payFeeForm, notes: e.target.value })}
+                    rows={2}
+                    placeholder="e.g. Paid at college counter"
+                    className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-semibold text-slate-700 text-xs outline-none resize-none"
+                  ></textarea>
+                </div>
+
+                <div className="pt-2">
+                  <button 
+                    type="submit"
+                    disabled={isSubmittingFeePay}
+                    className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isSubmittingFeePay ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    Confirm & Record Payment
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================================================= */}
+      {/* MODAL 2: EDIT FEE STRUCTURE & PAID AMOUNTS                                */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {isEditFeeModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+              onClick={() => setIsEditFeeModalOpen(false)}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }} 
+              animate={{ opacity: 1, scale: 1, y: 0 }} 
+              exit={{ opacity: 0, scale: 0.95, y: 20 }} 
+              className="relative bg-white w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden z-10 max-h-[92vh] flex flex-col"
+            >
+              <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center border border-indigo-100 text-indigo-600">
+                    <Edit3 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-slate-800 text-base">Edit Fee Structure & Paid Amounts</h3>
+                    <p className="text-xs font-bold text-slate-400">
+                      Configure or modify fee records for {studentData.firstName} {studentData.lastName}
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsEditFeeModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white text-slate-400 hover:text-slate-600 flex items-center justify-center border border-slate-100"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="px-8 py-3 bg-indigo-50/50 border-b border-indigo-100/50 flex flex-wrap justify-between items-center gap-4">
+                <div className="flex items-center gap-6 text-xs font-bold">
+                  <div>
+                    <span className="text-slate-400 uppercase text-[10px]">Total: </span>
+                    <span className="font-black text-slate-900">{formatCurrency(editModalTotals.total)}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 uppercase text-[10px]">Paid: </span>
+                    <span className="font-black text-emerald-600">{formatCurrency(editModalTotals.paid)}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 uppercase text-[10px]">Due: </span>
+                    <span className="font-black text-amber-600">{formatCurrency(editModalTotals.balance)}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button 
+                    type="button" 
+                    onClick={handleMarkAllAsPaid}
+                    className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-all flex items-center gap-1 shadow-sm"
+                  >
+                    <Check className="w-3.5 h-3.5" /> Mark All as Paid
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={handleResetAllPaid}
+                    className="px-3 py-1.5 bg-slate-200 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-300 transition-all"
+                  >
+                    Reset Paid
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-8 space-y-6 overflow-y-auto flex-1">
+                {editFeeYears.map((yr, yIdx) => {
+                  const yrTotal = (Number(yr.tuition?.total) || 0) + (Number(yr.exam?.total) || 0) + (Number(yr.transport?.total) || 0) + (Number(yr.other?.total) || 0);
+                  const yrPaid = (Number(yr.tuition?.paid) || 0) + (Number(yr.exam?.paid) || 0) + (Number(yr.transport?.paid) || 0) + (Number(yr.other?.paid) || 0);
+                  const yrDue = Math.max(0, yrTotal - yrPaid);
+
+                  return (
+                    <div key={yIdx} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
+                      
+                      <div className="flex justify-between items-center border-b border-slate-200/80 pb-3">
+                        <div className="flex items-center gap-3">
+                          <span className="w-7 h-7 bg-indigo-600 text-white rounded-lg flex items-center justify-center font-black text-xs">
+                            {yr.year}
+                          </span>
+                          <span className="font-black text-slate-800 text-sm">Academic Year {yr.year}</span>
+                          <span className="text-xs font-semibold text-slate-400">
+                            (Total: {formatCurrency(yrTotal)} | Paid: {formatCurrency(yrPaid)} | Due: {formatCurrency(yrDue)})
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button 
+                            type="button" 
+                            onClick={() => handleQuickMarkYearPaid(yIdx)}
+                            className="text-[11px] font-bold text-emerald-700 bg-emerald-100/70 hover:bg-emerald-200 px-2.5 py-1 rounded-md transition-all flex items-center gap-1"
+                          >
+                            <Check className="w-3 h-3" /> Mark Year Paid
+                          </button>
+                          {editFeeYears.length > 1 && (
+                            <button 
+                              type="button" 
+                              onClick={() => handleRemoveAcademicYear(yIdx)}
+                              className="text-slate-400 hover:text-rose-500 p-1"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        
+                        {/* Tuition */}
+                        <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-800">Tuition Fee</span>
+                            <button 
+                              type="button" 
+                              onClick={() => handleQuickMarkCategoryPaid(yIdx, "tuition")}
+                              className="text-[10px] font-bold text-indigo-600 hover:underline"
+                            >
+                              Set Paid = Total
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">Total (₹)</span>
+                              <input 
+                                type="number"
+                                value={yr.tuition?.total ?? 0}
+                                onChange={e => handleEditFeeChange(yIdx, "tuition", "total", e.target.value)}
+                                className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-slate-800 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-bold text-emerald-600 uppercase">Paid (₹)</span>
+                              <input 
+                                type="number"
+                                value={yr.tuition?.paid ?? 0}
+                                onChange={e => handleEditFeeChange(yIdx, "tuition", "paid", e.target.value)}
+                                className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-emerald-700 text-xs"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Exam */}
+                        <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-800">Exam Fee</span>
+                            <button 
+                              type="button" 
+                              onClick={() => handleQuickMarkCategoryPaid(yIdx, "exam")}
+                              className="text-[10px] font-bold text-indigo-600 hover:underline"
+                            >
+                              Set Paid = Total
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">Total (₹)</span>
+                              <input 
+                                type="number"
+                                value={yr.exam?.total ?? 0}
+                                onChange={e => handleEditFeeChange(yIdx, "exam", "total", e.target.value)}
+                                className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-slate-800 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-bold text-emerald-600 uppercase">Paid (₹)</span>
+                              <input 
+                                type="number"
+                                value={yr.exam?.paid ?? 0}
+                                onChange={e => handleEditFeeChange(yIdx, "exam", "paid", e.target.value)}
+                                className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-emerald-700 text-xs"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Transport */}
+                        <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-800">Transport Fee</span>
+                            <button 
+                              type="button" 
+                              onClick={() => handleQuickMarkCategoryPaid(yIdx, "transport")}
+                              className="text-[10px] font-bold text-indigo-600 hover:underline"
+                            >
+                              Set Paid = Total
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">Total (₹)</span>
+                              <input 
+                                type="number"
+                                value={yr.transport?.total ?? 0}
+                                onChange={e => handleEditFeeChange(yIdx, "transport", "total", e.target.value)}
+                                className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-slate-800 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-bold text-emerald-600 uppercase">Paid (₹)</span>
+                              <input 
+                                type="number"
+                                value={yr.transport?.paid ?? 0}
+                                onChange={e => handleEditFeeChange(yIdx, "transport", "paid", e.target.value)}
+                                className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-emerald-700 text-xs"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Other */}
+                        <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-800">Other / Misc Fee</span>
+                            <button 
+                              type="button" 
+                              onClick={() => handleQuickMarkCategoryPaid(yIdx, "other")}
+                              className="text-[10px] font-bold text-indigo-600 hover:underline"
+                            >
+                              Set Paid = Total
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">Total (₹)</span>
+                              <input 
+                                type="number"
+                                value={yr.other?.total ?? 0}
+                                onChange={e => handleEditFeeChange(yIdx, "other", "total", e.target.value)}
+                                className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-slate-800 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-bold text-emerald-600 uppercase">Paid (₹)</span>
+                              <input 
+                                type="number"
+                                value={yr.other?.paid ?? 0}
+                                onChange={e => handleEditFeeChange(yIdx, "other", "paid", e.target.value)}
+                                className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-emerald-700 text-xs"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <button 
+                  type="button" 
+                  onClick={handleAddAcademicYear}
+                  className="w-full py-3 border-2 border-dashed border-indigo-200 hover:border-indigo-400 text-indigo-600 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 hover:bg-indigo-50/50"
+                >
+                  <Plus className="w-4 h-4" /> Add Another Academic Year
+                </button>
+              </div>
+
+              <div className="px-8 py-4 border-t border-slate-100 flex justify-between items-center bg-slate-50">
+                <button 
+                  type="button" 
+                  onClick={() => setIsEditFeeModalOpen(false)}
+                  className="px-5 py-2.5 border border-slate-200 text-slate-600 font-bold rounded-xl text-xs hover:bg-slate-100 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  disabled={isSavingFeeEdit}
+                  onClick={handleSaveStudentFeeStructure}
+                  className="px-6 py-2.5 bg-indigo-600 text-white font-black rounded-xl text-xs hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/20 flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isSavingFeeEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  Save Fee Structure & Payments
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Student ID Card Modal */}
       <IdCardModal
         isOpen={isIdModalOpen}
         onClose={() => setIsIdModalOpen(false)}

@@ -29,12 +29,17 @@ export async function GET() {
         await connectDB();
         
         const totalBooks = await Book.countDocuments();
-        const activeIssues = await IssueBook.find({ isVerified: true, status: { $in: ['Active', 'Overdue'] } });
-        const overdueBooksCount = await IssueBook.countDocuments({ isVerified: true, status: 'Overdue' });
+        const activeIssues = await IssueBook.find({ status: { $in: ['Active', 'Overdue'] } });
+        const overdueBooksCount = await IssueBook.countDocuments({ 
+            $or: [
+                { status: 'Overdue' },
+                { status: 'Active', dueDate: { $lt: new Date() } }
+            ] 
+        });
         const totalStock = await Book.aggregate([{ $group: { _id: null, total: { $sum: '$total' } } }]);
 
         // Unique students with active books
-        const uniqueConsumers = await IssueBook.distinct('student', { isVerified: true, status: { $in: ['Active', 'Overdue'] } });
+        const uniqueConsumers = await IssueBook.distinct('student', { status: { $in: ['Active', 'Overdue'] } });
 
         // Calculate total pending fine
         let totalFineDues = 0;

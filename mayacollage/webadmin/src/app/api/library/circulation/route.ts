@@ -8,7 +8,7 @@ import { Book } from "@/models/Book";
 export const dynamic = 'force-dynamic';
 
 const calculateFine = async (issue: any) => {
-    if (issue.status === 'Returned' || !issue.dueDate) return 0;
+    if (issue.status === 'Returned' || !issue.dueDate) return issue.fine || 0;
     
     const now = new Date();
     const due = new Date(issue.dueDate);
@@ -17,31 +17,50 @@ const calculateFine = async (issue: any) => {
         const diffTime = Math.abs(now.getTime() - due.getTime());
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         
-        if (diffDays > 10) {
-            const settings = await LibrarySettings.findOne() || { fineRatePerDay: 5 };
-            return (diffDays - 10) * settings.fineRatePerDay;
-        }
+        // Fine rate: ₹5/day after due date
+        const settings = await LibrarySettings.findOne() || { fineRatePerDay: 5 };
+        const fineRate = settings.fineRatePerDay || 5;
+        return diffDays * fineRate;
     }
     return 0;
 };
 
-export async function GET() {
+export async function GET(req: Request) {
     try {
         await connectDB();
         
         // Ensure models are registered
-        Student.init();
-        Book.init();
+        if (!Student.schema) Student.init();
+        if (!Book.schema) Book.init();
 
-        const issues = await IssueBook.find({ isVerified: true })
-            .populate('student', 'firstName lastName studentId')
-            .populate('book', 'title author')
-            .sort({ createdAt: -1 });
+        const { searchParams } = new URL(req.url);
+        const statusParam = searchParams.get('status');
+
+        let filter: any = {};
+        if (statusParam && statusParam !== 'all') {
+            filter.status = statusParam;
+        }
+
+        const issues = await IssueBook.find(filter)
+            .populate('student', 'firstName lastName studentId admissionNumber email selectedProgram selectedBranch contactNumber')
+            .populate('book', 'title author isbn category shelf price total available')
+            .sort({ createdAt: -1 })
+            .lean();
             
         const issuesWithFines = await Promise.all(issues.map(async (i: any) => {
-            const fine = await calculateFine(i);
-            const obj = i.toObject();
-            return { ...obj, fine };
+            const calculatedFine = await calculateFine(i);
+            const now = new Date();
+            const due = i.dueDate ? new Date(i.dueDate) : now;
+            const isOverdue = i.status !== 'Returned' && now > due;
+            const diffDays = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+            
+            return {
+                ...i,
+                fine: i.status === 'Returned' ? (i.fine || 0) : Math.max(i.fine || 0, calculatedFine),
+                isOverdue,
+                daysRemaining: diffDays,
+                displayStatus: isOverdue && i.status === 'Active' ? 'Overdue' : i.status
+            };
         }));
             
         return NextResponse.json(issuesWithFines);
