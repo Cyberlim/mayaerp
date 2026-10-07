@@ -4,13 +4,23 @@ import { Student } from '@/models/Student';
 import { Course } from '@/models/Course';
 import { Branch } from '@/models/Branch';
 import { FeeTransaction } from '@/models/FeeTransaction';
+import { getCache, setCache, DEFAULT_CACHE_TTL } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
-    await connectDB();
     const { searchParams } = new URL(request.url);
+    const queryString = searchParams.toString() || 'all';
+    const cacheKey = `fee:student-accounts:${queryString}`;
+
+    // 1. Check Redis cache (30 min TTL)
+    const cachedData = await getCache(cacheKey);
+    if (cachedData) {
+      return NextResponse.json(cachedData);
+    }
+
+    await connectDB();
     const search = searchParams.get('search') || '';
     const branchId = searchParams.get('branchId') || '';
     const courseId = searchParams.get('courseId') || '';
@@ -123,7 +133,7 @@ export async function GET(request: Request) {
     const totalInstitutionalOS = studentAccounts.reduce((acc, curr) => acc + curr.outstandingAmount, 0);
     const totalDefaulters = studentAccounts.filter((s: any) => s.outstandingAmount > 0).length;
 
-    return NextResponse.json({
+    const responsePayload = {
       summary: {
         totalStudents: studentAccounts.length,
         totalInstitutionalReceivable,
@@ -133,7 +143,12 @@ export async function GET(request: Request) {
         recoveryRate: totalInstitutionalReceivable > 0 ? Math.round((totalInstitutionalCollected / totalInstitutionalReceivable) * 100) : 100
       },
       accounts: studentAccounts
-    });
+    };
+
+    // 2. Store in Redis cache for 30 minutes
+    await setCache(cacheKey, responsePayload, DEFAULT_CACHE_TTL);
+
+    return NextResponse.json(responsePayload);
 
   } catch (error: any) {
     console.error('Error in GET /api/finance/student-account:', error);

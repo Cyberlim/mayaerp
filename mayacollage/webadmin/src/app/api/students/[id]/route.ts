@@ -1,16 +1,22 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import { Student } from "@/models/Student";
-import { Course } from "@/models/Course"; // We might need these to populate
+import { Course } from "@/models/Course";
 import { Branch } from "@/models/Branch";
+import { getCache, setCache, delCache, delCachePattern, DEFAULT_CACHE_TTL } from "@/lib/redis";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await connectDB();
     const { id } = await params;
+    const cacheKey = `student:${id}`;
 
-    // Use .populate if Course and Branch models exist. Otherwise just findById.
-    // If we just do findById, we can populate selectedBranch and selectedProgram
+    // 1. Try serving from Redis cache (30 min TTL)
+    const cachedStudent = await getCache(cacheKey);
+    if (cachedStudent) {
+      return NextResponse.json(cachedStudent);
+    }
+
+    await connectDB();
     const student = await Student.findById(id)
       .populate("selectedBranch")
       .populate("selectedProgram")
@@ -19,6 +25,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!student) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
+
+    // 2. Cache student profile for 30 minutes (1800s)
+    await setCache(cacheKey, student, DEFAULT_CACHE_TTL);
 
     return NextResponse.json(student);
   } catch (error) {
@@ -33,10 +42,23 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     await connectDB();
     const body = await request.json();
 
-    const updatedStudent = await Student.findByIdAndUpdate(id, body, { new: true });
+    const updatedStudent = await Student.findByIdAndUpdate(id, body, { new: true })
+      .populate("selectedBranch")
+      .populate("selectedProgram");
+
     if (!updatedStudent) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
+
+    // Update / invalidate cache immediately
+    const cacheKey = `student:${id}`;
+    await Promise.all([
+      setCache(cacheKey, updatedStudent, DEFAULT_CACHE_TTL),
+      delCachePattern("students:*"),
+      delCache(`fee:student-account:${id}`),
+      delCachePattern("fee:student-accounts:*"),
+      delCachePattern("fee:alerts:*")
+    ]);
 
     return NextResponse.json(updatedStudent);
   } catch (error: any) {
@@ -54,6 +76,16 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     if (!deletedStudent) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
+
+    // Invalidate cache
+    await Promise.all([
+      delCache(`student:${id}`),
+      delCachePattern("students:*"),
+      delCache(`fee:student-account:${id}`),
+      delCachePattern("fee:student-accounts:*"),
+      delCachePattern("fee:transactions:*"),
+      delCachePattern("fee:alerts:*")
+    ]);
 
     return NextResponse.json({ message: "Student deleted successfully" });
   } catch (error) {

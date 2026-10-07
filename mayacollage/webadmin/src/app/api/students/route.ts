@@ -1,13 +1,23 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import { Student } from "@/models/Student";
+import { getCache, setCache, delCachePattern, DEFAULT_CACHE_TTL } from "@/lib/redis";
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
-    await connectDB();
     const { searchParams } = new URL(request.url);
+    const queryString = searchParams.toString() || 'all';
+    const cacheKey = `students:list:${queryString}`;
+
+    // 1. Try serving from Redis cache (30 min TTL)
+    const cachedStudents = await getCache(cacheKey);
+    if (cachedStudents) {
+      return NextResponse.json(cachedStudents);
+    }
+
+    await connectDB();
     const selectedProgram = searchParams.get("selectedProgram");
     const selectedBranch = searchParams.get("selectedBranch");
     const batch = searchParams.get("batch");
@@ -48,6 +58,10 @@ export async function GET(request: Request) {
     }
 
     const students = await Student.find(query).sort({ createdAt: -1 }).lean();
+
+    // 2. Store in Redis cache for 30 minutes (1800s)
+    await setCache(cacheKey, students, DEFAULT_CACHE_TTL);
+
     return NextResponse.json(students);
   } catch (error) {
     console.error("GET /api/students error:", error);
@@ -69,6 +83,13 @@ export async function POST(request: Request) {
 
     const newStudent = new Student(body);
     await newStudent.save();
+
+    // Invalidate students and financial cache
+    await Promise.all([
+      delCachePattern("students:*"),
+      delCachePattern("fee:student-accounts:*"),
+      delCachePattern("fee:alerts:*")
+    ]);
 
     return NextResponse.json(newStudent, { status: 201 });
   } catch (error: any) {

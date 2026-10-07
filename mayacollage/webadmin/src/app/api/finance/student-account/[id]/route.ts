@@ -4,13 +4,22 @@ import { Student } from '@/models/Student';
 import { Course } from '@/models/Course';
 import { Branch } from '@/models/Branch';
 import { FeeTransaction } from '@/models/FeeTransaction';
+import { getCache, setCache, DEFAULT_CACHE_TTL } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await connectDB();
     const { id: studentId } = await params;
+    const cacheKey = `fee:student-account:${studentId}`;
+
+    // 1. Try Redis cache (30 min TTL)
+    const cachedData = await getCache(cacheKey);
+    if (cachedData) {
+      return NextResponse.json(cachedData);
+    }
+
+    await connectDB();
 
     const studentDoc = await Student.findById(studentId)
       .populate('selectedBranch', 'name code')
@@ -102,7 +111,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const outstandingAmount = Math.max(0, totalAssessed - totalPaid);
 
-    return NextResponse.json({
+    const payload = {
       student: {
         _id: student._id,
         enrollmentNumber: student.enrollmentNumber || 'N/A',
@@ -133,7 +142,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         years: yearsData
       },
       transactions
-    });
+    };
+
+    // 2. Cache in Redis for 30 minutes
+    await setCache(cacheKey, payload, DEFAULT_CACHE_TTL);
+
+    return NextResponse.json(payload);
 
   } catch (error: any) {
     console.error('Error in GET /api/finance/student-account/[id]:', error);

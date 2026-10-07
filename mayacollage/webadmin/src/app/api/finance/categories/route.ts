@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { FeeCategory } from '@/models/FeeCategory';
+import { getCache, setCache, delCache, DEFAULT_CACHE_TTL } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
+
+const CACHE_KEY = 'fee:categories';
 
 const DEFAULT_CATEGORIES = [
   { name: 'Tuition Fee', code: 'tuition', type: 'Academic', defaultAmount: 45000, frequency: 'Semester-wise', isMandatory: true, description: 'Core academic and lecture fee' },
@@ -22,6 +25,12 @@ const DEFAULT_CATEGORIES = [
 
 export async function GET() {
   try {
+    // 1. Try Redis cache (30 min TTL)
+    const cachedCategories = await getCache(CACHE_KEY);
+    if (cachedCategories) {
+      return NextResponse.json(cachedCategories);
+    }
+
     await connectDB();
     let categories = await FeeCategory.find({}).sort({ createdAt: 1 });
 
@@ -30,6 +39,9 @@ export async function GET() {
       await FeeCategory.insertMany(DEFAULT_CATEGORIES);
       categories = await FeeCategory.find({}).sort({ createdAt: 1 });
     }
+
+    // 2. Cache categories in Redis for 30 minutes
+    await setCache(CACHE_KEY, categories, DEFAULT_CACHE_TTL);
 
     return NextResponse.json(categories);
   } catch (error: any) {
@@ -66,6 +78,9 @@ export async function POST(request: Request) {
       status: 'Active',
     });
 
+    // Invalidate categories cache
+    await delCache(CACHE_KEY);
+
     return NextResponse.json({ success: true, category: newCategory }, { status: 201 });
   } catch (error: any) {
     console.error('Error in POST /api/finance/categories:', error);
@@ -101,6 +116,9 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Category not found' }, { status: 404 });
     }
 
+    // Invalidate categories cache
+    await delCache(CACHE_KEY);
+
     return NextResponse.json({ success: true, category: updated });
   } catch (error: any) {
     console.error('Error in PUT /api/finance/categories:', error);
@@ -119,6 +137,10 @@ export async function DELETE(request: Request) {
     }
 
     await FeeCategory.findByIdAndDelete(id);
+
+    // Invalidate categories cache
+    await delCache(CACHE_KEY);
+
     return NextResponse.json({ success: true, message: 'Category removed successfully' });
   } catch (error: any) {
     console.error('Error in DELETE /api/finance/categories:', error);

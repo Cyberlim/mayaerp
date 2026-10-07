@@ -3,13 +3,23 @@ import connectDB from "@/lib/mongodb";
 import { FeeTransaction } from "@/models/FeeTransaction";
 import { Student } from "@/models/Student";
 import { Course } from "@/models/Course";
+import { getCache, setCache, delCache, delCachePattern, DEFAULT_CACHE_TTL } from "@/lib/redis";
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
-    await connectDB();
     const { searchParams } = new URL(request.url);
+    const queryString = searchParams.toString() || 'all';
+    const cacheKey = `fee:transactions:${queryString}`;
+
+    // 1. Try Redis cache (30 min TTL)
+    const cachedTxns = await getCache(cacheKey);
+    if (cachedTxns) {
+      return NextResponse.json(cachedTxns);
+    }
+
+    await connectDB();
     const studentId = searchParams.get("studentId");
     const semester = searchParams.get("semester");
     const academicYear = searchParams.get("academicYear");
@@ -49,6 +59,9 @@ export async function GET(request: Request) {
         return name.includes(s) || enroll.includes(s) || adm.includes(s) || txnId.includes(s) || rcpt.includes(s);
       });
     }
+
+    // 2. Store in Redis cache for 30 minutes
+    await setCache(cacheKey, transactions, DEFAULT_CACHE_TTL);
 
     return NextResponse.json(transactions);
   } catch (error: any) {
@@ -171,6 +184,16 @@ export async function POST(request: Request) {
     const populatedTxn = await FeeTransaction.findById(newTxn._id)
       .populate({ path: 'studentId', model: Student })
       .populate({ path: 'courseId', model: Course });
+
+    // Invalidate related caches immediately
+    await Promise.all([
+      delCache(`student:${student._id}`),
+      delCache(`fee:student-account:${student._id}`),
+      delCachePattern("fee:transactions:*"),
+      delCachePattern("fee:student-accounts:*"),
+      delCachePattern("fee:receipts:*"),
+      delCachePattern("fee:alerts:*")
+    ]);
 
     return NextResponse.json({
       success: true,
