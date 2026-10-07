@@ -45,11 +45,17 @@ import {
   Award,
   Fingerprint,
   HeartHandshake,
-  Bus
+  Bus,
+  Tag,
+  ShoppingBag,
+  Shirt,
+  Package,
+  ShieldCheck
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import IdCardModal, { IdCardFront } from "@/components/IdCardModal";
+import ReceiptModal from "@/components/ReceiptModal";
 import { useSocket } from "@/components/SocketProvider";
 
 export default function StudentDetailScreen() {
@@ -65,11 +71,19 @@ export default function StudentDetailScreen() {
   const [branches, setBranches] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [feeCategories, setFeeCategories] = useState<any[]>([]);
   const [assignedBus, setAssignedBus] = useState<any>(null);
 
   const [isSaving, setIsSaving] = useState(false);
   const [editStatus, setEditStatus] = useState("");
   const [toastMsg, setToastMsg] = useState("");
+
+  // Receipt Modal State
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [selectedReceipt, setSelectedReceipt] = useState<any>(null);
+
+  // Category filter in fees tab
+  const [categoryFilter, setCategoryFilter] = useState<string>("All");
 
   // Quick Edit States: Personal Details
   const [isEditingPersonal, setIsEditingPersonal] = useState(false);
@@ -85,7 +99,7 @@ export default function StudentDetailScreen() {
   const [isPayFeeModalOpen, setIsPayFeeModalOpen] = useState(false);
   const [payFeeForm, setPayFeeForm] = useState({
     year: 1,
-    category: "tuition" as "tuition" | "exam" | "transport" | "other",
+    category: "tuition",
     amount: "",
     paymentMethod: "Cash",
     transactionId: "",
@@ -106,17 +120,19 @@ export default function StudentDetailScreen() {
 
   const fetchStudentData = async () => {
     try {
-      const [branchesData, coursesData, student, txnsData, busesData] = await Promise.all([
+      const [branchesData, coursesData, student, txnsData, busesData, categoriesData] = await Promise.all([
         fetch("/api/branches").then(res => res.json()).catch(() => []),
         fetch("/api/courses").then(res => res.json()).catch(() => []),
         fetch(`/api/students/${studentId}`).then(res => res.json()).catch(() => null),
         fetch(`/api/finance/transactions?studentId=${studentId}`).then(res => res.json()).catch(() => []),
-        fetch("/api/transport/buses").then(res => res.json()).catch(() => [])
+        fetch("/api/transport/buses").then(res => res.json()).catch(() => []),
+        fetch("/api/finance/categories").then(res => res.json()).catch(() => [])
       ]);
 
       setBranches(Array.isArray(branchesData) ? branchesData : []);
       setCourses(Array.isArray(coursesData) ? coursesData : []);
       setTransactions(Array.isArray(txnsData) ? txnsData : []);
+      setFeeCategories(Array.isArray(categoriesData) ? categoriesData : []);
 
       if (Array.isArray(busesData)) {
         const foundBus = busesData.find((b: any) => 
@@ -406,13 +422,23 @@ export default function StudentDetailScreen() {
   };
 
   // Open Add Fee Payment Modal
-  const handleOpenPayFeeModal = (defaultYear = 1, defaultCategory: "tuition" | "exam" | "transport" | "other" = "tuition") => {
+  const handleOpenPayFeeModal = (defaultYear = 1, defaultCategory = "tuition", defaultAmount?: number) => {
+    const matchedCategory = feeCategories.find(c => c.code === defaultCategory || c.name?.toLowerCase() === defaultCategory.toLowerCase());
+    let initialAmount = "";
+    if (defaultAmount !== undefined && defaultAmount > 0) {
+      initialAmount = String(defaultAmount);
+    } else if (matchedCategory && matchedCategory.defaultAmount > 0) {
+      initialAmount = String(matchedCategory.defaultAmount);
+    } else if (feeSummary.balance > 0 && (defaultCategory === "tuition" || defaultCategory === "all")) {
+      initialAmount = String(feeSummary.balance);
+    }
+
     setPayFeeForm({
       year: defaultYear,
-      category: defaultCategory,
-      amount: feeSummary.balance > 0 ? String(feeSummary.balance) : "",
+      category: matchedCategory?.code || defaultCategory,
+      amount: initialAmount,
       paymentMethod: "Cash",
-      transactionId: `FEE-${Date.now().toString().slice(-6)}`,
+      transactionId: `RCP-${Date.now().toString().slice(-6)}`,
       paymentDate: new Date().toISOString().split("T")[0],
       notes: ""
     });
@@ -429,6 +455,9 @@ export default function StudentDetailScreen() {
 
     setIsSubmittingFeePay(true);
     try {
+      const matchedCat = feeCategories.find(c => c.code === payFeeForm.category);
+      const categoryName = matchedCat?.name || (payFeeForm.category.charAt(0).toUpperCase() + payFeeForm.category.slice(1) + " Fee");
+
       const res = await fetch("/api/finance/transactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -440,6 +469,7 @@ export default function StudentDetailScreen() {
           transactionId: payFeeForm.transactionId,
           year: Number(payFeeForm.year),
           category: payFeeForm.category,
+          categoryName: categoryName,
           notes: payFeeForm.notes
         })
       });
@@ -1687,28 +1717,72 @@ export default function StudentDetailScreen() {
                         <thead>
                           <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
                             <th className="p-3">Receipt / Txn ID</th>
+                            <th className="p-3">Category</th>
                             <th className="p-3">Date</th>
                             <th className="p-3">Method</th>
                             <th className="p-3 text-right">Amount</th>
                             <th className="p-3 text-center">Status</th>
+                            <th className="p-3 text-center">Action</th>
                           </tr>
                         </thead>
                         <tbody className="text-xs divide-y divide-slate-50">
-                          {transactions.map(txn => (
-                            <tr key={txn._id} className="hover:bg-slate-50/60">
-                              <td className="p-3 font-bold text-slate-700">{txn.transactionId}</td>
-                              <td className="p-3 text-slate-500">
-                                {txn.paymentDate ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(txn.paymentDate)) : "-"}
-                              </td>
-                              <td className="p-3 font-semibold text-slate-600">{txn.paymentMethod || "Cash"}</td>
-                              <td className="p-3 text-right font-black text-emerald-600">{formatCurrency(txn.amount)}</td>
-                              <td className="p-3 text-center">
-                                <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase rounded-full">
-                                  {txn.status || "Completed"}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
+                          {transactions.map(txn => {
+                            const matchedCat = feeCategories.find(c => c.code === txn.category);
+                            const displayCatName = txn.categoryName || matchedCat?.name || (txn.category ? txn.category.toUpperCase() : "Tuition Fee");
+
+                            return (
+                              <tr key={txn._id} className="hover:bg-slate-50/60">
+                                <td className="p-3 font-bold text-slate-800">
+                                  <div className="flex items-center gap-1.5">
+                                    <Receipt className="w-3.5 h-3.5 text-indigo-600" />
+                                    <span>{txn.receiptNumber || txn.transactionId}</span>
+                                  </div>
+                                </td>
+                                <td className="p-3 font-semibold text-slate-700">
+                                  <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[11px] font-bold">
+                                    {displayCatName}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-slate-500">
+                                  {txn.paymentDate ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(txn.paymentDate)) : "-"}
+                                </td>
+                                <td className="p-3 font-semibold text-slate-600">{txn.paymentMethod || "Cash"}</td>
+                                <td className="p-3 text-right font-black text-emerald-600">{formatCurrency(txn.amount)}</td>
+                                <td className="p-3 text-center">
+                                  <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase rounded-full">
+                                    {txn.status || "Completed"}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-center">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedReceipt({
+                                        ...txn,
+                                        type: "student",
+                                        name: `${studentData.firstName} ${studentData.lastName}`.trim(),
+                                        studentId: studentData.studentId || studentData.admissionNumber,
+                                        course: selectedCourse?.name,
+                                        branch: selectedBranch?.name,
+                                        categoryName: displayCatName,
+                                        amount: txn.amount,
+                                        date: txn.paymentDate || txn.createdAt,
+                                        transactionId: txn.transactionId,
+                                        receiptNumber: txn.receiptNumber || txn.transactionId,
+                                        paymentMethod: txn.paymentMethod || "Cash",
+                                        notes: txn.notes
+                                      });
+                                      setIsReceiptModalOpen(true);
+                                    }}
+                                    className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1"
+                                    title="View & Print Official Receipt"
+                                  >
+                                    <Printer className="w-3.5 h-3.5" />
+                                    <span>Receipt</span>
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -1941,14 +2015,14 @@ export default function StudentDetailScreen() {
 
               <form onSubmit={handleSubmitFeePayment} className="p-7 space-y-4">
                 
-                {/* Academic Year & Category */}
-                <div className="grid grid-cols-2 gap-4">
+                {/* Academic Year & Fee Category Dropdown */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Academic Year</label>
                     <select 
                       value={payFeeForm.year}
                       onChange={e => setPayFeeForm({ ...payFeeForm, year: Number(e.target.value) })}
-                      className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                      className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none focus:ring-2 focus:ring-indigo-500/20"
                     >
                       <option value={1}>Year 1</option>
                       <option value={2}>Year 2</option>
@@ -1962,13 +2036,73 @@ export default function StudentDetailScreen() {
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Fee Category</label>
                     <select 
                       value={payFeeForm.category}
-                      onChange={e => setPayFeeForm({ ...payFeeForm, category: e.target.value as any })}
-                      className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                      onChange={e => {
+                        const selectedCode = e.target.value;
+                        const foundCat = feeCategories.find((c: any) => c.code === selectedCode);
+                        setPayFeeForm(prev => ({
+                          ...prev,
+                          category: selectedCode,
+                          amount: foundCat && foundCat.defaultAmount > 0 ? String(foundCat.defaultAmount) : prev.amount
+                        }));
+                      }}
+                      className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none focus:ring-2 focus:ring-indigo-500/20"
                     >
-                      <option value="tuition">Tuition Fee</option>
-                      <option value="exam">Examination Fee</option>
-                      <option value="transport">Transport Fee</option>
-                      <option value="other">Other / Misc Fee</option>
+                      {feeCategories.length > 0 ? (
+                        <>
+                          <optgroup label="Academic Fees">
+                            {feeCategories.filter(c => c.type === 'Academic').map(cat => (
+                              <option key={cat.code || cat._id} value={cat.code}>
+                                {cat.name} {cat.defaultAmount ? `(₹${cat.defaultAmount.toLocaleString('en-IN')})` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                          <optgroup label="Kit & Uniform Items">
+                            {feeCategories.filter(c => c.type === 'Kit/Uniform').map(cat => (
+                              <option key={cat.code || cat._id} value={cat.code}>
+                                {cat.name} {cat.defaultAmount ? `(₹${cat.defaultAmount.toLocaleString('en-IN')})` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                          <optgroup label="Facility & Labs">
+                            {feeCategories.filter(c => c.type === 'Facility/Lab').map(cat => (
+                              <option key={cat.code || cat._id} value={cat.code}>
+                                {cat.name} {cat.defaultAmount ? `(₹${cat.defaultAmount.toLocaleString('en-IN')})` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                          <optgroup label="Fines & Penalties">
+                            {feeCategories.filter(c => c.type === 'Fine/Penalty').map(cat => (
+                              <option key={cat.code || cat._id} value={cat.code}>
+                                {cat.name} {cat.defaultAmount ? `(₹${cat.defaultAmount.toLocaleString('en-IN')})` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                          {feeCategories.some(c => !['Academic', 'Kit/Uniform', 'Facility/Lab', 'Fine/Penalty'].includes(c.type)) && (
+                            <optgroup label="Other Categories">
+                              {feeCategories.filter(c => !['Academic', 'Kit/Uniform', 'Facility/Lab', 'Fine/Penalty'].includes(c.type)).map(cat => (
+                                <option key={cat.code || cat._id} value={cat.code}>
+                                  {cat.name} {cat.defaultAmount ? `(₹${cat.defaultAmount.toLocaleString('en-IN')})` : ''}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <option value="tuition">Tuition Fee</option>
+                          <option value="exam">Examination Fee</option>
+                          <option value="book">Books & Course Material</option>
+                          <option value="blazer">College Blazer</option>
+                          <option value="uniform">College Uniform (Pair)</option>
+                          <option value="tshirt">College T-Shirt</option>
+                          <option value="bag">College Bag / Backpack</option>
+                          <option value="labcoat">Lab Coat & Apron</option>
+                          <option value="fine">Disciplinary / Library Fine</option>
+                          <option value="late_fee">Late Fee / Surcharge</option>
+                          <option value="transport">Transport Fee</option>
+                          <option value="other">Other / Misc Fee</option>
+                        </>
+                      )}
                     </select>
                   </div>
                 </div>
@@ -2361,6 +2495,13 @@ export default function StudentDetailScreen() {
         studentData={studentData}
         branchName={selectedBranch?.name}
         courseName={selectedCourse?.name}
+      />
+
+      {/* Student Fee Receipt Modal */}
+      <ReceiptModal
+        isOpen={isReceiptModalOpen}
+        onClose={() => setIsReceiptModalOpen(false)}
+        receiptData={selectedReceipt}
       />
     </div>
   );

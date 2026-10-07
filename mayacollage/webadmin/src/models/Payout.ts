@@ -10,6 +10,24 @@ const payoutSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    receiptNumber: {
+        type: String,
+        unique: true,
+        sparse: true
+    },
+    designation: {
+        type: String,
+        default: 'Faculty / Staff'
+    },
+    department: {
+        type: String,
+        default: 'Academics'
+    },
+    payoutType: {
+        type: String,
+        enum: ['Salary', 'Stipend', 'Advance', 'Bonus', 'Reimbursement', 'Honorarium'],
+        default: 'Salary'
+    },
     amount: {
         type: Number,
         required: true
@@ -20,7 +38,7 @@ const payoutSchema = new mongoose.Schema({
     },
     paymentMethod: {
         type: String,
-        enum: ['Bank Transfer', 'Cash', 'Cheque'],
+        enum: ['Bank Transfer', 'Cash', 'Cheque', 'UPI', 'NEFT/RTGS'],
         default: 'Bank Transfer'
     },
     transactionId: {
@@ -30,11 +48,18 @@ const payoutSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Pending', 'Completed', 'Failed'],
+        enum: ['Pending', 'Completed', 'Failed', 'Cancelled'],
         default: 'Completed'
+    },
+    monthYear: {
+        type: String,
     },
     notes: {
         type: String
+    },
+    disbursedBy: {
+        type: String,
+        default: 'Finance Controller'
     }
 }, { timestamps: true });
 

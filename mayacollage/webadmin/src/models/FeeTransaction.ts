@@ -9,20 +9,38 @@ const feeTransactionSchema = new mongoose.Schema({
     courseId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Course',
-        required: true
+        required: false
+    },
+    receiptNumber: {
+        type: String,
+        unique: true,
+        sparse: true
     },
     amount: {
         type: Number,
         required: true
     },
+    category: {
+        type: String,
+        default: 'tuition'
+    },
+    categoryName: {
+        type: String,
+        default: 'Tuition Fee'
+    },
+    breakup: [{
+        category: String,
+        categoryName: String,
+        amount: Number
+    }],
     paymentDate: {
         type: Date,
         default: Date.now
     },
     paymentMethod: {
         type: String,
-        enum: ['Online', 'Cash', 'Bank Transfer'],
-        default: 'Online'
+        enum: ['Online', 'Cash', 'Bank Transfer', 'UPI', 'Cheque', 'Demand Draft'],
+        default: 'Cash'
     },
     transactionId: {
         type: String,
@@ -31,16 +49,23 @@ const feeTransactionSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Pending', 'Completed', 'Failed'],
+        enum: ['Pending', 'Completed', 'Failed', 'Cancelled'],
         default: 'Completed'
     },
     semester: {
         type: Number,
-        required: true
+        default: 1
     },
     academicYear: {
         type: String,
-        required: true
+        default: 'Year 1'
+    },
+    notes: {
+        type: String
+    },
+    collectedBy: {
+        type: String,
+        default: 'Admin Finance'
     }
 }, { timestamps: true });
 

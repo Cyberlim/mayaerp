@@ -55,8 +55,8 @@ export default function StudentManagementDashboard() {
   const [filterFeeStatus, setFilterFeeStatus] = useState("All");
   const [toastMsg, setToastMsg] = useState("");
 
-  // View Mode: Branch-Course, Cards or List
-  const [viewMode, setViewMode] = useState<"branch_course" | "cards" | "list">("branch_course");
+  // View Mode: Default to List View on Desktop & Responsive Cards on Mobile
+  const [viewMode, setViewMode] = useState<"list" | "cards" | "branch_course">("list");
   const [expandedCourses, setExpandedCourses] = useState<Record<string, boolean>>({});
 
   // Password Modal
@@ -961,115 +961,229 @@ export default function StudentManagementDashboard() {
             )}
 
             {/* ================================================================= */}
-            {/* OPTION 3: LIST VIEW (TABLE)                                       */}
+            {/* OPTION 3: DEFAULT LIST VIEW (DESKTOP: TABLE | MOBILE: CARDS)      */}
             {/* ================================================================= */}
             {viewMode === "list" && (
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                        <th className="py-4 px-5">Student</th>
-                        <th className="py-4 px-5">Program & Branch</th>
-                        <th className="py-4 px-5 text-right">Total Course Fee</th>
-                        <th className="py-4 px-5 text-right">Amount Paid</th>
-                        <th className="py-4 px-5 text-right">Due Balance</th>
-                        <th className="py-4 px-5 text-center">Fee Status</th>
-                        <th className="py-4 px-5 text-center">Manage Fee / Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-sm divide-y divide-slate-50">
-                      {filteredStudents.map(student => {
-                        const feeInfo = getFeeInfo(student);
-                        const isPaid = feeInfo.status === "paid";
-                        const courseName = courses.find(c => c._id === (typeof student.selectedProgram === 'object' ? student.selectedProgram?._id : student.selectedProgram))?.name || "Unassigned";
-                        const branchName = branches.find(b => b._id === (typeof student.selectedBranch === 'object' ? student.selectedBranch?._id : student.selectedBranch))?.name || "-";
+              <div className="space-y-4">
+                
+                {/* DESKTOP VIEW: CLEAN TABULAR LIST */}
+                <div className="hidden md:block bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          <th className="py-4 px-5">Student</th>
+                          <th className="py-4 px-5">Program & Branch</th>
+                          <th className="py-4 px-5 text-right">Total Fee</th>
+                          <th className="py-4 px-5 text-right">Amount Paid</th>
+                          <th className="py-4 px-5 text-right">Due Balance</th>
+                          <th className="py-4 px-5 text-center">Fee Status</th>
+                          <th className="py-4 px-5 text-center">Manage Fee / Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-sm divide-y divide-slate-50">
+                        {filteredStudents.map(student => {
+                          const feeInfo = getFeeInfo(student);
+                          const isPaid = feeInfo.status === "paid";
+                          const courseName = courses.find(c => c._id === (typeof student.selectedProgram === 'object' ? student.selectedProgram?._id : student.selectedProgram))?.name || "Unassigned";
+                          const branchName = branches.find(b => b._id === (typeof student.selectedBranch === 'object' ? student.selectedBranch?._id : student.selectedBranch))?.name || "-";
 
-                        return (
-                          <tr key={student._id} className="hover:bg-slate-50/80 transition-colors group">
-                            <td className="py-4 px-5">
-                              <div className="font-black text-slate-900 group-hover:text-indigo-600 transition-colors">
-                                {student.firstName} {student.lastName}
-                              </div>
-                              <div className="text-[11px] font-semibold text-slate-400 mt-0.5">
-                                {student.admissionNumber || student.studentId}
-                              </div>
-                            </td>
+                          return (
+                            <tr key={student._id} className="hover:bg-slate-50/80 transition-colors group">
+                              <td className="py-4 px-5">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-indigo-700 text-xs shrink-0 overflow-hidden">
+                                    {student.profilePhoto || student.documents?.studentPhoto ? (
+                                      <img 
+                                        src={student.profilePhoto || student.documents?.studentPhoto} 
+                                        alt="" 
+                                        className="w-full h-full object-cover" 
+                                      />
+                                    ) : (
+                                      <span>{student.firstName?.[0]}{student.lastName?.[0]}</span>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <div className="font-black text-slate-900 group-hover:text-indigo-600 transition-colors">
+                                      {student.firstName} {student.lastName}
+                                    </div>
+                                    <div className="text-[11px] font-semibold text-slate-400 mt-0.5">
+                                      {student.admissionNumber || student.studentId || "No Roll"}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
 
-                            <td className="py-4 px-5">
-                              <div className="font-bold text-slate-800 text-xs">{courseName}</div>
-                              <div className="text-[11px] font-semibold text-slate-400 mt-0.5">{branchName} • Sem {student.selectedSemester || 1}</div>
-                            </td>
+                              <td className="py-4 px-5">
+                                <div className="font-bold text-slate-800 text-xs">{courseName}</div>
+                                <div className="text-[11px] font-semibold text-slate-400 mt-0.5">{branchName} • Sem {student.selectedSemester || 1}</div>
+                              </td>
 
-                            <td className="py-4 px-5 text-right font-black text-slate-900">
-                              ₹{feeInfo.total.toLocaleString('en-IN')}
-                            </td>
+                              <td className="py-4 px-5 text-right font-black text-slate-900">
+                                ₹{feeInfo.total.toLocaleString('en-IN')}
+                              </td>
 
-                            <td className="py-4 px-5 text-right font-black text-emerald-600">
-                              ₹{feeInfo.paid.toLocaleString('en-IN')}
-                            </td>
+                              <td className="py-4 px-5 text-right font-black text-emerald-600">
+                                ₹{feeInfo.paid.toLocaleString('en-IN')}
+                              </td>
 
-                            <td className="py-4 px-5 text-right font-black text-amber-600">
-                              ₹{feeInfo.balance.toLocaleString('en-IN')}
-                            </td>
+                              <td className="py-4 px-5 text-right font-black text-amber-600">
+                                ₹{feeInfo.balance.toLocaleString('en-IN')}
+                              </td>
 
-                            <td className="py-4 px-5 text-center">
-                              {isPaid ? (
-                                <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 font-black text-[10px] rounded-full border border-emerald-100 inline-flex items-center gap-1">
-                                  <Check className="w-3 h-3 text-emerald-600" /> Fully Paid
-                                </span>
-                              ) : feeInfo.status === "partial" ? (
-                                <span className="px-2.5 py-0.5 bg-amber-50 text-amber-700 font-black text-[10px] rounded-full border border-amber-100">
-                                  Partial
-                                </span>
-                              ) : (
-                                <span className="px-2.5 py-0.5 bg-rose-50 text-rose-700 font-black text-[10px] rounded-full border border-rose-100">
-                                  Unpaid
-                                </span>
-                              )}
-                            </td>
-
-                            <td className="py-4 px-5 text-center">
-                              <div className="flex items-center justify-center gap-1.5">
-                                {!isPaid ? (
-                                  <button
-                                    onClick={() => handleToggleStudentPaid(student, true)}
-                                    title="Mark fee as paid"
-                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-lg text-xs transition-all flex items-center gap-1 shadow-sm"
-                                  >
-                                    <Check className="w-3 h-3" /> Mark Paid
-                                  </button>
+                              <td className="py-4 px-5 text-center">
+                                {isPaid ? (
+                                  <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 font-black text-[10px] rounded-full border border-emerald-100 inline-flex items-center gap-1">
+                                    <Check className="w-3 h-3 text-emerald-600" /> Fully Paid
+                                  </span>
+                                ) : feeInfo.status === "partial" ? (
+                                  <span className="px-2.5 py-0.5 bg-amber-50 text-amber-700 font-black text-[10px] rounded-full border border-amber-100">
+                                    Partial
+                                  </span>
                                 ) : (
-                                  <button
-                                    onClick={() => handleToggleStudentPaid(student, false)}
-                                    title="Mark fee as unpaid"
-                                    className="px-2.5 py-1 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 font-bold rounded-lg text-xs transition-all flex items-center gap-1 border border-slate-200"
-                                  >
-                                    <Undo2 className="w-3 h-3" /> Mark Unpaid
-                                  </button>
+                                  <span className="px-2.5 py-0.5 bg-rose-50 text-rose-700 font-black text-[10px] rounded-full border border-rose-100">
+                                    Unpaid
+                                  </span>
                                 )}
+                              </td>
 
-                                <Link href={`/dashboard/students/${student._id}`}>
-                                  <button title="View Detail Profile" className="p-1.5 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white rounded-lg transition-colors">
-                                    <Eye className="w-3.5 h-3.5" />
+                              <td className="py-4 px-5 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  {!isPaid ? (
+                                    <button
+                                      onClick={() => handleToggleStudentPaid(student, true)}
+                                      title="Mark fee as paid"
+                                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-lg text-xs transition-all flex items-center gap-1 shadow-sm"
+                                    >
+                                      <Check className="w-3 h-3" /> Mark Paid
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleToggleStudentPaid(student, false)}
+                                      title="Mark fee as unpaid"
+                                      className="px-2.5 py-1 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 font-bold rounded-lg text-xs transition-all flex items-center gap-1 border border-slate-200"
+                                    >
+                                      <Undo2 className="w-3 h-3" /> Mark Unpaid
+                                    </button>
+                                  )}
+
+                                  <Link href={`/dashboard/students/${student._id}`}>
+                                    <button title="View Detail Profile" className="p-1.5 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white rounded-lg transition-colors">
+                                      <Eye className="w-3.5 h-3.5" />
+                                    </button>
+                                  </Link>
+
+                                  <button 
+                                    onClick={() => handleDelete(student._id, `${student.firstName} ${student.lastName}`)}
+                                    title="Delete Student" 
+                                    className="p-1.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-600 rounded-lg transition-colors"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   </button>
-                                </Link>
-
-                                <button 
-                                  onClick={() => handleDelete(student._id, `${student.firstName} ${student.lastName}`)}
-                                  title="Delete Student" 
-                                  className="p-1.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-600 rounded-lg transition-colors"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
+
+                {/* MOBILE VIEW: RESPONSIVE CARDS */}
+                <div className="block md:hidden space-y-4">
+                  {filteredStudents.map(student => {
+                    const feeInfo = getFeeInfo(student);
+                    const isPaid = feeInfo.status === "paid";
+                    const courseName = courses.find(c => c._id === (typeof student.selectedProgram === 'object' ? student.selectedProgram?._id : student.selectedProgram))?.name || "Unassigned";
+                    const branchName = branches.find(b => b._id === (typeof student.selectedBranch === 'object' ? student.selectedBranch?._id : student.selectedBranch))?.name || "";
+
+                    return (
+                      <div
+                        key={student._id}
+                        className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-indigo-700 text-xs shrink-0 overflow-hidden">
+                              {student.profilePhoto || student.documents?.studentPhoto ? (
+                                <img 
+                                  src={student.profilePhoto || student.documents?.studentPhoto} 
+                                  alt="" 
+                                  className="w-full h-full object-cover" 
+                                />
+                              ) : (
+                                <span>{student.firstName?.[0]}{student.lastName?.[0]}</span>
+                              )}
+                            </div>
+                            <div>
+                              <h3 className="font-black text-slate-900 text-sm leading-tight">
+                                {student.firstName} {student.lastName}
+                              </h3>
+                              <div className="text-[11px] font-bold text-slate-400 mt-0.5">
+                                {student.admissionNumber || student.studentId || "No ID"}
+                              </div>
+                            </div>
+                          </div>
+
+                          <span className={`px-2 py-0.5 text-[10px] font-black uppercase rounded-full border shrink-0 ${
+                            isPaid ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'
+                          }`}>
+                            {isPaid ? 'Paid' : 'Due'}
+                          </span>
+                        </div>
+
+                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs space-y-1">
+                          <div className="font-bold text-slate-800 line-clamp-1">{courseName}</div>
+                          <div className="text-[11px] font-semibold text-slate-400 flex items-center justify-between">
+                            <span>{branchName || "Branch"}</span>
+                            <span>Sem {student.selectedSemester || 1}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center bg-slate-50/70 p-2.5 rounded-xl text-xs font-mono">
+                          <div>
+                            <span className="text-[10px] text-slate-400 block">Total</span>
+                            <span className="font-black text-slate-900">₹{feeInfo.total.toLocaleString('en-IN')}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-emerald-600 block">Paid</span>
+                            <span className="font-black text-emerald-600">₹{feeInfo.paid.toLocaleString('en-IN')}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-amber-600 block">Due</span>
+                            <span className="font-black text-amber-600">₹{feeInfo.balance.toLocaleString('en-IN')}</span>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 flex items-center gap-2">
+                          <Link href={`/dashboard/students/${student._id}`} className="flex-1">
+                            <button className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1">
+                              <Eye className="w-3.5 h-3.5" /> View Profile
+                            </button>
+                          </Link>
+
+                          {!isPaid ? (
+                            <button
+                              onClick={() => handleToggleStudentPaid(student, true)}
+                              className="px-3 py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs flex items-center gap-1 shadow-sm"
+                            >
+                              <Check className="w-3.5 h-3.5" /> Mark Paid
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleToggleStudentPaid(student, false)}
+                              className="px-3 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs border border-slate-200"
+                            >
+                              <Undo2 className="w-3.5 h-3.5" /> Unpaid
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
               </div>
             )}
           </>
