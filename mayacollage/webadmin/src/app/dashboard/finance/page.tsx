@@ -1781,7 +1781,7 @@ export default function FinanceDashboard() {
                   required
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 mb-3"
                 >
-                  {dynamicYears.map(y => (
+                  {dynamicYears.map((y: number) => (
                     <option key={y} value={y}>Academic Year {y}</option>
                   ))}
                 </select>
