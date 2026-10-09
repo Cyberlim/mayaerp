@@ -504,6 +504,27 @@ export default function StudentDetailScreen() {
     }
   };
 
+  const handleDeleteTransaction = async (txnId: string) => {
+    if (!confirm("Are you sure you want to delete this receipt? This will reverse the payment from the student's balance.")) return;
+
+    try {
+      const res = await fetch(`/api/finance/transactions/${txnId}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast("Receipt deleted and fee reversed successfully!");
+        fetchStudentData();
+      } else {
+        alert(data.error || "Failed to delete receipt.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting receipt.");
+    }
+  };
+
   // Handle Edit Fee Field Changes
   const handleEditFeeChange = (yearIndex: number, componentIndex: number, field: "amount" | "paid" | "category", value: string) => {
     const updated = [...editFeeYears];
@@ -1790,31 +1811,39 @@ export default function StudentDetailScreen() {
                                   </span>
                                 </td>
                                 <td className="p-3 text-center">
-                                  <button
-                                    onClick={() => {
-                                      setSelectedReceipt({
-                                        ...txn,
-                                        type: "student",
-                                        name: `${studentData.firstName} ${studentData.lastName}`.trim(),
-                                        studentId: studentData.studentId || studentData.admissionNumber,
-                                        course: selectedCourse?.name,
-                                        branch: selectedBranch?.name,
-                                        categoryName: displayCatName,
-                                        amount: txn.amount,
-                                        date: txn.paymentDate || txn.createdAt,
-                                        transactionId: txn.transactionId,
-                                        receiptNumber: txn.receiptNumber || txn.transactionId,
-                                        paymentMethod: txn.paymentMethod || "Cash",
-                                        notes: txn.notes
-                                      });
-                                      setIsReceiptModalOpen(true);
-                                    }}
-                                    className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1"
-                                    title="View & Print Official Receipt"
-                                  >
-                                    <Printer className="w-3.5 h-3.5" />
-                                    <span>Receipt</span>
-                                  </button>
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedReceipt({
+                                          ...txn,
+                                          type: "student",
+                                          name: `${studentData.firstName} ${studentData.lastName}`.trim(),
+                                          studentId: studentData.studentId || studentData.admissionNumber,
+                                          course: selectedCourse?.name,
+                                          branch: selectedBranch?.name,
+                                          categoryName: displayCatName,
+                                          amount: txn.amount,
+                                          date: txn.paymentDate || txn.createdAt,
+                                          transactionId: txn.transactionId,
+                                          receiptNumber: txn.receiptNumber || txn.transactionId,
+                                          paymentMethod: txn.paymentMethod || "Cash",
+                                          notes: txn.notes
+                                        });
+                                        setIsReceiptModalOpen(true);
+                                      }}
+                                      className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg transition-all"
+                                      title="Print Receipt"
+                                    >
+                                      <Printer className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteTransaction(txn._id)}
+                                      className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-all"
+                                      title="Delete Receipt & Reverse Payment"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             );
