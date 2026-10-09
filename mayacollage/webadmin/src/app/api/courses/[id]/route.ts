@@ -50,10 +50,16 @@ export async function PATCH(
         }
       );
       
-      // We must clear the Redis cache for all these student accounts
-      const { delCachePattern } = await import("@/lib/redis");
-      await delCachePattern("fee:student-account:*");
-      await delCachePattern("student:*");
+      // We must clear the Redis cache for all these student accounts reliably without using KEYS
+      const studentsToClear = await Student.find({ selectedProgram: course._id }).select('_id').lean();
+      if (studentsToClear.length > 0) {
+        const { delCache } = await import("@/lib/redis");
+        const cacheKeys = studentsToClear.flatMap(s => [
+          `fee:student-account:${s._id}`,
+          `student:${s._id}`
+        ]);
+        await delCache(...cacheKeys);
+      }
     }
 
     return NextResponse.json(course);

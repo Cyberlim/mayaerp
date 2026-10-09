@@ -43,12 +43,63 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     let totalAssessed = 0;
     let totalPaid = 0;
 
-    if (course?.feeStructureTemplate && course.feeStructureTemplate.length > 0) {
+    if (student.fees?.isConfigured && Array.isArray(student.fees?.years) && student.fees.years.length > 0) {
+      yearsData = student.fees.years.map((y: any, idx: number) => {
+        const yNum = y.year || idx + 1;
+        
+        let yearTotal = 0;
+        let yearPaid = 0;
+        let categories: any = {};
+        let components = [];
+
+        if (y.components && y.components.length > 0) {
+          components = y.components;
+          components.forEach((c: any) => {
+            const amt = Number(c.amount) || 0;
+            const pd = Number(c.paid) || 0;
+            yearTotal += amt;
+            yearPaid += pd;
+          });
+        } else {
+          const tuitionTot = Number(y.tuition?.total) || 0;
+          const tuitionPaid = Number(y.tuition?.paid) || 0;
+          const examTot = Number(y.exam?.total) || 0;
+          const examPaid = Number(y.exam?.paid) || 0;
+          const transportTot = Number(y.transport?.total) || 0;
+          const transportPaid = Number(y.transport?.paid) || 0;
+          const otherTot = Number(y.other?.total) || 0;
+          const otherPaid = Number(y.other?.paid) || 0;
+
+          yearTotal = tuitionTot + examTot + transportTot + otherTot;
+          yearPaid = tuitionPaid + examPaid + transportPaid + otherPaid;
+          
+          categories = {
+            tuition: { total: tuitionTot, paid: tuitionPaid, os: Math.max(0, tuitionTot - tuitionPaid) },
+            exam: { total: examTot, paid: examPaid, os: Math.max(0, examTot - examPaid) },
+            transport: { total: transportTot, paid: transportPaid, os: Math.max(0, transportTot - transportPaid) },
+            other: { total: otherTot, paid: otherPaid, os: Math.max(0, otherTot - otherPaid) }
+          };
+        }
+
+        const yearOS = Math.max(0, yearTotal - yearPaid);
+        totalAssessed += yearTotal;
+        totalPaid += yearPaid;
+
+        return {
+          year: yNum,
+          components,
+          categories,
+          yearTotal,
+          yearPaid,
+          yearOS,
+          status: yearOS === 0 && yearTotal > 0 ? 'Cleared' : yearPaid > 0 ? 'Partial' : 'Pending'
+        };
+      });
+    } else if (course?.feeStructureTemplate && course.feeStructureTemplate.length > 0) {
       yearsData = course.feeStructureTemplate.map((ft: any) => {
         const yNum = ft.year;
         const yearTotal = ft.totalYearlyFee || 0;
         
-        // Find transactions for this year
         const yrTxns = transactions.filter((t: any) => 
           t.academicYear === `Year ${yNum}` || 
           t.semester === (yNum * 2 - 1) || 
@@ -63,39 +114,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         return {
           year: yNum,
           components: ft.components,
-          yearTotal,
-          yearPaid,
-          yearOS,
-          status: yearOS === 0 && yearTotal > 0 ? 'Cleared' : yearPaid > 0 ? 'Partial' : 'Pending'
-        };
-      });
-    } else if (student.fees?.isConfigured && Array.isArray(student.fees?.years) && student.fees.years.length > 0) {
-      yearsData = student.fees.years.map((y: any, idx: number) => {
-        const yNum = y.year || idx + 1;
-        const tuitionTot = Number(y.tuition?.total) || 0;
-        const tuitionPaid = Number(y.tuition?.paid) || 0;
-        const examTot = Number(y.exam?.total) || 0;
-        const examPaid = Number(y.exam?.paid) || 0;
-        const transportTot = Number(y.transport?.total) || 0;
-        const transportPaid = Number(y.transport?.paid) || 0;
-        const otherTot = Number(y.other?.total) || 0;
-        const otherPaid = Number(y.other?.paid) || 0;
-
-        const yearTotal = tuitionTot + examTot + transportTot + otherTot;
-        const yearPaid = tuitionPaid + examPaid + transportPaid + otherPaid;
-        const yearOS = Math.max(0, yearTotal - yearPaid);
-
-        totalAssessed += yearTotal;
-        totalPaid += yearPaid;
-
-        return {
-          year: yNum,
-          categories: {
-            tuition: { total: tuitionTot, paid: tuitionPaid, os: Math.max(0, tuitionTot - tuitionPaid) },
-            exam: { total: examTot, paid: examPaid, os: Math.max(0, examTot - examPaid) },
-            transport: { total: transportTot, paid: transportPaid, os: Math.max(0, transportTot - transportPaid) },
-            other: { total: otherTot, paid: otherPaid, os: Math.max(0, otherTot - otherPaid) },
-          },
           yearTotal,
           yearPaid,
           yearOS,
