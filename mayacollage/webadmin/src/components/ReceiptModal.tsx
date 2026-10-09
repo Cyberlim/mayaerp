@@ -95,7 +95,7 @@ export default function ReceiptModal({ isOpen, onClose, receiptData }: ReceiptMo
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 print:p-0 print:bg-white">
+    <div className="fixed inset-0 z-[60] overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 print:p-0 print:bg-white">
       <style type="text/css" media="print">
         {`
           @page { margin: 0; }
