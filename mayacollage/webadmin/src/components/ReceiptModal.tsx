@@ -94,11 +94,36 @@ export default function ReceiptModal({ isOpen, onClose, receiptData }: ReceiptMo
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 print:p-0 print:bg-white">
+      <style type="text/css" media="print">
+        {`
+          @page { margin: 0; }
+          html, body {
+            height: 100vh !important;
+            overflow: hidden !important;
+            background: white !important;
+          }
+          body * {
+            visibility: hidden;
+          }
+          .printable-receipt, .printable-receipt * {
+            visibility: visible;
+          }
+          .printable-receipt {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            transform: none !important;
+          }
+        `}
+      </style>
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 15 }}
-        className={`bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden w-full ${
+        className={`bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden w-full printable-receipt ${
           thermalMode ? "max-w-md font-mono" : "max-w-3xl"
         } print:max-w-none print:shadow-none print:border-none print:m-0`}
       >

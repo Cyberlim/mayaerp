@@ -1622,6 +1622,58 @@ export default function FinanceDashboard() {
         };
         const dynamicFeeComponents = getAvailableFeeComponents();
 
+        const getYearFeeSummary = () => {
+          if (!selectedStudentForFee) return { total: 0, paid: 0, due: 0 };
+          const yr = feeForm.year || 1;
+          
+          let total = 0;
+          let paid = 0;
+
+          const calculateComponentTotal = (c: any) => {
+             const amt = Number(c.amount) || 0;
+             return c.frequency === "Quarterly" ? amt * 4 : amt;
+          };
+
+          if (selectedStudentForFee.fees?.isConfigured && Array.isArray(selectedStudentForFee.fees.years)) {
+            const studentYear = selectedStudentForFee.fees.years.find((y: any) => String(y.year) === String(yr));
+            if (studentYear?.components && studentYear.components.length > 0) {
+              total = studentYear.components.reduce((sum: number, c: any) => sum + calculateComponentTotal(c), 0);
+              paid = studentYear.components.reduce((sum: number, c: any) => sum + (Number(c.paid) || 0), 0);
+            } else if (studentYear) {
+              total = (Number(studentYear.tuition?.total) || 0) + (Number(studentYear.exam?.total) || 0) + (Number(studentYear.transport?.total) || 0) + (Number(studentYear.other?.total) || 0);
+              paid = (Number(studentYear.tuition?.paid) || 0) + (Number(studentYear.exam?.paid) || 0) + (Number(studentYear.transport?.paid) || 0) + (Number(studentYear.other?.paid) || 0);
+            }
+          } 
+          
+          if (total === 0) {
+            const courseId = typeof selectedStudentForFee.selectedProgram === 'object' ? selectedStudentForFee.selectedProgram?._id : selectedStudentForFee.selectedProgram;
+            const course = courses.find((c: any) => c._id === courseId);
+            if (course) {
+               if (Array.isArray(course.feeStructureTemplate)) {
+                 const courseYear = course.feeStructureTemplate.find((y: any) => String(y.year) === String(yr));
+                 if (courseYear?.components && courseYear.components.length > 0) {
+                   total = courseYear.components.reduce((sum: number, c: any) => sum + calculateComponentTotal(c), 0);
+                 }
+               }
+               if (total === 0) {
+                 total = Number(course.tuitionFee) || 0;
+               }
+            }
+          }
+          
+          const studentTxns = transactions.filter(t => 
+             (t.studentId?._id === selectedStudentForFee._id || t.studentId === selectedStudentForFee._id) &&
+             String(t.academicYear).includes(String(yr))
+          );
+          const txnPaid = studentTxns.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+          
+          paid = Math.max(paid, txnPaid);
+          const due = Math.max(0, total - paid);
+          
+          return { total, paid, due };
+        };
+        const yearSummary = getYearFeeSummary();
+
         return isAddFeeModalOpen && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
           <motion.div
@@ -1684,12 +1736,29 @@ export default function FinanceDashboard() {
                   value={feeForm.year}
                   onChange={e => setFeeForm(prev => ({ ...prev, year: Number(e.target.value) }))}
                   required
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 mb-3"
                 >
                   {[1, 2, 3, 4, 5].map(y => (
                     <option key={y} value={y}>Academic Year {y}</option>
                   ))}
                 </select>
+                
+                {selectedStudentForFee && (
+                  <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 flex items-center justify-between">
+                    <div className="text-center px-2">
+                      <p className="text-[9px] font-black text-indigo-400 uppercase">Total Fee</p>
+                      <p className="text-sm font-black text-indigo-900">₹{yearSummary.total.toLocaleString("en-IN")}</p>
+                    </div>
+                    <div className="text-center px-2 border-l border-indigo-200">
+                      <p className="text-[9px] font-black text-indigo-400 uppercase">Deposited</p>
+                      <p className="text-sm font-black text-emerald-600">₹{yearSummary.paid.toLocaleString("en-IN")}</p>
+                    </div>
+                    <div className="text-center px-2 border-l border-indigo-200">
+                      <p className="text-[9px] font-black text-indigo-400 uppercase">Due Balance</p>
+                      <p className="text-sm font-black text-rose-600">₹{yearSummary.due.toLocaleString("en-IN")}</p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
