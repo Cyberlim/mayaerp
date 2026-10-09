@@ -505,12 +505,38 @@ export default function StudentDetailScreen() {
   };
 
   // Handle Edit Fee Field Changes
-  const handleEditFeeChange = (yearIndex: number, componentIndex: number, field: "amount" | "paid", value: string) => {
-    const numVal = Math.max(0, Number(value) || 0);
+  const handleEditFeeChange = (yearIndex: number, componentIndex: number, field: "amount" | "paid" | "category", value: string) => {
     const updated = [...editFeeYears];
     const yearObj = { ...updated[yearIndex] };
     const comps = [...(yearObj.components || [])];
-    comps[componentIndex] = { ...comps[componentIndex], [field]: numVal };
+    
+    if (field === "category") {
+      comps[componentIndex] = { ...comps[componentIndex], [field]: value };
+    } else {
+      const numVal = Math.max(0, Number(value) || 0);
+      comps[componentIndex] = { ...comps[componentIndex], [field]: numVal };
+    }
+    
+    yearObj.components = comps;
+    updated[yearIndex] = yearObj;
+    setEditFeeYears(updated);
+  };
+
+  const handleAddFeeComponent = (yearIndex: number) => {
+    const updated = [...editFeeYears];
+    const yearObj = { ...updated[yearIndex] };
+    const comps = [...(yearObj.components || [])];
+    comps.push({ category: 'Custom Charge', amount: 0, paid: 0, frequency: 'Annual' });
+    yearObj.components = comps;
+    updated[yearIndex] = yearObj;
+    setEditFeeYears(updated);
+  };
+
+  const handleRemoveFeeComponent = (yearIndex: number, componentIndex: number) => {
+    const updated = [...editFeeYears];
+    const yearObj = { ...updated[yearIndex] };
+    const comps = [...(yearObj.components || [])];
+    comps.splice(componentIndex, 1);
     yearObj.components = comps;
     updated[yearIndex] = yearObj;
     setEditFeeYears(updated);
@@ -2331,14 +2357,29 @@ export default function StudentDetailScreen() {
                         {(yr.components || []).map((comp: any, cIdx: number) => (
                           <div key={cIdx} className="bg-white p-3.5 rounded-xl border border-slate-200/80 space-y-2">
                             <div className="flex justify-between items-center">
-                              <span className="text-xs font-bold text-slate-800">{comp.category || "Fee Component"}</span>
-                              <button 
-                                type="button" 
-                                onClick={() => handleQuickMarkCategoryPaid(yIdx, cIdx)}
-                                className="text-[10px] font-bold text-indigo-600 hover:underline"
-                              >
-                                Set Paid = Total
-                              </button>
+                              <input 
+                                type="text"
+                                value={comp.category || ""}
+                                onChange={e => handleEditFeeChange(yIdx, cIdx, "category", e.target.value)}
+                                className="text-xs font-bold text-slate-800 bg-transparent border-none outline-none focus:ring-0 p-0 hover:bg-slate-100 rounded px-1 -ml-1 transition-colors w-[60%]"
+                              />
+                              <div className="flex items-center gap-2">
+                                <button 
+                                  type="button" 
+                                  onClick={() => handleQuickMarkCategoryPaid(yIdx, cIdx)}
+                                  className="text-[10px] font-bold text-indigo-600 hover:underline whitespace-nowrap"
+                                >
+                                  Set Paid = Total
+                                </button>
+                                <button 
+                                  type="button" 
+                                  onClick={() => handleRemoveFeeComponent(yIdx, cIdx)}
+                                  className="text-slate-400 hover:text-rose-500 transition-colors p-1"
+                                  title="Remove Component"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                               <div>
@@ -2363,6 +2404,14 @@ export default function StudentDetailScreen() {
                           </div>
                         ))}
                       </div>
+                      
+                      <button 
+                        type="button" 
+                        onClick={() => handleAddFeeComponent(yIdx)}
+                        className="w-full mt-4 py-2 border border-dashed border-slate-300 hover:border-indigo-400 text-slate-500 hover:text-indigo-600 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 hover:bg-indigo-50/50"
+                      >
+                        <Plus className="w-4 h-4" /> Add Extra Charge
+                      </button>
                     </div>
                   );
                 })}

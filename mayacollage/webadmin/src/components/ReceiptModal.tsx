@@ -39,10 +39,12 @@ export default function ReceiptModal({ isOpen, onClose, receiptData }: ReceiptMo
   const dateStr = receiptData.date ? new Date(receiptData.date).toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  }) : new Date().toLocaleDateString("en-IN");
+    year: "numeric"
+  }) : new Date().toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
 
   const amount = Number(receiptData.amount) || 0;
 

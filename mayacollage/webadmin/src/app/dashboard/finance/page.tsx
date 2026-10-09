@@ -1801,7 +1801,7 @@ export default function FinanceDashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-black mb-1">
                     Amount (INR) <span className="text-rose-500">*</span>
@@ -1823,13 +1823,26 @@ export default function FinanceDashboard() {
                   <select
                     value={feeForm.paymentMethod}
                     onChange={e => setFeeForm(prev => ({ ...prev, paymentMethod: e.target.value }))}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-sm"
                   >
                     <option value="Cash">Cash</option>
                     <option value="Online">Online / UPI (PhonePe, GPay)</option>
                     <option value="Bank Transfer">Bank Transfer / NEFT</option>
                     <option value="Cheque">Cheque</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-black mb-1">
+                    Payment Date <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={feeForm.paymentDate}
+                    onChange={e => setFeeForm(prev => ({ ...prev, paymentDate: e.target.value }))}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-sm focus:outline-none"
+                  />
                 </div>
               </div>
 
