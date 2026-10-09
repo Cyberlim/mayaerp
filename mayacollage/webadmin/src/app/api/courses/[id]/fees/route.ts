@@ -10,7 +10,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     await connectDB();
     const { id } = await params;
     const body = await request.json();
-    const { feeStructureTemplate } = body;
+    const { feeStructureTemplate, applyToStudents } = body;
 
     const course = await Course.findByIdAndUpdate(
       id,
@@ -20,9 +20,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     if (!course) return NextResponse.json({ error: "Course not found" }, { status: 404 });
 
-    // Note: We don't forcefully overwrite existing student fee templates here
-    // to prevent messing up paid fees. 
-    // They will inherit this template when they are admitted or when "Reset Fees" is explicitly clicked.
+    if (applyToStudents) {
+      await Student.updateMany(
+        { selectedProgram: course._id },
+        { 
+          $set: { 
+            "fees.isConfigured": false,
+            "fees.years": []
+          } 
+        }
+      );
+    }
 
     return NextResponse.json({ message: "Fee structure updated successfully", course });
   } catch (error: any) {

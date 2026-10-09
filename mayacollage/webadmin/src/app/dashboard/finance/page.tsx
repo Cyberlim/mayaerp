@@ -1778,46 +1778,61 @@ export default function FinanceDashboard() {
 
               <div>
                 <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-black mb-1">
-                  3. Fee Category / Item <span className="text-rose-500">*</span>
+                  3. Select Fee to Pay <span className="text-rose-500">*</span>
                 </label>
-                <select
-                  value={feeForm.category}
-                  onChange={e => {
-                    if (dynamicFeeComponents.length > 0) {
-                      const comp = dynamicFeeComponents.find((c: any) => c.category === e.target.value);
-                      setFeeForm(prev => ({
-                        ...prev,
-                        category: e.target.value,
-                        categoryName: e.target.value,
-                        amount: comp?.amount ? String(comp.amount) : prev.amount
-                      }));
-                    } else {
-                      const catObj = categories.find(c => c.code === e.target.value);
-                      setFeeForm(prev => ({
-                        ...prev,
-                        category: e.target.value,
-                        categoryName: catObj?.name || e.target.value,
-                        amount: catObj?.defaultAmount ? String(catObj.defaultAmount) : prev.amount
-                      }));
-                    }
-                  }}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800"
-                >
-                  <option value="">-- Select Fee Component --</option>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                   {dynamicFeeComponents.length > 0 ? (
                     dynamicFeeComponents.map((c: any, idx: number) => (
-                      <option key={`dyn-${idx}`} value={c.category}>
-                        {c.category} {c.amount ? `(₹${c.amount})` : ""}
-                      </option>
+                      <label key={`dyn-${idx}`} className={`flex items-center justify-between p-3 border rounded-xl cursor-pointer transition-all ${feeForm.category === c.category ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-slate-100'}`}>
+                        <div className="flex items-center gap-3">
+                          <input 
+                            type="radio"
+                            name="feeCategory"
+                            value={c.category}
+                            checked={feeForm.category === c.category}
+                            required
+                            onChange={() => {
+                              setFeeForm(prev => ({
+                                ...prev,
+                                category: c.category,
+                                categoryName: c.category,
+                                amount: c.amount ? String(c.amount) : prev.amount
+                              }));
+                            }}
+                            className="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                          />
+                          <span className="font-bold text-slate-800 text-[13px]">{c.category}</span>
+                        </div>
+                        {c.amount && <span className="font-black text-indigo-900 text-[13px]">₹{c.amount}</span>}
+                      </label>
                     ))
                   ) : (
                     categories.map(c => (
-                      <option key={`cat-${c.code}`} value={c.code}>
-                        {c.name} {c.defaultAmount ? `(₹${c.defaultAmount})` : ""}
-                      </option>
+                      <label key={`cat-${c.code}`} className={`flex items-center justify-between p-3 border rounded-xl cursor-pointer transition-all ${feeForm.category === c.code ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-slate-100'}`}>
+                        <div className="flex items-center gap-3">
+                          <input 
+                            type="radio"
+                            name="feeCategory"
+                            value={c.code}
+                            checked={feeForm.category === c.code}
+                            required
+                            onChange={() => {
+                              setFeeForm(prev => ({
+                                ...prev,
+                                category: c.code,
+                                categoryName: c.name || c.code,
+                                amount: c.defaultAmount ? String(c.defaultAmount) : prev.amount
+                              }));
+                            }}
+                            className="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                          />
+                          <span className="font-bold text-slate-800 text-[13px]">{c.name}</span>
+                        </div>
+                        {c.defaultAmount && <span className="font-black text-indigo-900 text-[13px]">₹{c.defaultAmount}</span>}
+                      </label>
                     ))
                   )}
-                </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

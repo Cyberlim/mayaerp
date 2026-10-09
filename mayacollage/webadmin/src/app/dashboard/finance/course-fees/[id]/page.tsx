@@ -121,13 +121,15 @@ export default function CourseFeeStructureBuilder({ params }: { params: { id: st
 
   const grandTotal = feeStructureTemplate.reduce((sum, y) => sum + (y.totalYearlyFee || 0), 0);
 
+  const [applyToStudents, setApplyToStudents] = useState(true);
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
       const res = await fetch(`/api/courses/${params.id}/fees`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ feeStructureTemplate })
+        body: JSON.stringify({ feeStructureTemplate, applyToStudents })
       });
       if (res.ok) {
         showToast("Fee structure template saved successfully!");
@@ -179,14 +181,29 @@ export default function CourseFeeStructureBuilder({ params }: { params: { id: st
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Grand Total (Course)</p>
               <p className="text-2xl font-black text-slate-900">₹{grandTotal.toLocaleString()}</p>
             </div>
-            <button 
-              onClick={handleSave} 
-              disabled={isSaving}
-              className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2"
-            >
-              {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-              Save Template
-            </button>
+            
+            <div className="flex flex-col items-end gap-1">
+              <button 
+                onClick={handleSave} 
+                disabled={isSaving}
+                className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2"
+              >
+                {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                Save Template
+              </button>
+              
+              <label className="flex items-center gap-2 cursor-pointer mt-1 group">
+                <input 
+                  type="checkbox" 
+                  checked={applyToStudents}
+                  onChange={(e) => setApplyToStudents(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600 bg-slate-100 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                />
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-indigo-600 transition-colors">
+                  Sync with Enrolled Students
+                </span>
+              </label>
+            </div>
           </div>
         </div>
       </div>
