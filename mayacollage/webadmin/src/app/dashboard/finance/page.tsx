@@ -38,7 +38,8 @@ import {
   DollarSign,
   Briefcase,
   ChevronDown,
-  LayoutGrid
+  LayoutGrid,
+  Trash2
 } from "lucide-react";
 import ReceiptModal from "@/components/ReceiptModal";
 
@@ -575,6 +576,31 @@ export default function FinanceDashboard() {
       alert("Error recording payment");
     } finally {
       setIsSubmittingFee(false);
+    }
+  };
+
+  // Delete Transaction
+  const handleDeleteTransaction = async (txnId: string) => {
+    if (!confirm("Are you sure you want to delete this receipt? This will reverse the payment from the student's balance.")) return;
+
+    try {
+      const res = await fetch(`/api/finance/transactions/${txnId}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast("Receipt deleted and fee reversed successfully!");
+        fetchData();
+        if (selectedStudentForStatement) {
+          handleOpenStudentStatement(selectedStudentForStatement);
+        }
+      } else {
+        alert(data.error || "Failed to delete receipt.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting receipt.");
     }
   };
 
@@ -1976,34 +2002,43 @@ export default function FinanceDashboard() {
                         </div>
                         <div className="flex items-center gap-3">
                           <span className="font-mono font-black text-emerald-600">{formatCurrency(t.amount)}</span>
-                          <button
-                            onClick={() => {
-                              setSelectedReceiptForModal({
-                                type: "student",
-                                receiptType: "Student Fee Receipt",
-                                receiptNumber: t.receiptNumber || `RCP-STU-${t._id.slice(-8).toUpperCase()}`,
-                                transactionId: t.transactionId,
-                                date: t.paymentDate,
-                                name: studentStatementData.student?.fullName || "Student",
-                                idNumber: studentStatementData.student?.enrollmentNumber || "N/A",
-                                program: studentStatementData.student?.course || "Course",
-                                semester: t.semester || 1,
-                                academicYear: t.academicYear || "Year 1",
-                                category: t.category || "tuition",
-                                categoryName: t.categoryName || "Tuition Fee",
-                                amount: t.amount,
-                                paymentMethod: t.paymentMethod,
-                                collectedBy: "Accounts Office",
-                                notes: t.notes,
-                                items: [{ description: `${t.categoryName || t.category || "Fee"}`, amount: t.amount }]
-                              });
-                              setIsReceiptModalOpen(true);
-                            }}
-                            className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg"
-                            title="Print"
-                          >
-                            <Printer className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                setSelectedReceiptForModal({
+                                  type: "student",
+                                  receiptType: "Student Fee Receipt",
+                                  receiptNumber: t.receiptNumber || `RCP-STU-${t._id.slice(-8).toUpperCase()}`,
+                                  transactionId: t.transactionId,
+                                  date: t.paymentDate,
+                                  name: studentStatementData.student?.fullName || "Student",
+                                  idNumber: studentStatementData.student?.enrollmentNumber || "N/A",
+                                  program: studentStatementData.student?.course || "Course",
+                                  semester: t.semester || 1,
+                                  academicYear: t.academicYear || "Year 1",
+                                  category: t.category || "tuition",
+                                  categoryName: t.categoryName || "Tuition Fee",
+                                  amount: t.amount,
+                                  paymentMethod: t.paymentMethod,
+                                  collectedBy: "Accounts Office",
+                                  notes: t.notes,
+                                  items: [{ description: `${t.categoryName || t.category || "Fee"}`, amount: t.amount }]
+                                });
+                                setIsReceiptModalOpen(true);
+                              }}
+                              className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg transition-all"
+                              title="Print"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteTransaction(t._id)}
+                              className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-all"
+                              title="Delete & Reverse Payment"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
