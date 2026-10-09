@@ -27,39 +27,33 @@ export async function PATCH(
     await connectDB();
     const body = await request.json();
     const { id } = await params;
-    const { applyToStudents, ...courseData } = body;
+    const { updateStudents, applyToStudents, ...courseData } = body;
+    const shouldSync = updateStudents || applyToStudents;
 
     const course = await Course.findByIdAndUpdate(id, courseData, { new: true, runValidators: true }).populate("branchId");
     if (!course) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
 
-    if (applyToStudents && (course.tuitionFee || course.semesterFees?.length > 0)) {
+    if (shouldSync) {
       const { Student } = await import("@/models/Student");
-      const duration = course.duration || 4;
-      let totalFee = course.tuitionFee || 0;
-      if (course.semesterFees && course.semesterFees.length > 0) {
-        const sumSem = course.semesterFees.reduce((acc: number, sf: any) => acc + (Number(sf.fee) || 0), 0);
-        if (sumSem > 0) totalFee = sumSem;
-      }
-      const annualFee = Math.round(totalFee / duration);
-
-      const studentsInCourse = await Student.find({ selectedProgram: course._id });
-      for (const st of studentsInCourse) {
-        const years = Array.from({ length: duration }).map((_, idx) => ({
-          year: idx + 1,
-          tuition: { total: annualFee, paid: st.fees?.years?.[idx]?.tuition?.paid || 0 },
-          exam: { total: 0, paid: st.fees?.years?.[idx]?.exam?.paid || 0 },
-          transport: { total: 0, paid: st.fees?.years?.[idx]?.transport?.paid || 0 },
-          other: { total: 0, paid: st.fees?.years?.[idx]?.other?.paid || 0 }
-        }));
-        st.fees = {
-          isConfigured: true,
-          years
-        };
-        st.markModified('fees');
-        await st.save();
-      }
+      
+      // Update all students in this course to reset their manual fee configurations
+      // This forces them to inherit the new dynamic course feeStructureTemplate
+      await Student.updateMany(
+        { selectedProgram: course._id },
+        { 
+          $set: { 
+            "fees.isConfigured": false,
+            "fees.years": []
+          } 
+        }
+      );
+      
+      // We must clear the Redis cache for all these student accounts
+      const { delCachePattern } = await import("@/lib/redis");
+      await delCachePattern("fee:student-account:*");
+      await delCachePattern("student:*");
     }
 
     return NextResponse.json(course);

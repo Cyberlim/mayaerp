@@ -367,9 +367,9 @@ export default function BranchDetail() {
                       <div className="w-px h-8 bg-slate-100" />
                       <div>
                         <p className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
-                          <TrendingUp className="w-4 h-4 text-emerald-500" /> ₹{(course.semesterFees?.[0]?.fee || course.tuitionFee).toLocaleString()}
+                          <TrendingUp className="w-4 h-4 text-emerald-500" /> ₹{(course.feeStructureTemplate?.[0]?.totalYearlyFee || (course.semesterFees?.[0]?.fee * 2) || (course.tuitionFee / course.duration)).toLocaleString()}
                         </p>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Per Sem</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Per Year</p>
                       </div>
                     </div>
                     

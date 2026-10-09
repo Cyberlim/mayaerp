@@ -118,21 +118,27 @@ export default function StudentDetailScreen() {
     setTimeout(() => setToastMsg(""), 3500);
   };
 
+  const [studentStatementData, setStudentStatementData] = useState<any>(null);
+
   const fetchStudentData = async () => {
     try {
-      const [branchesData, coursesData, student, txnsData, busesData, categoriesData] = await Promise.all([
+      const [branchesData, coursesData, student, txnsData, busesData, categoriesData, statementData] = await Promise.all([
         fetch("/api/branches").then(res => res.json()).catch(() => []),
         fetch("/api/courses").then(res => res.json()).catch(() => []),
         fetch(`/api/students/${studentId}`).then(res => res.json()).catch(() => null),
         fetch(`/api/finance/transactions?studentId=${studentId}`).then(res => res.json()).catch(() => []),
         fetch("/api/transport/buses").then(res => res.json()).catch(() => []),
-        fetch("/api/finance/categories").then(res => res.json()).catch(() => [])
+        fetch("/api/finance/categories").then(res => res.json()).catch(() => []),
+        fetch(`/api/finance/student-account/${studentId}`).then(res => res.json()).catch(() => null)
       ]);
 
       setBranches(Array.isArray(branchesData) ? branchesData : []);
       setCourses(Array.isArray(coursesData) ? coursesData : []);
       setTransactions(Array.isArray(txnsData) ? txnsData : []);
       setFeeCategories(Array.isArray(categoriesData) ? categoriesData : []);
+      if (statementData && !statementData.error) {
+        setStudentStatementData(statementData);
+      }
 
       if (Array.isArray(busesData)) {
         const foundBus = busesData.find((b: any) => 
@@ -367,18 +373,18 @@ export default function StudentDetailScreen() {
 
   // Student Fee Calculations
   const feeSummary = useMemo(() => {
-    const isConfigured = Boolean(studentData?.fees?.isConfigured && studentData?.fees?.years?.length > 0);
-    let total = 0;
-    let paid = 0;
-
-    if (isConfigured && studentData?.fees?.years) {
-      studentData.fees.years.forEach((fy: any) => {
-        total += (Number(fy.tuition?.total) || 0) + (Number(fy.exam?.total) || 0) + (Number(fy.transport?.total) || 0) + (Number(fy.other?.total) || 0);
-        paid += (Number(fy.tuition?.paid) || 0) + (Number(fy.exam?.paid) || 0) + (Number(fy.transport?.paid) || 0) + (Number(fy.other?.paid) || 0);
-      });
+    if (!studentStatementData || !studentStatementData.ledger) {
+      return { isConfigured: false, total: 0, paid: 0, balance: 0, status: "not_configured", percentage: 0 };
     }
 
-    const balance = Math.max(0, total - paid);
+    const ledger = studentStatementData.ledger;
+    const total = ledger.totalAssessed || 0;
+    const paid = ledger.totalPaid || 0;
+    const balance = ledger.outstandingAmount || 0;
+    
+    // Check if it's configured by checking if we have any years or total > 0
+    const isConfigured = Boolean(ledger.years && ledger.years.length > 0);
+
     let status: "not_configured" | "paid" | "partial" | "unpaid" = "not_configured";
     
     if (isConfigured) {
@@ -390,32 +396,39 @@ export default function StudentDetailScreen() {
     const percentage = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
 
     return { isConfigured, total, paid, balance, status, percentage };
-  }, [studentData]);
+  }, [studentStatementData]);
 
   // Open Edit Fee Modal
   const handleOpenEditFeeModal = () => {
-    const selectedCourse = courses.find(c => c._id === (typeof studentData.selectedProgram === 'object' ? studentData.selectedProgram?._id : studentData.selectedProgram));
-    const duration = selectedCourse?.durationYears || 4;
-
-    if (studentData.fees?.isConfigured && Array.isArray(studentData.fees?.years) && studentData.fees.years.length > 0) {
-      const clonedYears = studentData.fees.years.map((y: any, idx: number) => ({
-        year: y.year || idx + 1,
-        tuition: { total: y.tuition?.total || 0, paid: y.tuition?.paid || 0 },
-        exam: { total: y.exam?.total || 0, paid: y.exam?.paid || 0 },
-        transport: { total: y.transport?.total || 0, paid: y.transport?.paid || 0 },
-        other: { total: y.other?.total || 0, paid: y.other?.paid || 0 }
-      }));
+    if (studentStatementData?.ledger?.years && studentStatementData.ledger.years.length > 0) {
+      const clonedYears = studentStatementData.ledger.years.map((y: any, idx: number) => {
+        let components = y.components || [];
+        if (components.length === 0 && y.categories) {
+           components = Object.entries(y.categories).map(([k, c]: any) => ({
+              category: k.charAt(0).toUpperCase() + k.slice(1) + " Fee",
+              amount: c.total || 0,
+              paid: c.paid || 0,
+              frequency: 'Annual'
+           }));
+        }
+        return {
+          year: y.year || idx + 1,
+          components: components.map((c: any) => ({
+             category: c.category || '',
+             amount: c.amount || 0,
+             paid: c.paid || 0,
+             frequency: c.frequency || 'Annual'
+          }))
+        };
+      });
       setEditFeeYears(clonedYears);
     } else {
-      const defaultTuition = selectedCourse?.tuitionFee ? Math.round(selectedCourse.tuitionFee / duration) : 0;
-      const initialYears = Array.from({ length: duration }).map((_, idx) => ({
+      const selectedCourse = courses.find(c => c._id === (typeof studentData.selectedProgram === 'object' ? studentData.selectedProgram?._id : studentData.selectedProgram));
+      const duration = selectedCourse?.durationYears || 4;
+      setEditFeeYears(Array.from({ length: duration }).map((_, idx) => ({
         year: idx + 1,
-        tuition: { total: defaultTuition, paid: 0 },
-        exam: { total: 0, paid: 0 },
-        transport: { total: 0, paid: 0 },
-        other: { total: 0, paid: 0 }
-      }));
-      setEditFeeYears(initialYears);
+        components: [{ category: 'Tuition Fee', amount: 0, paid: 0, frequency: 'Annual' }]
+      })));
     }
 
     setIsEditFeeModalOpen(true);
@@ -492,52 +505,39 @@ export default function StudentDetailScreen() {
   };
 
   // Handle Edit Fee Field Changes
-  const handleEditFeeChange = (yearIndex: number, category: "tuition" | "exam" | "transport" | "other", field: "total" | "paid", value: string) => {
+  const handleEditFeeChange = (yearIndex: number, componentIndex: number, field: "amount" | "paid", value: string) => {
     const numVal = Math.max(0, Number(value) || 0);
     const updated = [...editFeeYears];
-    updated[yearIndex] = {
-      ...updated[yearIndex],
-      [category]: {
-        ...updated[yearIndex][category],
-        [field]: numVal
-      }
-    };
+    const yearObj = { ...updated[yearIndex] };
+    const comps = [...(yearObj.components || [])];
+    comps[componentIndex] = { ...comps[componentIndex], [field]: numVal };
+    yearObj.components = comps;
+    updated[yearIndex] = yearObj;
     setEditFeeYears(updated);
   };
 
-  const handleQuickMarkCategoryPaid = (yearIndex: number, category: "tuition" | "exam" | "transport" | "other") => {
+  const handleQuickMarkCategoryPaid = (yearIndex: number, componentIndex: number) => {
     const updated = [...editFeeYears];
-    const totalVal = updated[yearIndex][category]?.total || 0;
-    updated[yearIndex] = {
-      ...updated[yearIndex],
-      [category]: {
-        ...updated[yearIndex][category],
-        paid: totalVal
-      }
-    };
+    const yearObj = { ...updated[yearIndex] };
+    const comps = [...(yearObj.components || [])];
+    comps[componentIndex] = { ...comps[componentIndex], paid: comps[componentIndex].amount || 0 };
+    yearObj.components = comps;
+    updated[yearIndex] = yearObj;
     setEditFeeYears(updated);
   };
 
   const handleQuickMarkYearPaid = (yearIndex: number) => {
     const updated = [...editFeeYears];
-    const yr = updated[yearIndex];
-    updated[yearIndex] = {
-      ...yr,
-      tuition: { ...yr.tuition, paid: yr.tuition.total },
-      exam: { ...yr.exam, paid: yr.exam.total },
-      transport: { ...yr.transport, paid: yr.transport.total },
-      other: { ...yr.other, paid: yr.other.total }
-    };
+    const yearObj = { ...updated[yearIndex] };
+    yearObj.components = (yearObj.components || []).map((c: any) => ({ ...c, paid: c.amount || 0 }));
+    updated[yearIndex] = yearObj;
     setEditFeeYears(updated);
   };
 
   const handleMarkAllAsPaid = () => {
     const updated = editFeeYears.map(yr => ({
       ...yr,
-      tuition: { ...yr.tuition, paid: yr.tuition.total },
-      exam: { ...yr.exam, paid: yr.exam.total },
-      transport: { ...yr.transport, paid: yr.transport.total },
-      other: { ...yr.other, paid: yr.other.total }
+      components: (yr.components || []).map((c: any) => ({ ...c, paid: c.amount || 0 }))
     }));
     setEditFeeYears(updated);
   };
@@ -545,10 +545,7 @@ export default function StudentDetailScreen() {
   const handleResetAllPaid = () => {
     const updated = editFeeYears.map(yr => ({
       ...yr,
-      tuition: { ...yr.tuition, paid: 0 },
-      exam: { ...yr.exam, paid: 0 },
-      transport: { ...yr.transport, paid: 0 },
-      other: { ...yr.other, paid: 0 }
+      components: (yr.components || []).map((c: any) => ({ ...c, paid: 0 }))
     }));
     setEditFeeYears(updated);
   };
@@ -559,10 +556,7 @@ export default function StudentDetailScreen() {
       ...editFeeYears,
       {
         year: nextYearNum,
-        tuition: { total: 0, paid: 0 },
-        exam: { total: 0, paid: 0 },
-        transport: { total: 0, paid: 0 },
-        other: { total: 0, paid: 0 }
+        components: [{ category: 'Tuition Fee', amount: 0, paid: 0, frequency: 'Annual' }]
       }
     ]);
   };
@@ -609,8 +603,10 @@ export default function StudentDetailScreen() {
     let total = 0;
     let paid = 0;
     editFeeYears.forEach(y => {
-      total += (Number(y.tuition?.total) || 0) + (Number(y.exam?.total) || 0) + (Number(y.transport?.total) || 0) + (Number(y.other?.total) || 0);
-      paid += (Number(y.tuition?.paid) || 0) + (Number(y.exam?.paid) || 0) + (Number(y.transport?.paid) || 0) + (Number(y.other?.paid) || 0);
+      (y.components || []).forEach((c: any) => {
+        total += Number(c.amount) || 0;
+        paid += Number(c.paid) || 0;
+      });
     });
     return { total, paid, balance: Math.max(0, total - paid) };
   }, [editFeeYears]);
@@ -1590,10 +1586,10 @@ export default function StudentDetailScreen() {
                       </button>
                     </div>
 
-                    {studentData.fees.years?.map((fy: any) => {
-                      const yrTotal = (Number(fy.tuition?.total) || 0) + (Number(fy.exam?.total) || 0) + (Number(fy.transport?.total) || 0) + (Number(fy.other?.total) || 0);
-                      const yrPaid = (Number(fy.tuition?.paid) || 0) + (Number(fy.exam?.paid) || 0) + (Number(fy.transport?.paid) || 0) + (Number(fy.other?.paid) || 0);
-                      const yrDue = Math.max(0, yrTotal - yrPaid);
+                    {studentStatementData?.ledger?.years?.map((fy: any) => {
+                      const yrTotal = fy.yearTotal || 0;
+                      const yrPaid = fy.yearPaid || 0;
+                      const yrDue = fy.yearOS || 0;
 
                       return (
                         <div key={fy.year} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
@@ -1613,7 +1609,7 @@ export default function StudentDetailScreen() {
                             </div>
 
                             <div className="flex items-center gap-2">
-                              {yrDue === 0 ? (
+                              {yrDue === 0 && yrTotal > 0 ? (
                                 <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-wider rounded-full border border-emerald-100 flex items-center gap-1">
                                   <Check className="w-3 h-3 text-emerald-600" /> Fully Paid
                                 </span>
@@ -1632,33 +1628,47 @@ export default function StudentDetailScreen() {
                             </div>
                           </div>
 
-                          {/* 4 Category Blocks */}
+                          {/* Dynamic Categories / Components */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                            {[
-                              { title: "Tuition Fee", total: fy.tuition?.total || 0, paid: fy.tuition?.paid || 0, icon: Calculator },
-                              { title: "Exam Fee", total: fy.exam?.total || 0, paid: fy.exam?.paid || 0, icon: FileText },
-                              { title: "Transport Fee", total: fy.transport?.total || 0, paid: fy.transport?.paid || 0, icon: Building2 },
-                              { title: "Other Fee", total: fy.other?.total || 0, paid: fy.other?.paid || 0, icon: Receipt },
-                            ].map(cat => {
-                              const catDue = Math.max(0, cat.total - cat.paid);
-                              return (
-                                <div key={cat.title} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs font-bold text-slate-800">{cat.title}</span>
-                                    {catDue === 0 && cat.total > 0 ? (
-                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                    ) : catDue > 0 ? (
-                                      <Clock className="w-3.5 h-3.5 text-amber-600" />
-                                    ) : null}
+                            {fy.components && fy.components.length > 0 ? (
+                              fy.components.map((cat: any) => {
+                                // Since we don't track paid amount per sub-component easily yet, we just show the component
+                                const total = cat.amount || 0;
+                                return (
+                                  <div key={cat.category} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-bold text-slate-800">{cat.category}</span>
+                                    </div>
+                                    <div className="text-sm font-black text-slate-900">{formatCurrency(total)}</div>
                                   </div>
-                                  <div className="text-sm font-black text-slate-900">{formatCurrency(cat.total)}</div>
-                                  <div className="text-[11px] font-semibold flex justify-between">
-                                    <span className="text-emerald-600">Paid: {formatCurrency(cat.paid)}</span>
-                                    {catDue > 0 && <span className="text-amber-600">Due: {formatCurrency(catDue)}</span>}
+                                );
+                              })
+                            ) : (
+                              Object.entries(fy.categories || {}).map(([key, cat]: any) => {
+                                const title = key.charAt(0).toUpperCase() + key.slice(1) + " Fee";
+                                const total = cat.total || 0;
+                                const paid = cat.paid || 0;
+                                const catDue = cat.os || Math.max(0, total - paid);
+                                
+                                return (
+                                  <div key={title} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-bold text-slate-800">{title}</span>
+                                      {catDue === 0 && total > 0 ? (
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                      ) : catDue > 0 ? (
+                                        <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                      ) : null}
+                                    </div>
+                                    <div className="text-sm font-black text-slate-900">{formatCurrency(total)}</div>
+                                    <div className="text-[11px] font-semibold flex justify-between">
+                                      <span className="text-emerald-600">Paid: {formatCurrency(paid)}</span>
+                                      {catDue > 0 && <span className="text-amber-600">Due: {formatCurrency(catDue)}</span>}
+                                    </div>
                                   </div>
-                                </div>
-                              );
-                            })}
+                                );
+                              })
+                            )}
                           </div>
                         </div>
                       );
@@ -2275,8 +2285,12 @@ export default function StudentDetailScreen() {
 
               <div className="p-8 space-y-6 overflow-y-auto flex-1">
                 {editFeeYears.map((yr, yIdx) => {
-                  const yrTotal = (Number(yr.tuition?.total) || 0) + (Number(yr.exam?.total) || 0) + (Number(yr.transport?.total) || 0) + (Number(yr.other?.total) || 0);
-                  const yrPaid = (Number(yr.tuition?.paid) || 0) + (Number(yr.exam?.paid) || 0) + (Number(yr.transport?.paid) || 0) + (Number(yr.other?.paid) || 0);
+                  let yrTotal = 0;
+                  let yrPaid = 0;
+                  (yr.components || []).forEach((c: any) => {
+                    yrTotal += Number(c.amount) || 0;
+                    yrPaid += Number(c.paid) || 0;
+                  });
                   const yrDue = Math.max(0, yrTotal - yrPaid);
 
                   return (
@@ -2314,143 +2328,40 @@ export default function StudentDetailScreen() {
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        
-                        {/* Tuition */}
-                        <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold text-slate-800">Tuition Fee</span>
-                            <button 
-                              type="button" 
-                              onClick={() => handleQuickMarkCategoryPaid(yIdx, "tuition")}
-                              className="text-[10px] font-bold text-indigo-600 hover:underline"
-                            >
-                              Set Paid = Total
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <span className="text-[10px] font-bold text-slate-400 uppercase">Total (₹)</span>
-                              <input 
-                                type="number"
-                                value={yr.tuition?.total ?? 0}
-                                onChange={e => handleEditFeeChange(yIdx, "tuition", "total", e.target.value)}
-                                className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-slate-800 text-xs"
-                              />
+                        {(yr.components || []).map((comp: any, cIdx: number) => (
+                          <div key={cIdx} className="bg-white p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs font-bold text-slate-800">{comp.category || "Fee Component"}</span>
+                              <button 
+                                type="button" 
+                                onClick={() => handleQuickMarkCategoryPaid(yIdx, cIdx)}
+                                className="text-[10px] font-bold text-indigo-600 hover:underline"
+                              >
+                                Set Paid = Total
+                              </button>
                             </div>
-                            <div>
-                              <span className="text-[10px] font-bold text-emerald-600 uppercase">Paid (₹)</span>
-                              <input 
-                                type="number"
-                                value={yr.tuition?.paid ?? 0}
-                                onChange={e => handleEditFeeChange(yIdx, "tuition", "paid", e.target.value)}
-                                className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-emerald-700 text-xs"
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Exam */}
-                        <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold text-slate-800">Exam Fee</span>
-                            <button 
-                              type="button" 
-                              onClick={() => handleQuickMarkCategoryPaid(yIdx, "exam")}
-                              className="text-[10px] font-bold text-indigo-600 hover:underline"
-                            >
-                              Set Paid = Total
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <span className="text-[10px] font-bold text-slate-400 uppercase">Total (₹)</span>
-                              <input 
-                                type="number"
-                                value={yr.exam?.total ?? 0}
-                                onChange={e => handleEditFeeChange(yIdx, "exam", "total", e.target.value)}
-                                className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-slate-800 text-xs"
-                              />
-                            </div>
-                            <div>
-                              <span className="text-[10px] font-bold text-emerald-600 uppercase">Paid (₹)</span>
-                              <input 
-                                type="number"
-                                value={yr.exam?.paid ?? 0}
-                                onChange={e => handleEditFeeChange(yIdx, "exam", "paid", e.target.value)}
-                                className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-emerald-700 text-xs"
-                              />
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase">Total (₹)</span>
+                                <input 
+                                  type="number"
+                                  value={comp.amount ?? 0}
+                                  onChange={e => handleEditFeeChange(yIdx, cIdx, "amount", e.target.value)}
+                                  className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-slate-800 text-xs"
+                                />
+                              </div>
+                              <div>
+                                <span className="text-[10px] font-bold text-emerald-600 uppercase">Paid (₹)</span>
+                                <input 
+                                  type="number"
+                                  value={comp.paid ?? 0}
+                                  onChange={e => handleEditFeeChange(yIdx, cIdx, "paid", e.target.value)}
+                                  className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-emerald-700 text-xs"
+                                />
+                              </div>
                             </div>
                           </div>
-                        </div>
-
-                        {/* Transport */}
-                        <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold text-slate-800">Transport Fee</span>
-                            <button 
-                              type="button" 
-                              onClick={() => handleQuickMarkCategoryPaid(yIdx, "transport")}
-                              className="text-[10px] font-bold text-indigo-600 hover:underline"
-                            >
-                              Set Paid = Total
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <span className="text-[10px] font-bold text-slate-400 uppercase">Total (₹)</span>
-                              <input 
-                                type="number"
-                                value={yr.transport?.total ?? 0}
-                                onChange={e => handleEditFeeChange(yIdx, "transport", "total", e.target.value)}
-                                className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-slate-800 text-xs"
-                              />
-                            </div>
-                            <div>
-                              <span className="text-[10px] font-bold text-emerald-600 uppercase">Paid (₹)</span>
-                              <input 
-                                type="number"
-                                value={yr.transport?.paid ?? 0}
-                                onChange={e => handleEditFeeChange(yIdx, "transport", "paid", e.target.value)}
-                                className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-emerald-700 text-xs"
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Other */}
-                        <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold text-slate-800">Other / Misc Fee</span>
-                            <button 
-                              type="button" 
-                              onClick={() => handleQuickMarkCategoryPaid(yIdx, "other")}
-                              className="text-[10px] font-bold text-indigo-600 hover:underline"
-                            >
-                              Set Paid = Total
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <span className="text-[10px] font-bold text-slate-400 uppercase">Total (₹)</span>
-                              <input 
-                                type="number"
-                                value={yr.other?.total ?? 0}
-                                onChange={e => handleEditFeeChange(yIdx, "other", "total", e.target.value)}
-                                className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-slate-800 text-xs"
-                              />
-                            </div>
-                            <div>
-                              <span className="text-[10px] font-bold text-emerald-600 uppercase">Paid (₹)</span>
-                              <input 
-                                type="number"
-                                value={yr.other?.paid ?? 0}
-                                onChange={e => handleEditFeeChange(yIdx, "other", "paid", e.target.value)}
-                                className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-emerald-700 text-xs"
-                              />
-                            </div>
-                          </div>
-                        </div>
-
+                        ))}
                       </div>
                     </div>
                   );

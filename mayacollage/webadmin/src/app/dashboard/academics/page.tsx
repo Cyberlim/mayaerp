@@ -77,13 +77,22 @@ export default function AcademicManagement() {
           <h1 className="text-3xl font-black tracking-tight text-slate-900">Academic Hub</h1>
           <p className="text-slate-500 font-medium mt-1">Manage branches, courses, and curriculum structures.</p>
         </div>
-        <button 
-          onClick={() => router.push("/academics/branches/new")}
-          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-2xl shadow-[0_10px_20px_rgba(79,70,229,0.3)] hover:-translate-y-1 hover:shadow-[0_15px_30px_rgba(79,70,229,0.4)] transition-all"
-        >
-          <Plus className="w-5 h-5" />
-          Add Branch
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => router.push("/dashboard/students/promote")}
+            className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white font-bold rounded-2xl shadow-[0_10px_20px_rgba(15,23,42,0.2)] hover:-translate-y-1 hover:shadow-[0_15px_30px_rgba(15,23,42,0.3)] transition-all"
+          >
+            <GraduationCap className="w-5 h-5" />
+            Batch Promote
+          </button>
+          <button 
+            onClick={() => router.push("/academics/branches/new")}
+            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-2xl shadow-[0_10px_20px_rgba(79,70,229,0.3)] hover:-translate-y-1 hover:shadow-[0_15px_30px_rgba(79,70,229,0.4)] transition-all"
+          >
+            <Plus className="w-5 h-5" />
+            Add Branch
+          </button>
+        </div>
       </div>
 
       {/* Academic Stats */}

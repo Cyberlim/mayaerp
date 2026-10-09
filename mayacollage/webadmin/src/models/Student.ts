@@ -41,8 +41,13 @@ const studentSchema = new mongoose.Schema({
   // Fees Structure
   fees: {
       isConfigured: { type: Boolean, default: false },
+      grandTotal: { type: Number, default: 0 },
+      totalPaid: { type: Number, default: 0 },
       years: [{
           year: { type: Number, required: true },
+          yearTotal: { type: Number, default: 0 },
+          yearPaid: { type: Number, default: 0 },
+          // Legacy fields (kept for backward compatibility during migration)
           tuition: {
               total: { type: Number, default: 0 },
               paid: { type: Number, default: 0 }
@@ -58,7 +63,17 @@ const studentSchema = new mongoose.Schema({
           other: {
               total: { type: Number, default: 0 },
               paid: { type: Number, default: 0 }
-          }
+          },
+          // New dynamic fee components
+          components: [{
+              category: { type: String, required: true },
+              amount: { type: Number, default: 0 },
+              paid: { type: Number, default: 0 },
+              isMandatory: { type: Boolean, default: true },
+              frequency: { type: String, default: "Annual" },
+              months: [String],
+              dueDate: { type: Date }
+          }]
       }]
   },
 

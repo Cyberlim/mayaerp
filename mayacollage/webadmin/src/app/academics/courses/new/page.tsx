@@ -13,7 +13,9 @@ import {
   Calculator,
   User,
   Microscope,
-  Loader2
+  Loader2,
+  Trash2,
+  Plus
 } from "lucide-react";
 
 import { Suspense } from "react";
@@ -33,10 +35,11 @@ function CreateCourseContent() {
     duration: "",
     intakeCapacity: "",
     totalSemesters: "8",
-    tuitionFee: "",
     coordinator: "",
     labIndex: "",
   });
+
+  const [feeStructureTemplate, setFeeStructureTemplate] = useState<any[]>([]);
 
   useEffect(() => {
     if (branchId) {
@@ -46,6 +49,30 @@ function CreateCourseContent() {
         .catch(err => console.error(err));
     }
   }, [branchId]);
+
+  useEffect(() => {
+    const dur = parseInt(formData.duration);
+    if (!isNaN(dur) && dur > 0) {
+      setFeeStructureTemplate(prev => {
+        const next = [...prev];
+        if (next.length < dur) {
+          for (let i = next.length; i < dur; i++) {
+            // First year gets extra defaults
+            if (i === 0) {
+               next.push({ year: i + 1, components: [{ category: 'Admission Fee', amount: "" }, { category: 'Tuition Fee', amount: "" }] });
+            } else {
+               next.push({ year: i + 1, components: [{ category: 'Tuition Fee', amount: "" }] });
+            }
+          }
+        } else if (next.length > dur) {
+          next.length = dur;
+        }
+        return next;
+      });
+    } else {
+      setFeeStructureTemplate([]);
+    }
+  }, [formData.duration]);
 
   const handleChange = (e: any) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -58,22 +85,40 @@ function CreateCourseContent() {
 
     try {
       // Calculate split fees
-      const totalSems = parseInt(formData.totalSemesters) || 8;
-      const totalTuition = parseInt(formData.tuitionFee) || 0;
-      const feePerSem = totalTuition / (totalSems > 0 ? totalSems : 1);
+      const duration = parseInt(formData.duration) || 4;
+      const totalSems = parseInt(formData.totalSemesters) || (duration * 2) || 8;
       
+      const feeTemplateFormatted = feeStructureTemplate.map(yt => ({
+        year: yt.year,
+        totalYearlyFee: yt.components.reduce((acc: number, curr: any) => acc + (parseInt(curr.amount) || 0), 0),
+        components: yt.components.map((c: any) => ({
+          category: c.category,
+          amount: parseInt(c.amount) || 0,
+          isMandatory: true,
+          frequency: "Annual"
+        }))
+      }));
+
+      const totalTuition = feeTemplateFormatted.reduce((acc, curr) => acc + curr.totalYearlyFee, 0);
+      
+      const semsPerYear = totalSems / duration;
       const semesterFees = [];
-      for (let i = 0; i < totalSems; i++) {
-        semesterFees.push({ semester: i + 1, fee: feePerSem });
+      for (let y = 0; y < duration; y++) {
+        const yearFee = feeTemplateFormatted[y]?.totalYearlyFee || 0;
+        const feePerSem = yearFee / (semsPerYear || 2);
+        for (let s = 0; s < (semsPerYear || 2); s++) {
+          semesterFees.push({ semester: (y * (semsPerYear || 2)) + s + 1, fee: feePerSem });
+        }
       }
 
       const payload = {
         branchId,
         ...formData,
-        duration: parseInt(formData.duration) || 4,
+        duration,
         intakeCapacity: parseInt(formData.intakeCapacity) || 60,
         tuitionFee: totalTuition,
         totalSemesters: totalSems,
+        feeStructureTemplate: feeTemplateFormatted,
         semesterFees,
       };
 
@@ -142,12 +187,87 @@ function CreateCourseContent() {
 
             {/* Section 2 */}
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-              <h2 className="text-xs font-black text-slate-400 tracking-widest uppercase mb-8">Section 2: Automated Billing Lifecycle</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-4">
+              <h2 className="text-xs font-black text-slate-400 tracking-widest uppercase mb-8">Section 2: Fee Structure (Per Year)</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
                 <InputField label="Total Semesters" name="totalSemesters" type="number" icon={<Calculator />} value={formData.totalSemesters} onChange={handleChange} required />
-                <InputField label="Total Program Fee (₹)" name="tuitionFee" type="number" icon={<Calculator />} value={formData.tuitionFee} onChange={handleChange} required />
               </div>
-              <p className="text-xs font-bold text-slate-500">* Fees will be equally distributed among the total number of semesters.</p>
+
+              {feeStructureTemplate.map((yearObj, yIndex) => (
+                <div key={yIndex} className="mb-6 border border-slate-200 rounded-2xl p-6 bg-slate-50 relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500" />
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-bold text-lg text-slate-800">Year {yearObj.year}</h3>
+                    <div className="font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg">
+                      Total: ₹{yearObj.components.reduce((acc: number, curr: any) => acc + (parseInt(curr.amount) || 0), 0).toLocaleString()}
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {yearObj.components.map((comp: any, cIndex: number) => (
+                      <div key={cIndex} className="flex gap-4 items-center">
+                        <select
+                          className="flex-1 px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium"
+                          value={comp.category}
+                          onChange={(e) => {
+                            const newTemplate = [...feeStructureTemplate];
+                            newTemplate[yIndex].components[cIndex].category = e.target.value;
+                            setFeeStructureTemplate(newTemplate);
+                          }}
+                        >
+                          <option value="Tuition Fee">Tuition Fee</option>
+                          <option value="Admission Fee">Admission Fee</option>
+                          <option value="Exam Fee">Exam Fee</option>
+                          <option value="Practical Fee">Practical Fee</option>
+                          <option value="Bag Fee">Bag Fee</option>
+                          <option value="Uniform Fee">Uniform Fee</option>
+                          <option value="Tie Fee">Tie Fee</option>
+                          <option value="Lab Coat Fee">Lab Coat Fee</option>
+                          <option value="Book Fee">Book Fee</option>
+                          <option value="Blazer Fee">Blazer Fee</option>
+                          <option value="T-Shirt Fee">T-Shirt Fee</option>
+                          <option value="Transport Fee">Transport Fee</option>
+                          <option value="Breakage Fine">Breakage Fine</option>
+                          <option value="Other">Other</option>
+                        </select>
+                        <input
+                          type="number"
+                          placeholder="Amount (₹)"
+                          className="w-1/3 px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium"
+                          value={comp.amount}
+                          onChange={(e) => {
+                            const newTemplate = [...feeStructureTemplate];
+                            newTemplate[yIndex].components[cIndex].amount = e.target.value;
+                            setFeeStructureTemplate(newTemplate);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newTemplate = [...feeStructureTemplate];
+                            newTemplate[yIndex].components.splice(cIndex, 1);
+                            setFeeStructureTemplate(newTemplate);
+                          }}
+                          className="w-10 h-10 rounded-xl flex items-center justify-center bg-rose-50 text-rose-500 hover:bg-rose-100 transition-colors shrink-0"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newTemplate = [...feeStructureTemplate];
+                        newTemplate[yIndex].components.push({ category: 'Tuition Fee', amount: "" });
+                        setFeeStructureTemplate(newTemplate);
+                      }}
+                      className="mt-4 px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl font-bold text-sm transition-colors flex items-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" /> Add Fee Component
+                    </button>
+                  </div>
+                </div>
+              ))}
             </motion.div>
 
             {/* Section 3 */}

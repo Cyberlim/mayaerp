@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/mongodb";
 import { Student } from "@/models/Student";
+import { delCachePattern } from "@/lib/redis";
 
 export const dynamic = 'force-dynamic';
 
@@ -8,7 +9,7 @@ export async function PUT(request: Request) {
   try {
     await connectDB();
     const body = await request.json();
-    const { sessionYear, selectedProgram, selectedBranch, newSemester } = body;
+    const { sessionYear, selectedProgram, selectedBranch, newSemester, selectedSemester } = body;
 
     let query: any = {};
     if (sessionYear) {
@@ -19,6 +20,7 @@ export async function PUT(request: Request) {
     }
     if (selectedProgram) query.selectedProgram = selectedProgram;
     if (selectedBranch) query.selectedBranch = selectedBranch;
+    if (selectedSemester) query.selectedSemester = Number(selectedSemester);
 
     // We only update students who match the query
     if (Object.keys(query).length === 0) {
@@ -28,6 +30,12 @@ export async function PUT(request: Request) {
     const result = await Student.updateMany(query, {
       $set: { selectedSemester: newSemester }
     });
+
+    try {
+      await delCachePattern("students:*");
+    } catch (cacheErr) {
+      console.error("Cache invalidation failed:", cacheErr);
+    }
 
     return NextResponse.json({
       message: "Batch update successful",

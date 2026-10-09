@@ -41,7 +41,7 @@ export default function DashboardLayout({
   // Also hide for dynamic edit routes
   const isHiddenRoute = hideSidebarRoutes.includes(pathname) || 
                         (pathname.startsWith("/dashboard/users/") && pathname !== "/dashboard/users") ||
-                        (pathname.startsWith("/dashboard/students/") && pathname !== "/dashboard/students");
+                        (pathname.startsWith("/dashboard/students/") && pathname !== "/dashboard/students" && pathname !== "/dashboard/students/promote");
 
   if (isHiddenRoute) {
     return (

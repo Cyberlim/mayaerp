@@ -1579,20 +1579,12 @@ export default function FinanceDashboard() {
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
-                    <button
-                      onClick={() => {
-                        setEditingCourse(c);
-                        setCourseFeeForm({
-                          tuitionFee: String(c.tuitionFee || 0),
-                          semesterFee: String(Math.round((c.tuitionFee || 0) / 8)),
-                          applyToStudents: true
-                        });
-                        setIsCourseFeeModalOpen(true);
-                      }}
+                    <Link
+                      href={`/dashboard/finance/course-fees/${c._id}`}
                       className="px-3 py-1.5 bg-indigo-50 text-indigo-700 font-bold rounded-lg text-xs"
                     >
-                      Update Fee
-                    </button>
+                      Configure Fee Structure
+                    </Link>
                   </div>
                 </div>
               ))}
@@ -1605,8 +1597,33 @@ export default function FinanceDashboard() {
       {/* ========================================================================= */}
       {/* MODAL 1: ADD FEE / COLLECT PAYMENT                                        */}
       {/* ========================================================================= */}
-      {isAddFeeModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+      {(() => {
+        const getAvailableFeeComponents = () => {
+          if (!selectedStudentForFee) return [];
+          const yr = feeForm.year || 1;
+          
+          if (selectedStudentForFee.fees?.isConfigured && Array.isArray(selectedStudentForFee.fees.years)) {
+            const studentYear = selectedStudentForFee.fees.years.find((y: any) => y.year === yr);
+            if (studentYear?.components && studentYear.components.length > 0) {
+               return studentYear.components;
+            }
+          }
+          
+          const courseId = typeof selectedStudentForFee.selectedProgram === 'object' ? selectedStudentForFee.selectedProgram?._id : selectedStudentForFee.selectedProgram;
+          const course = courses.find((c: any) => c._id === courseId);
+          if (course && Array.isArray(course.feeStructureTemplate)) {
+             const courseYear = course.feeStructureTemplate.find((y: any) => y.year === yr);
+             if (courseYear?.components && courseYear.components.length > 0) {
+                return courseYear.components;
+             }
+          }
+          
+          return [];
+        };
+        const dynamicFeeComponents = getAvailableFeeComponents();
+
+        return isAddFeeModalOpen && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -1661,26 +1678,61 @@ export default function FinanceDashboard() {
 
               <div>
                 <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-black mb-1">
-                  2. Fee Category / Item <span className="text-rose-500">*</span>
+                  2. Academic Year <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={feeForm.year}
+                  onChange={e => setFeeForm(prev => ({ ...prev, year: Number(e.target.value) }))}
+                  required
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800"
+                >
+                  {[1, 2, 3, 4, 5].map(y => (
+                    <option key={y} value={y}>Academic Year {y}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-black mb-1">
+                  3. Fee Category / Item <span className="text-rose-500">*</span>
                 </label>
                 <select
                   value={feeForm.category}
                   onChange={e => {
-                    const catObj = categories.find(c => c.code === e.target.value);
-                    setFeeForm(prev => ({
-                      ...prev,
-                      category: e.target.value,
-                      categoryName: catObj?.name || e.target.value,
-                      amount: catObj?.defaultAmount ? String(catObj.defaultAmount) : prev.amount
-                    }));
+                    if (dynamicFeeComponents.length > 0) {
+                      const comp = dynamicFeeComponents.find((c: any) => c.category === e.target.value);
+                      setFeeForm(prev => ({
+                        ...prev,
+                        category: e.target.value,
+                        categoryName: e.target.value,
+                        amount: comp?.amount ? String(comp.amount) : prev.amount
+                      }));
+                    } else {
+                      const catObj = categories.find(c => c.code === e.target.value);
+                      setFeeForm(prev => ({
+                        ...prev,
+                        category: e.target.value,
+                        categoryName: catObj?.name || e.target.value,
+                        amount: catObj?.defaultAmount ? String(catObj.defaultAmount) : prev.amount
+                      }));
+                    }
                   }}
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800"
                 >
-                  {categories.map(c => (
-                    <option key={c.code} value={c.code}>
-                      {c.name} {c.defaultAmount ? `(₹${c.defaultAmount})` : ""}
-                    </option>
-                  ))}
+                  <option value="">-- Select Fee Component --</option>
+                  {dynamicFeeComponents.length > 0 ? (
+                    dynamicFeeComponents.map((c: any, idx: number) => (
+                      <option key={`dyn-${idx}`} value={c.category}>
+                        {c.category} {c.amount ? `(₹${c.amount})` : ""}
+                      </option>
+                    ))
+                  ) : (
+                    categories.map(c => (
+                      <option key={`cat-${c.code}`} value={c.code}>
+                        {c.name} {c.defaultAmount ? `(₹${c.defaultAmount})` : ""}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -1749,7 +1801,8 @@ export default function FinanceDashboard() {
             </form>
           </motion.div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ========================================================================= */}
       {/* MODAL 2: STATEMENT / OS KHATA MODAL                                       */}
@@ -1802,6 +1855,37 @@ export default function FinanceDashboard() {
                     </span>
                   </div>
                 </div>
+
+                {/* YEAR-WISE BREAKDOWN */}
+                {studentStatementData.ledger?.years && studentStatementData.ledger.years.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-2">Year-wise Fee Breakdown</h4>
+                    <div className="space-y-3">
+                      {studentStatementData.ledger.years.map((y: any) => (
+                        <div key={y.year} className="border border-slate-200 rounded-xl bg-white overflow-hidden">
+                          <div className="flex justify-between items-center p-3 bg-slate-50 border-b border-slate-100">
+                            <span className="font-bold text-sm text-slate-800">Year {y.year}</span>
+                            <div className="flex gap-4 text-xs font-mono">
+                              <span className="text-slate-500">Total: <span className="font-bold text-slate-900">{formatCurrency(y.yearTotal)}</span></span>
+                              <span className="text-slate-500">Paid: <span className="font-bold text-emerald-600">{formatCurrency(y.yearPaid)}</span></span>
+                              <span className="text-slate-500">OS: <span className="font-bold text-rose-600">{formatCurrency(y.yearOS)}</span></span>
+                            </div>
+                          </div>
+                          {y.components && y.components.length > 0 && (
+                            <div className="p-3 bg-white flex flex-wrap gap-2">
+                              {y.components.map((c: any, i: number) => (
+                                <div key={i} className="px-2.5 py-1 rounded-md bg-slate-50 border border-slate-100 flex items-center gap-2 text-[10px]">
+                                  <span className="font-bold text-slate-600">{c.category}</span>
+                                  <span className="text-slate-400 font-mono">{formatCurrency(c.amount)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-2">Past Receipts & Payments</h4>

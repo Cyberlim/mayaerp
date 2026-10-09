@@ -24,7 +24,8 @@ import {
   ChevronRight,
   Book,
   Trash2,
-  X
+  X,
+  ChevronDown
 } from "lucide-react";
 
 export default function CourseDetail() {
@@ -34,7 +35,7 @@ export default function CourseDetail() {
 
   const [course, setCourse] = useState<any>(null);
   const [students, setStudents] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState("curriculum");
+  const [selectedYear, setSelectedYear] = useState<string>("All");
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -277,140 +278,56 @@ export default function CourseDetail() {
       */}
       <div className="max-w-7xl mx-auto px-6 lg:px-8 -mt-6 relative z-20">
         
-        <div className="flex gap-2 p-2 bg-white rounded-2xl shadow-lg border border-slate-100 max-w-fit mb-10">
-          <TabButton active={activeTab === 'curriculum'} onClick={() => setActiveTab('curriculum')} icon={<Map />} label="Curriculum Matrix" color={themeColor} />
-          <TabButton active={activeTab === 'students'} onClick={() => setActiveTab('students')} icon={<Users />} label="Student Roster" color={themeColor} />
+        <div className="mb-10">
+          <div className="relative inline-block">
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="appearance-none bg-slate-900 text-white font-bold text-sm px-6 py-3.5 pr-12 rounded-2xl shadow-lg border border-slate-900 outline-none focus:ring-4 focus:ring-slate-900/20 transition-all cursor-pointer hover:bg-slate-800"
+            >
+              <option value="All">All Years</option>
+              {Array.from(new Set(students.map(s => s.sessionYear || "1"))).sort((a: any, b: any) => {
+                const strA = String(a);
+                const strB = String(b);
+                return strA.localeCompare(strB);
+              }).map(year => (
+                <option key={year as string | number} value={String(year)}>
+                  Year {String(year)}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-white">
+              <ChevronDown className="w-4 h-4" />
+            </div>
+          </div>
         </div>
 
         <div className="min-h-[500px]">
-          {activeTab === 'curriculum' && (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            {(() => {
+              const filteredStudents = selectedYear === "All" ? students : students.filter(s => (s.sessionYear || 1).toString() === selectedYear);
               
-              <div className="flex flex-col sm:flex-row justify-between items-center gap-6 p-6 bg-white rounded-[2rem] shadow-sm border border-slate-100">
-                <div className="flex items-center gap-4 px-2">
-                  <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center">
-                    <Map className="w-6 h-6 text-slate-700" />
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">Academic Curriculum Matrix</h2>
-                    <p className="text-slate-500 font-semibold text-sm">Map of semesters and assigned subjects</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setModalType("semester")}
-                  className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl font-bold shadow-xl hover:-translate-y-1 hover:shadow-[0_10px_20px_rgba(0,0,0,0.15)] transition-all"
-                >
-                  <Plus className="w-5 h-5" />
-                  Add Semester
-                </button>
-              </div>
-
-              {curriculum.length === 0 ? (
-                <div className="w-full bg-white rounded-[3rem] border border-slate-100 p-20 text-center shadow-sm">
-                  <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <BookOpen className="w-12 h-12 text-slate-300" />
-                  </div>
-                  <h3 className="text-2xl font-black text-slate-800 mb-3">Empty Curriculum</h3>
-                  <p className="text-slate-500 font-medium max-w-md mx-auto mb-8">
-                    The curriculum matrix is currently empty. Start by adding semesters and subjects to build out the academic structure.
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {curriculum.map((sem: any, idx: number) => (
-                    <div key={idx} className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative">
-                      
-                      {/* Semester Header */}
-                      <div className="flex justify-between items-start mb-8 pb-6 border-b border-slate-100">
-                        <div className="flex items-center gap-4">
-                          <div className="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-2xl shadow-inner" style={{ backgroundColor: themeColor + '15', color: themeColor }}>
-                            {sem.semester}
-                          </div>
-                          <div>
-                            <h3 className="text-2xl font-black text-slate-900">Semester {sem.semester}</h3>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{sem.credits || 0} Expected Credits</p>
-                          </div>
-                        </div>
-                        <button 
-                          onClick={() => { setModalType("section"); setModalData({ semesterIndex: idx }); }}
-                          className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 font-bold rounded-xl text-sm hover:bg-indigo-100 transition-colors"
-                        >
-                          <Plus className="w-4 h-4" /> Section
-                        </button>
-                      </div>
-
-                      {/* Sections List */}
-                      {(!sem.sections || sem.sections.length === 0) ? (
-                        <div className="flex flex-col items-center py-6 border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/50">
-                           <p className="text-sm font-semibold text-slate-500">No sections configured.</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-6">
-                          {sem.sections.map((sec: any, sIdx: number) => (
-                            <div key={sIdx} className="bg-[#F8FAFC] rounded-2xl p-5 border border-slate-100">
-                              
-                              <div className="flex justify-between items-center mb-4">
-                                <h4 className="font-bold text-slate-700">{sec.name}</h4>
-                                <div className="flex gap-2">
-                                  <button onClick={() => { setModalType("subject"); setModalData({ semesterIndex: idx, sectionIndex: sIdx }); }} className="text-indigo-600 p-1.5 hover:bg-indigo-100 rounded-lg">
-                                    <Plus className="w-4 h-4" />
-                                  </button>
-                                  <button onClick={() => handleDeleteSection(idx, sIdx)} className="text-rose-500 p-1.5 hover:bg-rose-100 rounded-lg">
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </div>
-
-                              <div className="space-y-3">
-                                {(!sec.subjects || sec.subjects.length === 0) ? (
-                                  <p className="text-xs text-slate-400 font-medium italic">No subjects added.</p>
-                                ) : (
-                                  sec.subjects.map((sub: any, subIdx: number) => (
-                                    <div key={subIdx} className="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-slate-100">
-                                      <div className="flex items-center gap-3">
-                                        <Book className="w-4 h-4 text-slate-400" />
-                                        <div>
-                                          <p className="text-sm font-bold text-slate-900">{sub.name}</p>
-                                          <p className="text-[10px] font-bold text-slate-400">Instr: {sub.facultyId || "Not Allocated"}</p>
-                                        </div>
-                                      </div>
-                                      <span className="px-2 py-1 bg-amber-50 text-amber-600 rounded-lg text-xs font-black">{sub.credits} Cr</span>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
+              if (filteredStudents.length === 0) {
+                return (
+                  <div className="w-full bg-white rounded-[3rem] border border-slate-100 p-20 text-center shadow-sm">
+                    <div className="w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <Users className="w-12 h-12 text-indigo-300" />
                     </div>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {activeTab === 'students' && (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-              {students.length === 0 ? (
-                <div className="w-full bg-white rounded-[3rem] border border-slate-100 p-20 text-center shadow-sm">
-                  <div className="w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <Users className="w-12 h-12 text-indigo-300" />
+                    <h3 className="text-2xl font-black text-slate-800 mb-3">Student Roster is Empty</h3>
+                    <p className="text-slate-500 font-medium max-w-md mx-auto">
+                      No active students are currently enrolled in {course.code} for the selected year.
+                    </p>
                   </div>
-                  <h3 className="text-2xl font-black text-slate-800 mb-3">Student Roster is Empty</h3>
-                  <p className="text-slate-500 font-medium max-w-md mx-auto">
-                    No active students are currently enrolled in {course.code}. Once admissions are approved, they will appear here.
-                  </p>
-                </div>
-              ) : (
+                );
+              }
+
+              return (
                 <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
                   <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                    <h3 className="text-lg font-black text-slate-900">Enrolled Students ({students.length})</h3>
+                    <h3 className="text-lg font-black text-slate-900">Enrolled Students ({filteredStudents.length})</h3>
                   </div>
                   <div className="divide-y divide-slate-100">
-                    {students.map((s, idx) => (
+                    {filteredStudents.map((s, idx) => (
                       <div key={idx} onClick={() => router.push(`/dashboard/students/${s._id}`)} className="p-6 hover:bg-slate-50 transition-colors flex items-center gap-6 cursor-pointer group">
                         <div className="w-14 h-14 bg-indigo-50 rounded-full flex items-center justify-center border border-indigo-100 overflow-hidden shrink-0 group-hover:scale-105 transition-transform">
                           {s.applicantPhoto ? (
@@ -430,10 +347,7 @@ export default function CourseDetail() {
                         <div className="text-right hidden sm:block">
                           <div className="flex gap-2 justify-end mb-1">
                             <span className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-wider">
-                              SEM {s.sessionYear || 1}
-                            </span>
-                            <span className="px-2 py-1 bg-purple-50 text-purple-600 rounded-lg text-[10px] font-black uppercase tracking-wider">
-                              SEC A
+                              YEAR {s.sessionYear || 1}
                             </span>
                           </div>
                           <p className="text-xs font-semibold text-slate-400">{s.email}</p>
@@ -442,9 +356,9 @@ export default function CourseDetail() {
                     ))}
                   </div>
                 </div>
-              )}
-            </motion.div>
-          )}
+              );
+            })()}
+          </motion.div>
         </div>
 
       </div>
@@ -575,20 +489,3 @@ function StatGlass({ val, label, icon }: any) {
   );
 }
 
-function TabButton({ active, onClick, icon, label, color }: any) {
-  return (
-    <button 
-      onClick={onClick}
-      className={`flex items-center gap-3 px-6 py-3.5 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${
-        active 
-          ? "bg-slate-900 text-white shadow-md" 
-          : "bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-900"
-      }`}
-    >
-      <div className={active ? "text-white" : "text-slate-400"}>
-        {React.cloneElement(icon, { className: "w-4 h-4" })}
-      </div>
-      {label}
-    </button>
-  );
-}

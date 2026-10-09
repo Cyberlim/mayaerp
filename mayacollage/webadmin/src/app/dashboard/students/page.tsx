@@ -69,6 +69,7 @@ export default function StudentManagementDashboard() {
   const [batchYear, setBatchYear] = useState("");
   const [batchBranch, setBatchBranch] = useState("");
   const [batchProgram, setBatchProgram] = useState("");
+  const [batchCurrentSemester, setBatchCurrentSemester] = useState("");
   const [newSemester, setNewSemester] = useState(1);
   const [isBatchUpdating, setIsBatchUpdating] = useState(false);
 
@@ -166,6 +167,7 @@ export default function StudentManagementDashboard() {
           sessionYear: batchYear || undefined,
           selectedBranch: batchBranch || undefined,
           selectedProgram: batchProgram || undefined,
+          selectedSemester: batchCurrentSemester || undefined,
           newSemester
         })
       });
@@ -1327,6 +1329,20 @@ export default function StudentManagementDashboard() {
                     <option value="">All Batches</option>
                     {uniqueBatches.map((b: any) => (
                       <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Current Semester</label>
+                  <select 
+                    value={batchCurrentSemester}
+                    onChange={e => setBatchCurrentSemester(e.target.value)}
+                    className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl text-slate-800 outline-none"
+                  >
+                    <option value="">All Semesters</option>
+                    {[1,2,3,4,5,6,7,8,9,10].map(sem => (
+                      <option key={sem} value={sem}>Semester {sem}</option>
                     ))}
                   </select>
                 </div>

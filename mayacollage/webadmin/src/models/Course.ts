@@ -7,7 +7,7 @@ const courseSchema = new mongoose.Schema({
   duration: { type: Number, required: true },
   intakeCapacity: { type: Number, required: true },
   coordinator: { type: String, required: true, trim: true },
-  tuitionFee: { type: Number, required: true },
+  tuitionFee: { type: Number },
   labIndex: { type: String, trim: true },
   curriculum: [{
     semester: Number,
@@ -28,6 +28,17 @@ const courseSchema = new mongoose.Schema({
   semesterFees: [{
     semester: Number,
     fee: Number,
+  }],
+  feeStructureTemplate: [{
+    year: { type: Number, required: true },
+    totalYearlyFee: { type: Number, default: 0 },
+    components: [{
+      category: { type: String, required: true },
+      amount: { type: Number, default: 0 },
+      isMandatory: { type: Boolean, default: true },
+      frequency: { type: String, default: "Annual" },
+      months: [String]
+    }]
   }],
 }, { timestamps: true });
 

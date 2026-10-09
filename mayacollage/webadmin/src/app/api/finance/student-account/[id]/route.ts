@@ -23,7 +23,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const studentDoc = await Student.findById(studentId)
       .populate('selectedBranch', 'name code')
-      .populate('selectedProgram', 'name code tuitionFee totalSemesters duration semesterFees coordinator')
+      .populate('selectedProgram', 'name code tuitionFee totalSemesters duration semesterFees coordinator feeStructureTemplate')
       .lean();
 
     const transactions = await FeeTransaction.find({ studentId }).sort({ paymentDate: -1, createdAt: -1 }).lean();
@@ -43,7 +43,33 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     let totalAssessed = 0;
     let totalPaid = 0;
 
-    if (student.fees?.isConfigured && Array.isArray(student.fees?.years) && student.fees.years.length > 0) {
+    if (course?.feeStructureTemplate && course.feeStructureTemplate.length > 0) {
+      yearsData = course.feeStructureTemplate.map((ft: any) => {
+        const yNum = ft.year;
+        const yearTotal = ft.totalYearlyFee || 0;
+        
+        // Find transactions for this year
+        const yrTxns = transactions.filter((t: any) => 
+          t.academicYear === `Year ${yNum}` || 
+          t.semester === (yNum * 2 - 1) || 
+          t.semester === (yNum * 2)
+        );
+        const yearPaid = yrTxns.reduce((sum: number, t: any) => sum + (Number(t.amount) || 0), 0);
+        const yearOS = Math.max(0, yearTotal - yearPaid);
+
+        totalAssessed += yearTotal;
+        totalPaid += yearPaid;
+
+        return {
+          year: yNum,
+          components: ft.components,
+          yearTotal,
+          yearPaid,
+          yearOS,
+          status: yearOS === 0 && yearTotal > 0 ? 'Cleared' : yearPaid > 0 ? 'Partial' : 'Pending'
+        };
+      });
+    } else if (student.fees?.isConfigured && Array.isArray(student.fees?.years) && student.fees.years.length > 0) {
       yearsData = student.fees.years.map((y: any, idx: number) => {
         const yNum = y.year || idx + 1;
         const tuitionTot = Number(y.tuition?.total) || 0;

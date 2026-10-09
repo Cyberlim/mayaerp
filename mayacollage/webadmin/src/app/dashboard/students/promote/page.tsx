@@ -9,23 +9,30 @@ export default function BatchPromotePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [previewStudents, setPreviewStudents] = useState<any[]>([]);
+  const [sessionYears, setSessionYears] = useState<string[]>([]);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   const [formData, setFormData] = useState({
     selectedBranch: "",
     selectedProgram: "",
     sessionYear: "",
+    selectedSemester: "",
     newSemester: 2,
   });
 
-  // Fetch Branches and Courses
+  // Fetch Branches, Courses, and Session Years
   useEffect(() => {
     Promise.all([
       fetch("/api/branches").then(res => res.json()),
-      fetch("/api/courses").then(res => res.json())
-    ]).then(([branchesData, coursesData]) => {
+      fetch("/api/courses").then(res => res.json()),
+      fetch("/api/students").then(res => res.json())
+    ]).then(([branchesData, coursesData, studentsData]) => {
       setBranches(Array.isArray(branchesData) ? branchesData : []);
       setCourses(Array.isArray(coursesData) ? coursesData : []);
+      if (Array.isArray(studentsData)) {
+        const uniqueYears = Array.from(new Set(studentsData.map(s => s.sessionYear || s.batch).filter(Boolean)));
+        setSessionYears(uniqueYears as string[]);
+      }
     }).catch(console.error);
   }, []);
 
@@ -35,7 +42,7 @@ export default function BatchPromotePage() {
   );
 
   const handlePreview = async () => {
-    if (!formData.selectedBranch && !formData.selectedProgram && !formData.sessionYear) {
+    if (!formData.selectedBranch && !formData.selectedProgram && !formData.sessionYear && !formData.selectedSemester) {
       setMessage({ type: 'error', text: 'Please select at least one filter criteria to preview students.' });
       return;
     }
@@ -49,6 +56,7 @@ export default function BatchPromotePage() {
       if (formData.selectedBranch) queryParams.append("selectedBranch", formData.selectedBranch);
       if (formData.selectedProgram) queryParams.append("selectedProgram", formData.selectedProgram);
       if (formData.sessionYear) queryParams.append("sessionYear", formData.sessionYear);
+      if (formData.selectedSemester) queryParams.append("selectedSemester", formData.selectedSemester);
 
       const res = await fetch(`/api/students?${queryParams.toString()}`);
       if (res.ok) {
@@ -69,8 +77,8 @@ export default function BatchPromotePage() {
 
   const handlePromote = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.selectedBranch && !formData.selectedProgram && !formData.sessionYear) {
-      setMessage({ type: 'error', text: 'Please select at least one filter criteria (Branch, Course, or Year).' });
+    if (!formData.selectedBranch && !formData.selectedProgram && !formData.sessionYear && !formData.selectedSemester) {
+      setMessage({ type: 'error', text: 'Please select at least one filter criteria (Branch, Course, Year, or Current Semester).' });
       return;
     }
 
@@ -85,6 +93,7 @@ export default function BatchPromotePage() {
           selectedBranch: formData.selectedBranch || undefined,
           selectedProgram: formData.selectedProgram || undefined,
           sessionYear: formData.sessionYear || undefined,
+          selectedSemester: formData.selectedSemester || undefined,
           newSemester: Number(formData.newSemester)
         })
       });
@@ -92,7 +101,9 @@ export default function BatchPromotePage() {
       const data = await res.json();
       
       if (res.ok) {
-        setMessage({ type: 'success', text: `Successfully promoted ${data.modifiedCount} students to Semester ${formData.newSemester}.` });
+        setMessage({ type: 'success', text: `Matched ${data.matchedCount} students. Successfully promoted ${data.modifiedCount} students to Semester ${formData.newSemester}.` });
+        // Automatically fetch preview again to refresh the list with the updated semesters
+        handlePreview();
       } else {
         setMessage({ type: 'error', text: data.error || data.message || 'Failed to update students.' });
       }
@@ -153,13 +164,30 @@ export default function BatchPromotePage() {
 
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Session Year (Batch)</label>
-                <input 
-                  type="text" 
+                <select 
                   className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm font-semibold rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                  placeholder="e.g. 2024-2028"
                   value={formData.sessionYear}
                   onChange={(e) => setFormData({...formData, sessionYear: e.target.value})}
-                />
+                >
+                  <option value="">-- All Batches --</option>
+                  {sessionYears.map(year => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Current Semester</label>
+                <select 
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm font-semibold rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  value={formData.selectedSemester}
+                  onChange={(e) => setFormData({...formData, selectedSemester: e.target.value})}
+                >
+                  <option value="">-- All Semesters --</option>
+                  {[1,2,3,4,5,6,7,8,9,10].map(sem => (
+                    <option key={sem} value={sem}>Semester {sem}</option>
+                  ))}
+                </select>
               </div>
 
             </div>
