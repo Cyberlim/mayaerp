@@ -1631,11 +1631,11 @@ export default function StudentDetailScreen() {
                           {/* Dynamic Categories / Components */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                             {fy.components && fy.components.length > 0 ? (
-                              fy.components.map((cat: any) => {
+                              fy.components.map((cat: any, idx: number) => {
                                 // Since we don't track paid amount per sub-component easily yet, we just show the component
                                 const total = cat.amount || 0;
                                 return (
-                                  <div key={cat.category} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-2">
+                                  <div key={`${cat.category}-${idx}`} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-2">
                                     <div className="flex items-center justify-between">
                                       <span className="text-xs font-bold text-slate-800">{cat.category}</span>
                                     </div>
