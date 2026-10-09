@@ -1674,6 +1674,21 @@ export default function FinanceDashboard() {
         };
         const yearSummary = getYearFeeSummary();
 
+        const getAvailableYears = () => {
+          if (!selectedStudentForFee) return [1];
+          const courseId = typeof selectedStudentForFee.selectedProgram === 'object' ? selectedStudentForFee.selectedProgram?._id : selectedStudentForFee.selectedProgram;
+          const course = courses.find((c: any) => c._id === courseId);
+          if (course) {
+             if (Array.isArray(course.feeStructureTemplate) && course.feeStructureTemplate.length > 0) {
+                 return course.feeStructureTemplate.map((t: any) => t.year).sort();
+             }
+             const yearsCount = course.duration || Math.ceil((course.totalSemesters || 8) / 2);
+             return Array.from({ length: yearsCount }).map((_, idx) => idx + 1);
+          }
+          return [1];
+        };
+        const dynamicYears = getAvailableYears();
+
         return isAddFeeModalOpen && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
           <motion.div
@@ -1738,7 +1753,7 @@ export default function FinanceDashboard() {
                   required
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 mb-3"
                 >
-                  {[1, 2, 3, 4, 5].map(y => (
+                  {dynamicYears.map(y => (
                     <option key={y} value={y}>Academic Year {y}</option>
                   ))}
                 </select>
