@@ -86,7 +86,9 @@ export async function POST(request: Request) {
       semester = 1,
       academicYear,
       notes,
-      collectedBy = "Admin Finance"
+      collectedBy = "Admin Finance",
+      receiptNumber,
+      receiptId
     } = body;
 
     if (!studentId || !amount) {
@@ -156,13 +158,27 @@ export async function POST(request: Request) {
     student.markModified('fees');
     await student.save();
 
-    // Generate readable receipt number & transaction ID
+    // Determine readable receipt number & transaction ID
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const finalReceiptNo = `RCP-STU-${dateStr}-${randomSuffix}`;
+    const manualReceipt = (typeof receiptNumber === 'string' && receiptNumber.trim()) 
+      || (typeof receiptId === 'string' && receiptId.trim()) 
+      || "";
+    const finalReceiptNo = manualReceipt !== "" ? manualReceipt : `RCP-STU-${dateStr}-${randomSuffix}`;
     const txnId = transactionId && transactionId.trim() !== ""
       ? transactionId.trim()
       : `TXN-${Date.now()}-${randomSuffix}`;
+
+    // If manual receipt number was provided, check if it already exists
+    if (manualReceipt !== "") {
+      const existing = await FeeTransaction.findOne({ receiptNumber: finalReceiptNo });
+      if (existing) {
+        return NextResponse.json(
+          { error: `Receipt ID "${finalReceiptNo}" is already in use. Please enter a unique Receipt ID.` },
+          { status: 400 }
+        );
+      }
+    }
 
     const newTxn = await FeeTransaction.create({
       studentId: student._id,

@@ -11,6 +11,11 @@ const feeTransactionSchema = new mongoose.Schema({
         ref: 'Course',
         required: true
     },
+    receiptNumber: {
+        type: String,
+        unique: true,
+        sparse: true
+    },
     amount: {
         type: Number,
         required: true

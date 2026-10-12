@@ -34,8 +34,8 @@ export default function ReceiptModal({ isOpen, onClose, receiptData }: ReceiptMo
   if (!isOpen || !receiptData) return null;
 
   const isStudent = receiptData.type === "student" || receiptData.receiptType?.toLowerCase().includes("student");
-  const receiptNo = receiptData.receiptNumber || `RCP-${receiptData._id?.slice(-8).toUpperCase() || "2026-001"}`;
-  const txnId = receiptData.transactionId || `TXN-${receiptData._id?.slice(-6) || "98765"}`;
+  const receiptNo = receiptData.receiptNumber || receiptData.receiptId || (receiptData._id ? `RCP-${receiptData._id.slice(-8).toUpperCase()}` : "2026-001");
+  const txnId = receiptData.transactionId || (receiptData._id ? `TXN-${receiptData._id.slice(-6)}` : "98765");
   const dateStr = receiptData.date ? new Date(receiptData.date).toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
@@ -216,7 +216,7 @@ export default function ReceiptModal({ isOpen, onClose, receiptData }: ReceiptMo
               <span className="font-mono font-bold text-slate-900 text-sm">{receiptNo}</span>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Date & Time</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Receipt Date</span>
               <span className="font-semibold text-slate-800">{dateStr}</span>
             </div>
             <div>

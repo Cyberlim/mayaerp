@@ -102,6 +102,7 @@ export default function StudentDetailScreen() {
     category: "tuition",
     amount: "",
     paymentMethod: "Cash",
+    receiptNumber: "",
     transactionId: "",
     paymentDate: new Date().toISOString().split("T")[0],
     notes: ""
@@ -451,7 +452,8 @@ export default function StudentDetailScreen() {
       category: matchedCategory?.code || defaultCategory,
       amount: initialAmount,
       paymentMethod: "Cash",
-      transactionId: `RCP-${Date.now().toString().slice(-6)}`,
+      receiptNumber: "",
+      transactionId: `TXN-${Date.now().toString().slice(-6)}`,
       paymentDate: new Date().toISOString().split("T")[0],
       notes: ""
     });
@@ -479,6 +481,7 @@ export default function StudentDetailScreen() {
           amount: Number(payFeeForm.amount),
           paymentDate: payFeeForm.paymentDate,
           paymentMethod: payFeeForm.paymentMethod,
+          receiptNumber: payFeeForm.receiptNumber?.trim() || undefined,
           transactionId: payFeeForm.transactionId,
           year: Number(payFeeForm.year),
           category: payFeeForm.category,
@@ -489,10 +492,29 @@ export default function StudentDetailScreen() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        showToast("Fee payment recorded successfully!");
+        showToast("Fee payment recorded & Receipt generated successfully!");
         setIsPayFeeModalOpen(false);
         if (data.student) setStudentData(data.student);
         fetchStudentData();
+
+        if (data.transaction) {
+          setSelectedReceipt({
+            ...data.transaction,
+            type: "student",
+            name: `${studentData.firstName} ${studentData.lastName}`.trim(),
+            studentId: studentData.studentId || studentData.admissionNumber,
+            course: selectedCourse?.name,
+            branch: selectedBranch?.name,
+            categoryName: categoryName,
+            amount: data.transaction.amount,
+            date: data.transaction.paymentDate || data.transaction.createdAt,
+            transactionId: data.transaction.transactionId,
+            receiptNumber: data.transaction.receiptNumber || data.receiptNumber || payFeeForm.receiptNumber?.trim(),
+            paymentMethod: data.transaction.paymentMethod || payFeeForm.paymentMethod,
+            notes: data.transaction.notes || payFeeForm.notes
+          });
+          setIsReceiptModalOpen(true);
+        }
       } else {
         alert(data.error || "Failed to record payment.");
       }
@@ -2215,7 +2237,7 @@ export default function StudentDetailScreen() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Payment Date</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Payment Date <span className="text-rose-500">*</span></label>
                     <input 
                       type="date"
                       required
@@ -2226,15 +2248,32 @@ export default function StudentDetailScreen() {
                   </div>
                 </div>
 
-                {/* Receipt / Txn ID */}
-                <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Receipt / Txn ID</label>
-                  <input 
-                    type="text"
-                    value={payFeeForm.transactionId}
-                    onChange={e => setPayFeeForm({ ...payFeeForm, transactionId: e.target.value })}
-                    className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
-                  />
+                {/* Receipt ID & Txn Ref */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">
+                      Receipt ID / Number <span className="text-slate-400 font-normal lowercase">(manual)</span>
+                    </label>
+                    <input 
+                      type="text"
+                      value={payFeeForm.receiptNumber}
+                      onChange={e => setPayFeeForm({ ...payFeeForm, receiptNumber: e.target.value })}
+                      placeholder="Auto if empty (e.g. REC-101)"
+                      className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs font-mono outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">
+                      Txn / Cheque Ref <span className="text-slate-400 font-normal lowercase">(optional)</span>
+                    </label>
+                    <input 
+                      type="text"
+                      value={payFeeForm.transactionId}
+                      onChange={e => setPayFeeForm({ ...payFeeForm, transactionId: e.target.value })}
+                      placeholder="e.g. UPI / Ref"
+                      className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs font-mono outline-none"
+                    />
+                  </div>
                 </div>
 
                 {/* Notes */}

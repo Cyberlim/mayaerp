@@ -100,6 +100,7 @@ export default function FinanceDashboard() {
     categoryName: "Tuition Fee",
     amount: "",
     paymentMethod: "Cash",
+    receiptNumber: "",
     transactionId: "",
     paymentDate: new Date().toISOString().split("T")[0],
     semester: 1,
@@ -484,6 +485,7 @@ export default function FinanceDashboard() {
         categoryName: "Tuition Fee",
         amount: "",
         paymentMethod: "Cash",
+        receiptNumber: "",
         transactionId: "",
         paymentDate: new Date().toISOString().split("T")[0],
         semester: student.selectedSemester || 1,
@@ -498,6 +500,7 @@ export default function FinanceDashboard() {
         categoryName: "Tuition Fee",
         amount: "",
         paymentMethod: "Cash",
+        receiptNumber: "",
         transactionId: "",
         paymentDate: new Date().toISOString().split("T")[0],
         semester: 1,
@@ -523,6 +526,7 @@ export default function FinanceDashboard() {
 
       const payload = {
         ...feeForm,
+        receiptNumber: feeForm.receiptNumber?.trim() || undefined,
         category: finalCategory,
         categoryName: catLabel,
         academicYear: `Year ${feeForm.year}`
@@ -545,7 +549,7 @@ export default function FinanceDashboard() {
           setSelectedReceiptForModal({
             type: "student",
             receiptType: "Student Fee Receipt",
-            receiptNumber: data.receiptNumber || `RCP-STU-${Date.now()}`,
+            receiptNumber: data.receiptNumber || data.transaction.receiptNumber || feeForm.receiptNumber?.trim() || `RCP-STU-${Date.now()}`,
             transactionId: data.transaction.transactionId,
             date: data.transaction.paymentDate,
             name: `${studentObj?.firstName || ""} ${studentObj?.lastName || ""}`.trim() || "Student",
@@ -1827,7 +1831,7 @@ export default function FinanceDashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-black mb-1">
                     Amount (INR) <span className="text-rose-500">*</span>
@@ -1842,6 +1846,21 @@ export default function FinanceDashboard() {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-black mb-1">
+                    Receipt ID / Number <span className="text-slate-400 font-normal lowercase">(optional - manual)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={feeForm.receiptNumber}
+                    onChange={e => setFeeForm(prev => ({ ...prev, receiptNumber: e.target.value }))}
+                    placeholder="Auto-generated if empty (e.g. REC-101)"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-sm font-mono focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-black mb-1">
                     Payment Mode
