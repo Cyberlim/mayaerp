@@ -58,6 +58,8 @@ const studentSchema = new mongoose.Schema({
         isConfigured: { type: Boolean, default: false },
         years: [{
             year: { type: Number, required: true },
+            discount: { type: Number, default: 0 },
+            discountReason: { type: String, default: "" },
             tuition: {
                 total: { type: Number, default: 0 },
                 paid: { type: Number, default: 0 }

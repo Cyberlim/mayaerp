@@ -40,6 +40,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     // Build years list
     let yearsData = [];
+    let totalGross = 0;
+    let totalDiscount = 0;
     let totalAssessed = 0;
     let totalPaid = 0;
 
@@ -47,17 +49,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       yearsData = student.fees.years.map((y: any, idx: number) => {
         const yNum = y.year || idx + 1;
         
-        let yearTotal = 0;
+        let yearGross = 0;
         let yearPaid = 0;
         let categories: any = {};
         let components = [];
+        const discount = Number(y.discount) || 0;
+        const discountReason = y.discountReason || "";
 
         if (y.components && y.components.length > 0) {
           components = y.components;
           components.forEach((c: any) => {
             const amt = Number(c.amount) || 0;
             const pd = Number(c.paid) || 0;
-            yearTotal += amt;
+            yearGross += amt;
             yearPaid += pd;
           });
         } else {
@@ -70,7 +74,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           const otherTot = Number(y.other?.total) || 0;
           const otherPaid = Number(y.other?.paid) || 0;
 
-          yearTotal = tuitionTot + examTot + transportTot + otherTot;
+          yearGross = tuitionTot + examTot + transportTot + otherTot;
           yearPaid = tuitionPaid + examPaid + transportPaid + otherPaid;
           
           categories = {
@@ -81,18 +85,24 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           };
         }
 
-        const yearOS = Math.max(0, yearTotal - yearPaid);
-        totalAssessed += yearTotal;
+        const yearNet = Math.max(0, yearGross - discount);
+        const yearOS = Math.max(0, yearNet - yearPaid);
+        totalGross += yearGross;
+        totalDiscount += discount;
+        totalAssessed += yearNet;
         totalPaid += yearPaid;
 
         return {
           year: yNum,
           components,
           categories,
-          yearTotal,
+          yearGross,
+          discount,
+          discountReason,
+          yearTotal: yearNet,
           yearPaid,
           yearOS,
-          status: yearOS === 0 && yearTotal > 0 ? 'Cleared' : yearPaid > 0 ? 'Partial' : 'Pending'
+          status: yearOS === 0 && yearNet > 0 ? 'Cleared' : yearPaid > 0 ? 'Partial' : 'Pending'
         };
       });
     } else if (course?.feeStructureTemplate && course.feeStructureTemplate.length > 0) {
@@ -178,6 +188,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         photo: student.applicantPhoto || student.documents?.studentPhoto || null
       },
       ledger: {
+        totalGross: totalGross || totalAssessed,
+        totalDiscount,
         totalAssessed,
         totalPaid,
         outstandingAmount,

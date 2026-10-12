@@ -47,6 +47,8 @@ const studentSchema = new mongoose.Schema({
           year: { type: Number, required: true },
           yearTotal: { type: Number, default: 0 },
           yearPaid: { type: Number, default: 0 },
+          discount: { type: Number, default: 0 },
+          discountReason: { type: String, default: "" },
           // Legacy fields (kept for backward compatibility during migration)
           tuition: {
               total: { type: Number, default: 0 },

@@ -437,7 +437,6 @@ class _AcademicManagementScreenState extends State<AcademicManagementScreen> {
 
   Widget _branchCard(Map<String, dynamic> branch, int i, double width) {
     final isXSmall = width < 500;
-    final isMobile = width < 750;
     final isDesktop = width >= 1100;
 
     final branchColor = _getColor(branch['colorHex']);

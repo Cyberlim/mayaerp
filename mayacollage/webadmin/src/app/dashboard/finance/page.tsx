@@ -223,17 +223,34 @@ export default function FinanceDashboard() {
     }
 
     const isConfigured = Boolean(student?.fees?.isConfigured && student?.fees?.years?.length > 0);
+    let gross = 0;
+    let discount = 0;
     let total = 0;
     let paid = 0;
 
     if (isConfigured && student.fees.years) {
       student.fees.years.forEach((fy: any) => {
-        total += (Number(fy.tuition?.total) || 0) + (Number(fy.exam?.total) || 0) + (Number(fy.transport?.total) || 0) + (Number(fy.other?.total) || 0);
-        paid += (Number(fy.tuition?.paid) || 0) + (Number(fy.exam?.paid) || 0) + (Number(fy.transport?.paid) || 0) + (Number(fy.other?.paid) || 0);
+        let yrGross = 0;
+        let yrPaid = 0;
+        if (fy.components && fy.components.length > 0) {
+          fy.components.forEach((c: any) => {
+            yrGross += Number(c.amount) || 0;
+            yrPaid += Number(c.paid) || 0;
+          });
+        } else {
+          yrGross += (Number(fy.tuition?.total) || 0) + (Number(fy.exam?.total) || 0) + (Number(fy.transport?.total) || 0) + (Number(fy.other?.total) || 0);
+          yrPaid += (Number(fy.tuition?.paid) || 0) + (Number(fy.exam?.paid) || 0) + (Number(fy.transport?.paid) || 0) + (Number(fy.other?.paid) || 0);
+        }
+        const yrDisc = Number(fy.discount) || 0;
+        gross += yrGross;
+        discount += yrDisc;
+        paid += yrPaid;
       });
+      total = Math.max(0, gross - discount);
     }
 
-    if (total === 0 && courseBaseFee > 0) {
+    if (total === 0 && gross === 0 && courseBaseFee > 0) {
+      gross = courseBaseFee;
       total = courseBaseFee;
     }
 
@@ -252,7 +269,7 @@ export default function FinanceDashboard() {
       else status = "unpaid";
     }
 
-    return { isConfigured, total, paid, balance, status, courseBaseFee, courseObj, studentTxns };
+    return { isConfigured, gross, discount, total, paid, balance, status, courseBaseFee, courseObj, studentTxns };
   };
 
   // Filtered Students
@@ -1083,6 +1100,11 @@ export default function FinanceDashboard() {
                             >
                               {isCleared ? "CLEARED" : summary.paid > 0 ? "PARTIAL DUE" : "FULL DUE"}
                             </span>
+                            {summary.discount > 0 && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                Disc: -{formatCurrency(summary.discount)}
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 font-medium mt-0.5">
@@ -1105,11 +1127,22 @@ export default function FinanceDashboard() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-6 bg-slate-50 p-2.5 px-4 rounded-xl border border-slate-200 text-xs w-full lg:w-auto justify-between lg:justify-start">
+                      <div className="flex items-center gap-4 sm:gap-6 bg-slate-50 p-2.5 px-4 rounded-xl border border-slate-200 text-xs w-full lg:w-auto justify-between lg:justify-start">
                         <div>
-                          <span className="text-[10px] font-bold text-slate-400 uppercase block">Total Assessed</span>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase block">
+                            {summary.discount > 0 ? "Net Payable" : "Total Assessed"}
+                          </span>
                           <span className="font-mono font-black text-slate-800 text-sm">{formatCurrency(summary.total)}</span>
                         </div>
+                        {summary.discount > 0 && (
+                          <>
+                            <div className="h-6 w-px bg-slate-200"></div>
+                            <div>
+                              <span className="text-[10px] font-bold text-emerald-600 uppercase block">Concession</span>
+                              <span className="font-mono font-black text-emerald-600 text-sm">-{formatCurrency(summary.discount)}</span>
+                            </div>
+                          </>
+                        )}
                         <div className="h-6 w-px bg-slate-200"></div>
                         <div>
                           <span className="text-[10px] font-bold text-emerald-600 uppercase block">Deposited</span>
@@ -1655,11 +1688,13 @@ export default function FinanceDashboard() {
         const dynamicFeeComponents = getAvailableFeeComponents();
 
         const getYearFeeSummary = () => {
-          if (!selectedStudentForFee) return { total: 0, paid: 0, due: 0 };
+          if (!selectedStudentForFee) return { gross: 0, discount: 0, total: 0, paid: 0, due: 0, discountReason: "" };
           const yr = feeForm.year || 1;
           
-          let total = 0;
+          let gross = 0;
           let paid = 0;
+          let discount = 0;
+          let discountReason = "";
 
           const calculateComponentTotal = (c: any) => {
              const amt = Number(c.amount) || 0;
@@ -1669,29 +1704,35 @@ export default function FinanceDashboard() {
           if (selectedStudentForFee.fees?.isConfigured && Array.isArray(selectedStudentForFee.fees.years)) {
             const studentYear = selectedStudentForFee.fees.years.find((y: any) => String(y.year) === String(yr));
             if (studentYear?.components && studentYear.components.length > 0) {
-              total = studentYear.components.reduce((sum: number, c: any) => sum + calculateComponentTotal(c), 0);
+              gross = studentYear.components.reduce((sum: number, c: any) => sum + calculateComponentTotal(c), 0);
               paid = studentYear.components.reduce((sum: number, c: any) => sum + (Number(c.paid) || 0), 0);
             } else if (studentYear) {
-              total = (Number(studentYear.tuition?.total) || 0) + (Number(studentYear.exam?.total) || 0) + (Number(studentYear.transport?.total) || 0) + (Number(studentYear.other?.total) || 0);
+              gross = (Number(studentYear.tuition?.total) || 0) + (Number(studentYear.exam?.total) || 0) + (Number(studentYear.transport?.total) || 0) + (Number(studentYear.other?.total) || 0);
               paid = (Number(studentYear.tuition?.paid) || 0) + (Number(studentYear.exam?.paid) || 0) + (Number(studentYear.transport?.paid) || 0) + (Number(studentYear.other?.paid) || 0);
+            }
+            if (studentYear) {
+              discount = Number(studentYear.discount) || 0;
+              discountReason = studentYear.discountReason || "";
             }
           } 
           
-          if (total === 0) {
+          if (gross === 0) {
             const courseId = typeof selectedStudentForFee.selectedProgram === 'object' ? selectedStudentForFee.selectedProgram?._id : selectedStudentForFee.selectedProgram;
             const course = courses.find((c: any) => c._id === courseId);
             if (course) {
                if (Array.isArray(course.feeStructureTemplate)) {
                  const courseYear = course.feeStructureTemplate.find((y: any) => String(y.year) === String(yr));
                  if (courseYear?.components && courseYear.components.length > 0) {
-                   total = courseYear.components.reduce((sum: number, c: any) => sum + calculateComponentTotal(c), 0);
+                   gross = courseYear.components.reduce((sum: number, c: any) => sum + calculateComponentTotal(c), 0);
                  }
                }
-               if (total === 0) {
-                 total = Number(course.tuitionFee) || 0;
+               if (gross === 0) {
+                 gross = Number(course.tuitionFee) || 0;
                }
             }
           }
+
+          const netTotal = Math.max(0, gross - discount);
           
           const studentTxns = transactions.filter(t => 
              (t.studentId?._id === selectedStudentForFee._id || t.studentId === selectedStudentForFee._id) &&
@@ -1700,9 +1741,9 @@ export default function FinanceDashboard() {
           const txnPaid = studentTxns.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
           
           paid = Math.max(paid, txnPaid);
-          const due = Math.max(0, total - paid);
+          const due = Math.max(0, netTotal - paid);
           
-          return { total, paid, due };
+          return { gross, discount, total: netTotal, paid, due, discountReason };
         };
         const yearSummary = getYearFeeSummary();
 
@@ -1793,9 +1834,17 @@ export default function FinanceDashboard() {
                 {selectedStudentForFee && (
                   <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 flex items-center justify-between">
                     <div className="text-center px-2">
-                      <p className="text-[9px] font-black text-indigo-400 uppercase">Total Fee</p>
+                      <p className="text-[9px] font-black text-indigo-400 uppercase">
+                        {yearSummary.discount > 0 ? "Net Payable" : "Total Fee"}
+                      </p>
                       <p className="text-sm font-black text-indigo-900">₹{yearSummary.total.toLocaleString("en-IN")}</p>
                     </div>
+                    {yearSummary.discount > 0 && (
+                      <div className="text-center px-2 border-l border-indigo-200">
+                        <p className="text-[9px] font-black text-emerald-600 uppercase">Concession</p>
+                        <p className="text-sm font-black text-emerald-700">-₹{yearSummary.discount.toLocaleString("en-IN")}</p>
+                      </div>
+                    )}
                     <div className="text-center px-2 border-l border-indigo-200">
                       <p className="text-[9px] font-black text-indigo-400 uppercase">Deposited</p>
                       <p className="text-sm font-black text-emerald-600">₹{yearSummary.paid.toLocaleString("en-IN")}</p>
@@ -1958,22 +2007,28 @@ export default function FinanceDashboard() {
               </div>
             ) : studentStatementData ? (
               <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-center">
+                <div className="grid grid-cols-4 gap-2.5 p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-center">
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Total Assessed</span>
-                    <span className="font-mono font-black text-slate-900 text-base">
-                      {formatCurrency(studentStatementData.ledger?.totalAssessed)}
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Gross Total</span>
+                    <span className="font-mono font-black text-slate-900 text-sm">
+                      {formatCurrency(studentStatementData.ledger?.totalGross || studentStatementData.ledger?.totalAssessed)}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-emerald-600 uppercase block">Deposited Fee</span>
-                    <span className="font-mono font-black text-emerald-600 text-base">
+                    <span className="text-[10px] font-bold text-emerald-600 uppercase block">Concession</span>
+                    <span className="font-mono font-black text-emerald-600 text-sm">
+                      {studentStatementData.ledger?.totalDiscount > 0 ? `-${formatCurrency(studentStatementData.ledger?.totalDiscount)}` : "₹0"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-blue-600 uppercase block">Deposited</span>
+                    <span className="font-mono font-black text-blue-600 text-sm">
                       {formatCurrency(studentStatementData.ledger?.totalPaid)}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-rose-500 uppercase block">Outstanding (OS)</span>
-                    <span className="font-mono font-black text-rose-600 text-base">
+                    <span className="text-[10px] font-bold text-rose-500 uppercase block">Outstanding</span>
+                    <span className="font-mono font-black text-rose-600 text-sm">
                       {formatCurrency(studentStatementData.ledger?.outstandingAmount)}
                     </span>
                   </div>
@@ -1986,10 +2041,16 @@ export default function FinanceDashboard() {
                     <div className="space-y-3">
                       {studentStatementData.ledger.years.map((y: any) => (
                         <div key={y.year} className="border border-slate-200 rounded-xl bg-white overflow-hidden">
-                          <div className="flex justify-between items-center p-3 bg-slate-50 border-b border-slate-100">
+                          <div className="flex flex-wrap justify-between items-center p-3 bg-slate-50 border-b border-slate-100 gap-2">
                             <span className="font-bold text-sm text-slate-800">Year {y.year}</span>
-                            <div className="flex gap-4 text-xs font-mono">
-                              <span className="text-slate-500">Total: <span className="font-bold text-slate-900">{formatCurrency(y.yearTotal)}</span></span>
+                            <div className="flex flex-wrap gap-3 text-xs font-mono">
+                              <span className="text-slate-500">Gross: <span className="font-bold text-slate-900">{formatCurrency(y.yearGross || y.yearTotal)}</span></span>
+                              {y.discount > 0 && (
+                                <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">
+                                  Disc: -{formatCurrency(y.discount)}
+                                </span>
+                              )}
+                              <span className="text-slate-500">Net: <span className="font-bold text-slate-900">{formatCurrency(y.yearTotal)}</span></span>
                               <span className="text-slate-500">Paid: <span className="font-bold text-emerald-600">{formatCurrency(y.yearPaid)}</span></span>
                               <span className="text-slate-500">OS: <span className="font-bold text-rose-600">{formatCurrency(y.yearOS)}</span></span>
                             </div>
@@ -2002,6 +2063,12 @@ export default function FinanceDashboard() {
                                   <span className="text-slate-400 font-mono">{formatCurrency(c.amount)}</span>
                                 </div>
                               ))}
+                            </div>
+                          )}
+                          {y.discount > 0 && (
+                            <div className="px-3 py-1.5 bg-emerald-50/70 border-t border-emerald-100 flex items-center justify-between text-[11px] text-emerald-800">
+                              <span className="font-semibold">Special Waiver / Scholarship:</span>
+                              <span className="font-mono font-bold">-{formatCurrency(y.discount)} {y.discountReason ? `(${y.discountReason})` : ""}</span>
                             </div>
                           )}
                         </div>

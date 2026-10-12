@@ -379,6 +379,8 @@ export default function StudentDetailScreen() {
     }
 
     const ledger = studentStatementData.ledger;
+    const gross = ledger.totalGross || ledger.totalAssessed || 0;
+    const discount = ledger.totalDiscount || 0;
     const total = ledger.totalAssessed || 0;
     const paid = ledger.totalPaid || 0;
     const balance = ledger.outstandingAmount || 0;
@@ -396,7 +398,7 @@ export default function StudentDetailScreen() {
 
     const percentage = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
 
-    return { isConfigured, total, paid, balance, status, percentage };
+    return { isConfigured, gross, discount, total, paid, balance, status, percentage };
   }, [studentStatementData]);
 
   // Open Edit Fee Modal
@@ -414,6 +416,8 @@ export default function StudentDetailScreen() {
         }
         return {
           year: y.year || idx + 1,
+          discount: Number(y.discount) || 0,
+          discountReason: y.discountReason || '',
           components: components.map((c: any) => ({
              category: c.category || '',
              amount: c.amount || 0,
@@ -428,6 +432,8 @@ export default function StudentDetailScreen() {
       const duration = selectedCourse?.durationYears || 4;
       setEditFeeYears(Array.from({ length: duration }).map((_, idx) => ({
         year: idx + 1,
+        discount: 0,
+        discountReason: '',
         components: [{ category: 'Tuition Fee', amount: 0, paid: 0, frequency: 'Annual' }]
       })));
     }
@@ -438,9 +444,13 @@ export default function StudentDetailScreen() {
   // Open Add Fee Payment Modal
   const handleOpenPayFeeModal = (defaultYear = 1, defaultCategory = "tuition", defaultAmount?: number) => {
     const matchedCategory = feeCategories.find(c => c.code === defaultCategory || c.name?.toLowerCase() === defaultCategory.toLowerCase());
+    const targetYr = studentStatementData?.ledger?.years?.find((y: any) => y.year === defaultYear);
+
     let initialAmount = "";
     if (defaultAmount !== undefined && defaultAmount > 0) {
       initialAmount = String(defaultAmount);
+    } else if (targetYr && targetYr.yearOS > 0) {
+      initialAmount = String(targetYr.yearOS);
     } else if (matchedCategory && matchedCategory.defaultAmount > 0) {
       initialAmount = String(matchedCategory.defaultAmount);
     } else if (feeSummary.balance > 0 && (defaultCategory === "tuition" || defaultCategory === "all")) {
@@ -565,6 +575,18 @@ export default function StudentDetailScreen() {
     setEditFeeYears(updated);
   };
 
+  const handleEditYearDiscount = (yearIndex: number, field: "discount" | "discountReason", value: string) => {
+    const updated = [...editFeeYears];
+    const yearObj = { ...updated[yearIndex] };
+    if (field === "discount") {
+      yearObj.discount = Math.max(0, Number(value) || 0);
+    } else {
+      yearObj.discountReason = value;
+    }
+    updated[yearIndex] = yearObj;
+    setEditFeeYears(updated);
+  };
+
   const handleAddFeeComponent = (yearIndex: number) => {
     const updated = [...editFeeYears];
     const yearObj = { ...updated[yearIndex] };
@@ -625,6 +647,8 @@ export default function StudentDetailScreen() {
       ...editFeeYears,
       {
         year: nextYearNum,
+        discount: 0,
+        discountReason: '',
         components: [{ category: 'Tuition Fee', amount: 0, paid: 0, frequency: 'Annual' }]
       }
     ]);
@@ -642,7 +666,17 @@ export default function StudentDetailScreen() {
       const payload = {
         fees: {
           isConfigured: true,
-          years: editFeeYears
+          years: editFeeYears.map(yr => ({
+            year: yr.year,
+            discount: Number(yr.discount) || 0,
+            discountReason: yr.discountReason || '',
+            components: (yr.components || []).map((c: any) => ({
+              category: c.category || '',
+              amount: Number(c.amount) || 0,
+              paid: Number(c.paid) || 0,
+              frequency: c.frequency || 'Annual'
+            }))
+          }))
         }
       };
 
@@ -655,8 +689,9 @@ export default function StudentDetailScreen() {
       const updatedStudent = await res.json();
       if (res.ok && !updatedStudent.error) {
         setStudentData(updatedStudent);
-        showToast("Fee structure and payment status saved to database!");
+        showToast("Fee structure and discounts saved to database!");
         setIsEditFeeModalOpen(false);
+        fetchStudentData();
       } else {
         alert(updatedStudent.error || "Failed to update fees.");
       }
@@ -669,15 +704,21 @@ export default function StudentDetailScreen() {
   };
 
   const editModalTotals = useMemo(() => {
-    let total = 0;
+    let grossTotal = 0;
+    let totalDiscount = 0;
     let paid = 0;
     editFeeYears.forEach(y => {
+      let yrGross = 0;
       (y.components || []).forEach((c: any) => {
-        total += Number(c.amount) || 0;
+        yrGross += Number(c.amount) || 0;
         paid += Number(c.paid) || 0;
       });
+      const disc = Number(y.discount) || 0;
+      grossTotal += yrGross;
+      totalDiscount += disc;
     });
-    return { total, paid, balance: Math.max(0, total - paid) };
+    const netTotal = Math.max(0, grossTotal - totalDiscount);
+    return { grossTotal, totalDiscount, total: netTotal, paid, balance: Math.max(0, netTotal - paid) };
   }, [editFeeYears]);
 
   if (isLoading) {
@@ -1586,22 +1627,32 @@ export default function StudentDetailScreen() {
                   </div>
 
                   {/* Summary Metric Cards */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mt-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Structured</span>
-                      <div className="text-2xl font-black text-slate-900 mt-1">{formatCurrency(feeSummary.total)}</div>
-                      <span className="text-[11px] font-semibold text-slate-400">All Academic Years</span>
+                      <div className="text-xl font-black text-slate-900 mt-1">{formatCurrency(feeSummary.gross || feeSummary.total)}</div>
+                      <span className="text-[11px] font-semibold text-slate-400">Gross Structured Fees</span>
                     </div>
 
-                    <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Total Paid</span>
-                      <div className="text-2xl font-black text-emerald-600 mt-1">{formatCurrency(feeSummary.paid)}</div>
-                      <span className="text-[11px] font-semibold text-emerald-700">{feeSummary.percentage}% Completed</span>
+                    <div className="p-4 bg-emerald-50/70 rounded-2xl border border-emerald-100">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Total Concession</span>
+                      <div className="text-xl font-black text-emerald-700 mt-1">
+                        {feeSummary.discount > 0 ? `- ${formatCurrency(feeSummary.discount)}` : "₹0"}
+                      </div>
+                      <span className="text-[11px] font-semibold text-emerald-600">
+                        {feeSummary.discount > 0 ? "Scholarship / Waiver" : "No Discount Applied"}
+                      </span>
+                    </div>
+
+                    <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-indigo-700">Total Paid</span>
+                      <div className="text-xl font-black text-indigo-700 mt-1">{formatCurrency(feeSummary.paid)}</div>
+                      <span className="text-[11px] font-semibold text-indigo-600">{feeSummary.percentage}% Completed</span>
                     </div>
 
                     <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
                       <span className="text-[10px] font-black uppercase tracking-widest text-amber-600">Outstanding Due</span>
-                      <div className="text-2xl font-black text-amber-600 mt-1">{formatCurrency(feeSummary.balance)}</div>
+                      <div className="text-xl font-black text-amber-600 mt-1">{formatCurrency(feeSummary.balance)}</div>
                       <span className="text-[11px] font-semibold text-amber-700">
                         {feeSummary.balance === 0 ? "Account Cleared" : "Payment Pending"}
                       </span>
@@ -1671,8 +1722,15 @@ export default function StudentDetailScreen() {
                               </span>
                               <div>
                                 <h5 className="font-black text-slate-900 text-sm">Academic Year {fy.year}</h5>
-                                <div className="text-xs font-semibold text-slate-400">
-                                  Total: {formatCurrency(yrTotal)} • Paid: {formatCurrency(yrPaid)}
+                                <div className="text-xs font-semibold text-slate-400 flex flex-wrap items-center gap-1.5 mt-0.5">
+                                  <span>Gross: {formatCurrency(fy.yearGross || fy.yearTotal)}</span>
+                                  {fy.discount > 0 && (
+                                    <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                                      Disc: -{formatCurrency(fy.discount)}
+                                    </span>
+                                  )}
+                                  <span>• Net: <strong className="text-slate-800">{formatCurrency(fy.yearTotal)}</strong></span>
+                                  <span>• Paid: <strong className="text-emerald-600">{formatCurrency(yrPaid)}</strong></span>
                                 </div>
                               </div>
                             </div>
@@ -1701,7 +1759,6 @@ export default function StudentDetailScreen() {
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                             {fy.components && fy.components.length > 0 ? (
                               fy.components.map((cat: any, idx: number) => {
-                                // Since we don't track paid amount per sub-component easily yet, we just show the component
                                 const total = cat.amount || 0;
                                 return (
                                   <div key={`${cat.category}-${idx}`} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-2">
@@ -1737,6 +1794,25 @@ export default function StudentDetailScreen() {
                                   </div>
                                 );
                               })
+                            )}
+
+                            {/* DISCOUNT APPLIED CARD */}
+                            {fy.discount > 0 && (
+                              <div className="bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-200/80 space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-black text-emerald-900 flex items-center gap-1.5">
+                                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                                    Concession / Disc.
+                                  </span>
+                                  <span className="text-[9px] font-black text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full">
+                                    Deducted
+                                  </span>
+                                </div>
+                                <div className="text-sm font-black text-emerald-700">- {formatCurrency(fy.discount)}</div>
+                                <div className="text-[10px] font-semibold text-emerald-600 truncate">
+                                  {fy.discountReason || "Special Waiver / Scholarship"}
+                                </div>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -2344,9 +2420,19 @@ export default function StudentDetailScreen() {
               </div>
 
               <div className="px-8 py-3 bg-indigo-50/50 border-b border-indigo-100/50 flex flex-wrap justify-between items-center gap-4">
-                <div className="flex items-center gap-6 text-xs font-bold">
+                <div className="flex items-center gap-5 text-xs font-bold">
                   <div>
-                    <span className="text-slate-400 uppercase text-[10px]">Total: </span>
+                    <span className="text-slate-400 uppercase text-[10px]">Gross: </span>
+                    <span className="font-black text-slate-700">{formatCurrency(editModalTotals.grossTotal)}</span>
+                  </div>
+                  {editModalTotals.totalDiscount > 0 && (
+                    <div className="bg-emerald-100/80 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-200">
+                      <span className="uppercase text-[10px] font-black">Discount: </span>
+                      <span className="font-black">-{formatCurrency(editModalTotals.totalDiscount)}</span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-slate-400 uppercase text-[10px]">Net Total: </span>
                     <span className="font-black text-slate-900">{formatCurrency(editModalTotals.total)}</span>
                   </div>
                   <div>
@@ -2379,13 +2465,15 @@ export default function StudentDetailScreen() {
 
               <div className="p-8 space-y-6 overflow-y-auto flex-1">
                 {editFeeYears.map((yr, yIdx) => {
-                  let yrTotal = 0;
+                  let yrGross = 0;
                   let yrPaid = 0;
                   (yr.components || []).forEach((c: any) => {
-                    yrTotal += Number(c.amount) || 0;
+                    yrGross += Number(c.amount) || 0;
                     yrPaid += Number(c.paid) || 0;
                   });
-                  const yrDue = Math.max(0, yrTotal - yrPaid);
+                  const yrDiscount = Number(yr.discount) || 0;
+                  const yrNet = Math.max(0, yrGross - yrDiscount);
+                  const yrDue = Math.max(0, yrNet - yrPaid);
 
                   return (
                     <div key={yIdx} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
@@ -2397,7 +2485,9 @@ export default function StudentDetailScreen() {
                           </span>
                           <span className="font-black text-slate-800 text-sm">Academic Year {yr.year}</span>
                           <span className="text-xs font-semibold text-slate-400">
-                            (Total: {formatCurrency(yrTotal)} | Paid: {formatCurrency(yrPaid)} | Due: {formatCurrency(yrDue)})
+                            (Gross: {formatCurrency(yrGross)}
+                            {yrDiscount > 0 ? ` | Disc: -${formatCurrency(yrDiscount)}` : ""}
+                            {` | Net: ${formatCurrency(yrNet)} | Paid: ${formatCurrency(yrPaid)} | Due: ${formatCurrency(yrDue)}`})
                           </span>
                         </div>
 
@@ -2472,11 +2562,61 @@ export default function StudentDetailScreen() {
                           </div>
                         ))}
                       </div>
+
+                      {/* Year Discount & Concession Configuration */}
+                      <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
+                              %
+                            </div>
+                            <div>
+                              <span className="text-xs font-black text-emerald-950 uppercase tracking-wide">
+                                Discount / Concession / Scholarship (Year {yr.year})
+                              </span>
+                              <p className="text-[10px] font-semibold text-emerald-700">Direct deduction from this year&apos;s total payable amount</p>
+                            </div>
+                          </div>
+                          {yrDiscount > 0 && (
+                            <span className="text-[10px] font-black text-emerald-800 bg-emerald-200/70 px-2.5 py-0.5 rounded-full">
+                              -{formatCurrency(yrDiscount)} Applied
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                          <div>
+                            <label className="text-[10px] font-black uppercase text-emerald-800 block mb-1">
+                              Discount Amount (₹)
+                            </label>
+                            <input 
+                              type="number"
+                              min="0"
+                              value={yr.discount ?? 0}
+                              onChange={e => handleEditYearDiscount(yIdx, "discount", e.target.value)}
+                              placeholder="e.g. 15000"
+                              className="w-full bg-white border border-emerald-300 p-2.5 rounded-xl font-black text-emerald-800 text-xs outline-none focus:ring-2 focus:ring-emerald-500/30"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-black uppercase text-emerald-800 block mb-1">
+                              Reason / Scheme / Scholarship Note
+                            </label>
+                            <input 
+                              type="text"
+                              value={yr.discountReason ?? ""}
+                              onChange={e => handleEditYearDiscount(yIdx, "discountReason", e.target.value)}
+                              placeholder="e.g. Merit Scholarship / Early Bird / Concession"
+                              className="w-full bg-white border border-emerald-300 p-2.5 rounded-xl font-bold text-slate-800 text-xs outline-none focus:ring-2 focus:ring-emerald-500/30"
+                            />
+                          </div>
+                        </div>
+                      </div>
                       
                       <button 
                         type="button" 
                         onClick={() => handleAddFeeComponent(yIdx)}
-                        className="w-full mt-4 py-2 border border-dashed border-slate-300 hover:border-indigo-400 text-slate-500 hover:text-indigo-600 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 hover:bg-indigo-50/50"
+                        className="w-full mt-2 py-2 border border-dashed border-slate-300 hover:border-indigo-400 text-slate-500 hover:text-indigo-600 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 hover:bg-indigo-50/50"
                       >
                         <Plus className="w-4 h-4" /> Add Extra Charge
                       </button>

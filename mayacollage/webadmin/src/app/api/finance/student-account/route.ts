@@ -63,8 +63,21 @@ export async function GET(request: Request) {
       // Check configured fee structure in student record
       if (s.fees?.isConfigured && Array.isArray(s.fees.years) && s.fees.years.length > 0) {
         s.fees.years.forEach((y: any) => {
-          totalAssessed += (Number(y.tuition?.total) || 0) + (Number(y.exam?.total) || 0) + (Number(y.transport?.total) || 0) + (Number(y.other?.total) || 0);
-          totalPaid += (Number(y.tuition?.paid) || 0) + (Number(y.exam?.paid) || 0) + (Number(y.transport?.paid) || 0) + (Number(y.other?.paid) || 0);
+          let yrGross = 0;
+          let yrPaid = 0;
+          if (y.components && y.components.length > 0) {
+            y.components.forEach((c: any) => {
+              yrGross += Number(c.amount) || 0;
+              yrPaid += Number(c.paid) || 0;
+            });
+          } else {
+            yrGross += (Number(y.tuition?.total) || 0) + (Number(y.exam?.total) || 0) + (Number(y.transport?.total) || 0) + (Number(y.other?.total) || 0);
+            yrPaid += (Number(y.tuition?.paid) || 0) + (Number(y.exam?.paid) || 0) + (Number(y.transport?.paid) || 0) + (Number(y.other?.paid) || 0);
+          }
+          const yrDiscount = Number(y.discount) || 0;
+          const yrNet = Math.max(0, yrGross - yrDiscount);
+          totalAssessed += yrNet;
+          totalPaid += yrPaid;
         });
       } else {
         totalAssessed = courseTuition;
