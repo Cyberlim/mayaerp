@@ -1,17 +1,11 @@
 import { NextResponse } from 'next/server';
-import connectDB from '@/lib/mongodb';
-import { FeeTransaction } from '@/models/FeeTransaction';
-import { Payout } from '@/models/Payout';
-import { Student } from '@/models/Student';
-import { User } from '@/models/User';
-import { Course } from '@/models/Course';
-import { Branch } from '@/models/Branch';
+import { query as pgQuery } from '@/lib/postgres';
+import { getCache, setCache, DEFAULT_CACHE_TTL } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
-    await connectDB();
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') || 'all'; // 'student', 'employee', 'all'
     const query = searchParams.get('query') || '';
@@ -20,28 +14,47 @@ export async function GET(request: Request) {
     if (id) {
       // Direct lookup by ID or receiptNumber
       if (type === 'student' || type === 'all') {
-        const studentTxn = await FeeTransaction.findById(id)
-          .populate({ path: 'studentId', model: Student, populate: [{ path: 'selectedBranch' }, { path: 'selectedProgram' }] })
-          .populate({ path: 'courseId', model: Course })
-          .lean();
+        const studentTxnRes = await pgQuery(`
+          SELECT 
+            t.*,
+            s.first_name as student_first_name,
+            s.last_name as student_last_name,
+            s.student_id as student_code,
+            s.enrollment_number as student_enrollment_number,
+            s.admission_number as student_admission_number,
+            s.mobile as student_mobile,
+            s.email as student_email,
+            b.name as branch_name,
+            c.name as course_name,
+            c.code as course_code
+          FROM fee_transactions t
+          LEFT JOIN students s ON t.student_id = s.id
+          LEFT JOIN branches b ON s.selected_branch = b.id
+          LEFT JOIN courses c ON t.course_id = c.id
+          WHERE t.id = $1 OR t.receipt_number = $1 OR t.transaction_id = $1
+          LIMIT 1
+        `, [id]);
 
-        if (studentTxn) {
+        if (studentTxnRes.rows.length > 0) {
           return NextResponse.json({
             type: 'student',
-            receipt: formatStudentReceipt(studentTxn)
+            receipt: formatStudentReceipt(studentTxnRes.rows[0])
           });
         }
       }
 
       if (type === 'employee' || type === 'all') {
-        const employeePayout = await Payout.findById(id)
-          .populate({ path: 'payeeId', model: User, select: 'firstName lastName email role department phone employeeId' })
-          .lean();
+        const payoutRes = await pgQuery(`
+          SELECT p.*
+          FROM payouts p
+          WHERE p.id = $1 OR p.receipt_number = $1 OR p.transaction_id = $1
+          LIMIT 1
+        `, [id]);
 
-        if (employeePayout) {
+        if (payoutRes.rows.length > 0) {
           return NextResponse.json({
             type: 'employee',
-            receipt: formatEmployeeReceipt(employeePayout)
+            receipt: formatEmployeeReceipt(payoutRes.rows[0])
           });
         }
       }
@@ -49,23 +62,46 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Receipt record not found' }, { status: 404 });
     }
 
-    // List recent receipts for both branches
-    const [studentTxns, payouts] = await Promise.all([
-      FeeTransaction.find({})
-        .populate({ path: 'studentId', model: Student, select: 'firstName lastName studentId enrollmentNumber admissionNumber' })
-        .populate({ path: 'courseId', model: Course, select: 'name code' })
-        .sort({ paymentDate: -1 })
-        .limit(50)
-        .lean(),
-      Payout.find({})
-        .populate({ path: 'payeeId', model: User, select: 'firstName lastName email role department' })
-        .sort({ paymentDate: -1 })
-        .limit(50)
-        .lean()
+    const cacheKey = `fee:receipts:${type}:${query.toLowerCase()}`;
+    const cachedReceipts = await getCache(cacheKey);
+    if (cachedReceipts) {
+      return NextResponse.json(cachedReceipts, {
+        headers: { "X-Cache-Source": "Upstash-Redis" }
+      });
+    }
+
+    // List recent receipts from PostgreSQL
+    const [txnsRes, payoutsRes] = await Promise.all([
+      pgQuery(`
+        SELECT 
+          t.*,
+          s.first_name as student_first_name,
+          s.last_name as student_last_name,
+          s.student_id as student_code,
+          s.enrollment_number as student_enrollment_number,
+          s.admission_number as student_admission_number,
+          s.mobile as student_mobile,
+          s.email as student_email,
+          b.name as branch_name,
+          c.name as course_name,
+          c.code as course_code
+        FROM fee_transactions t
+        LEFT JOIN students s ON t.student_id = s.id
+        LEFT JOIN branches b ON s.selected_branch = b.id
+        LEFT JOIN courses c ON t.course_id = c.id
+        ORDER BY t.payment_date DESC, t.created_at DESC
+        LIMIT 100
+      `),
+      pgQuery(`
+        SELECT p.*
+        FROM payouts p
+        ORDER BY p.payment_date DESC, p.created_at DESC
+        LIMIT 100
+      `)
     ]);
 
-    const formattedStudentReceipts = studentTxns.map(t => formatStudentReceipt(t));
-    const formattedEmployeeReceipts = payouts.map(p => formatEmployeeReceipt(p));
+    const formattedStudentReceipts = txnsRes.rows.map(formatStudentReceipt);
+    const formattedEmployeeReceipts = payoutsRes.rows.map(formatEmployeeReceipt);
 
     let combined = [];
     if (type === 'student') combined = formattedStudentReceipts;
@@ -82,7 +118,12 @@ export async function GET(request: Request) {
       );
     }
 
-    return NextResponse.json(combined);
+    // Cache in Redis
+    await setCache(cacheKey, combined, DEFAULT_CACHE_TTL);
+
+    return NextResponse.json(combined, {
+      headers: { "X-Cache-Source": "Neon-PostgreSQL" }
+    });
 
   } catch (error: any) {
     console.error('Error in GET /api/finance/receipts:', error);
@@ -90,69 +131,55 @@ export async function GET(request: Request) {
   }
 }
 
-function formatStudentReceipt(txn: any) {
-  const student = txn.studentId || {};
-  const course = txn.courseId || student.selectedProgram || {};
-  const branch = student.selectedBranch || {};
+function formatStudentReceipt(row: any) {
+  const name = `${row.student_first_name || ''} ${row.student_last_name || ''}`.trim() || 'Student';
+  const idNumber = row.student_code || row.student_enrollment_number || row.student_admission_number || 'PENDING';
 
   return {
     receiptType: 'Student Fee Receipt',
     type: 'student',
-    _id: txn._id,
-    receiptNumber: txn.receiptNumber || `RCP-STU-${txn._id.toString().slice(-8).toUpperCase()}`,
-    transactionId: txn.transactionId || `TXN-${txn._id.toString().slice(-6)}`,
-    date: txn.paymentDate || txn.createdAt,
-    name: `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Student',
-    idNumber: student.enrollmentNumber || student.admissionNumber || student.studentId || 'N/A',
-    enrollmentNumber: student.enrollmentNumber || 'N/A',
-    admissionNumber: student.admissionNumber || 'N/A',
-    program: course.name || 'Academic Program',
-    programCode: course.code || '',
-    branch: branch.name || 'Main Campus',
-    semester: txn.semester || 1,
-    academicYear: txn.academicYear || 'Year 1',
-    category: txn.category || 'tuition',
-    categoryName: txn.categoryName || 'Tuition Fee',
-    amount: txn.amount || 0,
-    paymentMethod: txn.paymentMethod || 'Cash',
-    status: txn.status || 'Completed',
-    collectedBy: txn.collectedBy || 'Admin Finance',
-    notes: txn.notes || 'Institutional fee deposit receipt',
-    items: [
-      {
-        description: txn.categoryName || `${txn.category || 'Tuition'} Fee (${txn.academicYear || 'Year 1'}, Sem ${txn.semester || 1})`,
-        amount: txn.amount || 0
-      }
-    ]
+    _id: row.id,
+    id: row.id,
+    receiptNumber: row.receipt_number || `RCP-STU-${row.id?.slice(-8).toUpperCase()}`,
+    transactionId: row.transaction_id || `TXN-${row.id?.slice(-6)}`,
+    date: row.payment_date || row.created_at,
+    name,
+    idNumber,
+    course: row.course_name || 'Academic Program',
+    branch: row.branch_name || 'Main Campus',
+    categoryName: row.category_name || row.category?.toUpperCase() || 'TUITION FEE',
+    amount: Number(row.amount) || 0,
+    paymentMethod: row.payment_method || 'Cash',
+    semester: row.semester ? `Semester ${row.semester}` : 'Regular',
+    academicYear: row.academic_year || 'Year 1',
+    collectedBy: row.collected_by || 'Admin Finance',
+    notes: row.notes || 'Institutional tuition and academic dues receipt',
+    status: row.status || 'Completed'
   };
 }
 
-function formatEmployeeReceipt(payout: any) {
-  const payee = payout.payeeId || {};
-  const name = payout.payeeName || `${payee.firstName || ''} ${payee.lastName || ''}`.trim() || 'Employee';
+function formatEmployeeReceipt(row: any) {
+  const name = row.payee_name || (row.user_first_name ? `${row.user_first_name} ${row.user_last_name || ''}`.trim() : 'Staff Member');
+  const idNumber = row.payee_id || 'STAFF';
 
   return {
-    receiptType: 'Employee Payment Voucher',
+    receiptType: 'Staff Payout Voucher',
     type: 'employee',
-    _id: payout._id,
-    receiptNumber: payout.receiptNumber || `RCP-EMP-${payout._id.toString().slice(-8).toUpperCase()}`,
-    transactionId: payout.transactionId || `TXN-${payout._id.toString().slice(-6)}`,
-    date: payout.paymentDate || payout.createdAt,
+    _id: row.id,
+    id: row.id,
+    receiptNumber: row.receipt_number || `VCH-STAFF-${row.id?.slice(-8).toUpperCase()}`,
+    transactionId: row.transaction_id || `PAY-${row.id?.slice(-6)}`,
+    date: row.payment_date || row.created_at,
     name,
-    idNumber: payee.employeeId || payee._id?.toString().slice(-6) || 'EMP-001',
-    designation: payout.designation || payee.role || 'Staff Member',
-    department: payout.department || payee.department || 'Administration',
-    payoutType: payout.payoutType || 'Salary / Disbursal',
-    amount: payout.amount || 0,
-    paymentMethod: payout.paymentMethod || 'Bank Transfer',
-    status: payout.status || 'Completed',
-    disbursedBy: payout.disbursedBy || 'Finance Controller',
-    notes: payout.notes || 'Institutional remuneration disbursal',
-    items: [
-      {
-        description: `${payout.payoutType || 'Salary'} Disbursal - ${payout.monthYear || 'Current Cycle'}`,
-        amount: payout.amount || 0
-      }
-    ]
+    idNumber,
+    designation: row.designation || 'Faculty / Staff',
+    department: row.department || 'Academics',
+    payoutType: row.payout_type || 'Salary',
+    amount: Number(row.amount) || 0,
+    paymentMethod: row.payment_method || 'Bank Transfer',
+    monthYear: row.month_year || 'Current Period',
+    disbursedBy: row.disbursed_by || 'Admin Finance',
+    notes: row.notes || 'Institutional staff compensation disbursement',
+    status: row.status || 'Completed'
   };
 }

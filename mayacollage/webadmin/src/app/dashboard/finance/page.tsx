@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   CreditCard,
   Landmark,
   Users,
   User,
-  ExternalLink,
   Wallet,
   CheckCircle2,
   Plus,
@@ -17,38 +17,206 @@ import {
   FileText,
   Search,
   AlertTriangle,
-  Edit3,
   RefreshCw,
   Printer,
   Bell,
-  Send,
   ShoppingBag,
   Shirt,
-  ShieldAlert,
-  Phone,
   Calendar,
-  Sparkles,
   Layers,
   Settings,
-  Save,
-  MessageSquare,
   Copy,
-  BookOpen,
-  Check,
-  DollarSign,
-  Briefcase,
   ChevronDown,
-  LayoutGrid,
-  Trash2
+  Trash2,
+  Zap,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  Clock,
+  Briefcase,
+  GraduationCap,
+  Receipt,
+  ExternalLink,
+  ArrowRight,
+  Tag,
+  ShieldCheck,
+  Sparkles,
+  Edit3,
+  Check
 } from "lucide-react";
 import ReceiptModal from "@/components/ReceiptModal";
 
+const LOCAL_CACHE_KEY = "mayacollage_finance_master_cache";
+
+const AVATAR_COLORS = [
+  "bg-amber-100 text-amber-800",
+  "bg-rose-100 text-rose-800",
+  "bg-blue-100 text-blue-800",
+  "bg-emerald-100 text-emerald-800",
+  "bg-purple-100 text-purple-800",
+  "bg-indigo-100 text-indigo-800"
+];
+
+function getAvatarColor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < (name || "").length; i++) {
+    hash = (hash + name.charCodeAt(i)) % AVATAR_COLORS.length;
+  }
+  return AVATAR_COLORS[hash] || AVATAR_COLORS[0];
+}
+
+// Micro Bar Chart Component for Cards
+function MicroBarChart({ color = "blue" }: { color?: "blue" | "emerald" | "rose" | "purple" }) {
+  const bgClasses = {
+    blue: "bg-blue-300",
+    emerald: "bg-emerald-300",
+    rose: "bg-rose-300",
+    purple: "bg-purple-300"
+  };
+  return (
+    <div className="flex items-end gap-1 h-9 shrink-0 opacity-80">
+      <div className={`w-1 rounded-full h-3.5 ${bgClasses[color]}`} />
+      <div className={`w-1 rounded-full h-5 ${bgClasses[color]}`} />
+      <div className={`w-1 rounded-full h-7 ${bgClasses[color]}`} />
+      <div className={`w-1 rounded-full h-9 ${bgClasses[color]}`} />
+    </div>
+  );
+}
+
+// Shimmer Skeleton for Finance Dashboard
+function FinanceSkeleton() {
+  return (
+    <div className="space-y-5 animate-pulse">
+      {/* 4 Cards Skeleton */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 bg-slate-100 rounded-2xl" />
+              <div className="space-y-2">
+                <div className="h-3 w-20 bg-slate-100 rounded" />
+                <div className="h-6 w-28 bg-slate-200 rounded" />
+                <div className="h-3 w-16 bg-slate-100 rounded" />
+              </div>
+            </div>
+            <div className="h-8 w-6 bg-slate-100 rounded" />
+          </div>
+        ))}
+      </div>
+
+      {/* Search & Filter Skeleton */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+        <div className="h-10 w-72 bg-slate-100 rounded-xl" />
+        <div className="flex gap-2">
+          <div className="h-10 w-20 bg-slate-100 rounded-xl" />
+          <div className="h-10 w-24 bg-slate-100 rounded-xl" />
+          <div className="h-10 w-20 bg-slate-100 rounded-xl" />
+        </div>
+      </div>
+
+      {/* Roster Skeleton */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm divide-y divide-slate-100">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="p-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5 flex-1">
+              <div className="w-10 h-10 rounded-xl bg-slate-100" />
+              <div className="space-y-1.5 flex-1">
+                <div className="h-4 w-40 bg-slate-200 rounded" />
+                <div className="h-3 w-28 bg-slate-100 rounded" />
+              </div>
+            </div>
+            <div className="h-6 w-20 bg-slate-100 rounded-full" />
+            <div className="h-5 w-44 bg-slate-100 rounded" />
+            <div className="flex gap-2">
+              <div className="h-8 w-24 bg-slate-100 rounded-xl" />
+              <div className="h-8 w-24 bg-slate-100 rounded-xl" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Shimmer Skeleton for Collect Fee / Edit Fee Structure Modal
+function CollectFeeModalSkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse">
+      {[1, 2].map((yrNum) => (
+        <div key={yrNum} className="bg-slate-50 border border-slate-200/90 rounded-2xl p-5 space-y-4">
+          {/* Header Row Skeleton */}
+          <div className="flex justify-between items-center border-b border-slate-200/70 pb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 bg-indigo-200/70 rounded-lg shrink-0" />
+              <div className="h-4 w-32 bg-slate-200/90 rounded-md" />
+              <div className="h-3 w-48 bg-slate-200/60 rounded-md hidden sm:block" />
+            </div>
+            <div className="h-6 w-28 bg-emerald-100/80 rounded-md" />
+          </div>
+
+          {/* Component Input Cards Skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[1, 2].map((c) => (
+              <div key={c} className="bg-white p-3.5 rounded-xl border border-slate-200/80 space-y-2.5 shadow-2xs">
+                <div className="flex justify-between items-center">
+                  <div className="h-3.5 w-24 bg-slate-200/80 rounded" />
+                  <div className="h-2.5 w-16 bg-indigo-100 rounded" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="h-2 w-12 bg-slate-200/70 rounded mb-1.5" />
+                    <div className="h-9 w-full bg-slate-50 rounded-lg border border-slate-200/70" />
+                  </div>
+                  <div>
+                    <div className="h-2 w-12 bg-emerald-200/70 rounded mb-1.5" />
+                    <div className="h-9 w-full bg-slate-50 rounded-lg border border-slate-200/70" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Discount Block Skeleton */}
+          <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-4 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-emerald-300/80 shrink-0" />
+                <div className="space-y-1">
+                  <div className="h-3 w-48 bg-emerald-200/80 rounded" />
+                  <div className="h-2 w-64 bg-emerald-100/80 rounded hidden sm:block" />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div>
+                <div className="h-2.5 w-24 bg-emerald-200/80 rounded mb-1.5" />
+                <div className="h-9 w-full bg-white rounded-xl border border-emerald-300/70" />
+              </div>
+              <div>
+                <div className="h-2.5 w-36 bg-emerald-200/80 rounded mb-1.5" />
+                <div className="h-9 w-full bg-white rounded-xl border border-emerald-300/70" />
+              </div>
+            </div>
+          </div>
+
+          {/* Add extra charge skeleton */}
+          <div className="w-full h-8 border border-dashed border-slate-200 rounded-xl bg-white/40" />
+        </div>
+      ))}
+
+      {/* Add another academic year skeleton */}
+      <div className="w-full h-11 border-2 border-dashed border-indigo-200/70 rounded-xl bg-indigo-50/40" />
+    </div>
+  );
+}
+
 export default function FinanceDashboard() {
+  const router = useRouter();
+
   const [activeTab, setActiveTab] = useState<
     "student_accounts" | "fee_records" | "categories" | "receipts" | "alerts" | "branch_course" | "payouts"
   >("student_accounts");
-
-  const [isTabDropdownOpen, setIsTabDropdownOpen] = useState(false);
 
   const [stats, setStats] = useState({ totalCollected: 0, totalReceivable: 0, activeStudentCount: 0 });
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -61,11 +229,13 @@ export default function FinanceDashboard() {
     defaulters: []
   });
 
-  // Student Accounts Search & Filters
+  // Student Accounts Search, Infinite Scroll & Filters
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedBranch, setSelectedBranch] = useState("all");
   const [selectedCourse, setSelectedCourse] = useState("all");
   const [osFilter, setOsFilter] = useState<"all" | "os_due" | "cleared">("all");
+  const [visibleCount, setVisibleCount] = useState(20);
+  const scrollSentinelRef = useRef<HTMLDivElement | null>(null);
+
   const [students, setStudents] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
@@ -83,16 +253,21 @@ export default function FinanceDashboard() {
   const [selectedReceiptForModal, setSelectedReceiptForModal] = useState<any>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
-  // Student Account Detailed Statement Modal State
+  // Student Account Statement Modal State
   const [selectedStudentForStatement, setSelectedStudentForStatement] = useState<any>(null);
   const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
   const [studentStatementData, setStudentStatementData] = useState<any>(null);
   const [isLoadingStatement, setIsLoadingStatement] = useState(false);
+  const [statementSidebarTab, setStatementSidebarTab] = useState<"all" | "categories" | "transactions">("all");
+  const statementCacheRef = useRef<Record<string, any>>({});
 
   // Add Fee / Collect Payment Modal State
   const [isAddFeeModalOpen, setIsAddFeeModalOpen] = useState(false);
   const [selectedStudentForFee, setSelectedStudentForFee] = useState<any>(null);
   const [isSubmittingFee, setIsSubmittingFee] = useState(false);
+  const [editFeeYears, setEditFeeYears] = useState<any[]>([]);
+  const [isSavingFeeEdit, setIsSavingFeeEdit] = useState(false);
+  const [isLoadingFeeStructure, setIsLoadingFeeStructure] = useState(false);
   const [feeForm, setFeeForm] = useState({
     studentId: "",
     year: 1,
@@ -164,42 +339,127 @@ export default function FinanceDashboard() {
     setTimeout(() => setToastMsg(""), 3500);
   };
 
-  const fetchData = async () => {
-    setIsLoading(true);
+  const syncToLocalCache = (payload: any) => {
+    if (typeof window === "undefined" || !payload) return;
     try {
+      localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(payload));
+      sessionStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(payload));
+    } catch (e) {
+      console.warn("Storage sync error:", e);
+    }
+  };
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchData = async (showLoader = false, forceBust = false) => {
+    if (showLoader && !stats.totalReceivable) setIsLoading(true);
+    if (forceBust) setIsRefreshing(true);
+    try {
+      // 1. FAST SINGLE-SHOT BUNDLE (sub-20ms from Upstash Redis)
+      const bundleUrl = forceBust ? "/api/finance/bundle?bust=true" : "/api/finance/bundle";
+      const bundleRes = await fetch(bundleUrl);
+      if (bundleRes.ok) {
+        const bundle = await bundleRes.json();
+        if (bundle && bundle.stats) {
+          setStats(bundle.stats);
+          setTransactions(Array.isArray(bundle.transactions) ? bundle.transactions : []);
+          setPayouts(Array.isArray(bundle.payouts) ? bundle.payouts : []);
+          setStaffList(Array.isArray(bundle.staffList) ? bundle.staffList : []);
+          setBranches(Array.isArray(bundle.branches) ? bundle.branches : []);
+          setCourses(Array.isArray(bundle.courses) ? bundle.courses : []);
+          setStudents(Array.isArray(bundle.students) ? bundle.students : []);
+          setCategories(Array.isArray(bundle.categories) ? bundle.categories : []);
+          setAlertsData(bundle.alertsData || { summary: {}, alerts: [], defaulters: [] });
+
+          syncToLocalCache(bundle);
+          if (forceBust) showToast("Database refreshed & Redis cache updated!");
+          return;
+        }
+      }
+
+      // 2. Fallback to parallel individual endpoints if bundle fails
+      const bustQuery = forceBust ? "?bust=true" : "";
       const [statsRes, txnsRes, payoutsRes, staffRes, branchesRes, coursesRes, studentsRes, categoriesRes, alertsRes] =
         await Promise.all([
-          fetch("/api/finance/stats").then(res => res.json()).catch(() => ({})),
+          fetch(`/api/finance/stats${bustQuery}`).then(res => res.json()).catch(() => ({})),
           fetch("/api/finance/transactions?limit=250").then(res => res.json()).catch(() => []),
-          fetch("/api/finance/payouts").then(res => res.json()).catch(() => []),
+          fetch(`/api/finance/payouts${bustQuery}`).then(res => res.json()).catch(() => []),
           fetch("/api/users/staff").then(res => res.json()).catch(() => []),
-          fetch("/api/branches").then(res => res.json()).catch(() => []),
-          fetch("/api/courses").then(res => res.json()).catch(() => []),
-          fetch("/api/students").then(res => res.json()).catch(() => []),
-          fetch("/api/finance/categories").then(res => res.json()).catch(() => []),
-          fetch("/api/finance/alerts").then(res => res.json()).catch(() => ({ summary: {}, alerts: [], defaulters: [] }))
+          fetch(`/api/branches${bustQuery}`).then(res => res.json()).catch(() => []),
+          fetch(`/api/courses${bustQuery}`).then(res => res.json()).catch(() => []),
+          fetch(`/api/students${bustQuery}`).then(res => res.json()).catch(() => []),
+          fetch(`/api/finance/categories${bustQuery}`).then(res => res.json()).catch(() => []),
+          fetch(`/api/finance/alerts${bustQuery}`).then(res => res.json()).catch(() => ({ summary: {}, alerts: [], defaulters: [] }))
         ]);
 
-      setStats(statsRes || { totalCollected: 0, totalReceivable: 0, activeStudentCount: 0 });
-      setTransactions(Array.isArray(txnsRes) ? txnsRes : []);
-      setPayouts(Array.isArray(payoutsRes) ? payoutsRes : []);
-      setStaffList(Array.isArray(staffRes) ? staffRes : []);
-      setBranches(Array.isArray(branchesRes) ? branchesRes : []);
-      setCourses(Array.isArray(coursesRes) ? coursesRes : []);
-      setStudents(Array.isArray(studentsRes) ? studentsRes : []);
-      setCategories(Array.isArray(categoriesRes) ? categoriesRes : []);
-      if (alertsRes && alertsRes.summary) {
-        setAlertsData(alertsRes);
-      }
+      const validStats = statsRes || { totalCollected: 0, totalReceivable: 0, activeStudentCount: 0 };
+      const validTxns = Array.isArray(txnsRes) ? txnsRes : [];
+      const validPayouts = Array.isArray(payoutsRes) ? payoutsRes : [];
+      const validStaff = Array.isArray(staffRes) ? staffRes : [];
+      const validBranches = Array.isArray(branchesRes) ? branchesRes : [];
+      const validCourses = Array.isArray(coursesRes) ? coursesRes : [];
+      const validStudents = Array.isArray(studentsRes) ? studentsRes : [];
+      const validCategories = Array.isArray(categoriesRes) ? categoriesRes : [];
+      const validAlerts = alertsRes && alertsRes.summary ? alertsRes : { summary: {}, alerts: [], defaulters: [] };
+
+      setStats(validStats);
+      setTransactions(validTxns);
+      setPayouts(validPayouts);
+      setStaffList(validStaff);
+      setBranches(validBranches);
+      setCourses(validCourses);
+      setStudents(validStudents);
+      setCategories(validCategories);
+      setAlertsData(validAlerts);
+
+      syncToLocalCache({
+        stats: validStats,
+        transactions: validTxns,
+        payouts: validPayouts,
+        staffList: validStaff,
+        branches: validBranches,
+        courses: validCourses,
+        students: validStudents,
+        categories: validCategories,
+        alertsData: validAlerts,
+        timestamp: Date.now()
+      });
+      if (forceBust) showToast("Database refreshed & Redis cache updated!");
     } catch (error) {
       console.error("Failed to fetch finance data", error);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    // 1. FAST SWR HYDRATION: Check client-side localStorage/sessionStorage first (0ms instant load)
+    if (typeof window !== "undefined") {
+      try {
+        const cachedRaw = localStorage.getItem(LOCAL_CACHE_KEY) || sessionStorage.getItem(LOCAL_CACHE_KEY);
+        if (cachedRaw) {
+          const parsed = JSON.parse(cachedRaw);
+          if (parsed && parsed.stats) {
+            setStats(parsed.stats);
+            if (Array.isArray(parsed.transactions)) setTransactions(parsed.transactions);
+            if (Array.isArray(parsed.payouts)) setPayouts(parsed.payouts);
+            if (Array.isArray(parsed.staffList)) setStaffList(parsed.staffList);
+            if (Array.isArray(parsed.branches)) setBranches(parsed.branches);
+            if (Array.isArray(parsed.courses)) setCourses(parsed.courses);
+            if (Array.isArray(parsed.students)) setStudents(parsed.students);
+            if (Array.isArray(parsed.categories)) setCategories(parsed.categories);
+            if (parsed.alertsData) setAlertsData(parsed.alertsData);
+            setIsLoading(false);
+          }
+        }
+      } catch (err) {
+        console.warn("Local storage cache read error:", err);
+      }
+    }
+
+    // 2. Fetch fresh from PostgreSQL & Redis backend
+    fetchData(true);
   }, []);
 
   const formatCurrency = (amount: number) => {
@@ -212,24 +472,30 @@ export default function FinanceDashboard() {
 
   // Student Fee Summary Calculation
   const getStudentFeeSummary = (student: any) => {
-    const courseObj = courses.find(
-      c => c._id === (typeof student.selectedProgram === "object" ? student.selectedProgram?._id : student.selectedProgram)
-    );
+    const courseId = typeof student.selectedProgram === "object" ? student.selectedProgram?._id : (student.selectedProgram || student.selected_program);
+    const courseObj = courses.find(c => c._id === courseId || c.id === courseId) || {
+      name: student.courseName || student.course_name,
+      code: student.courseCode || student.course_code,
+      tuitionFee: Number(student.courseTuitionFee || student.course_tuition_fee) || 0
+    };
 
-    let courseBaseFee = Number(courseObj?.tuitionFee) || 0;
+    let courseBaseFee = Number(courseObj?.tuitionFee) || Number(student.courseTuitionFee || student.course_tuition_fee) || Number(student.totalFee || student.total_fee) || 0;
     if (Array.isArray(courseObj?.semesterFees) && courseObj.semesterFees.length > 0) {
       const sumSem = courseObj.semesterFees.reduce((acc: number, sf: any) => acc + (Number(sf.fee) || 0), 0);
       if (sumSem > 0) courseBaseFee = sumSem;
     }
 
-    const isConfigured = Boolean(student?.fees?.isConfigured && student?.fees?.years?.length > 0);
+    const feesObj = student?.fees || {};
+    const isConfigured = Boolean(feesObj.isConfigured && Array.isArray(feesObj.years) && feesObj.years.length > 0);
     let gross = 0;
     let discount = 0;
-    let total = 0;
-    let paid = 0;
+    let total = Number(student.totalFee || student.total_fee) || 0;
+    let paid = Number(student.paidFee || student.paid_fee) || 0;
 
-    if (isConfigured && student.fees.years) {
-      student.fees.years.forEach((fy: any) => {
+    if (isConfigured && feesObj.years) {
+      let calcGross = 0;
+      let calcPaid = 0;
+      feesObj.years.forEach((fy: any) => {
         let yrGross = 0;
         let yrPaid = 0;
         if (fy.components && fy.components.length > 0) {
@@ -242,19 +508,19 @@ export default function FinanceDashboard() {
           yrPaid += (Number(fy.tuition?.paid) || 0) + (Number(fy.exam?.paid) || 0) + (Number(fy.transport?.paid) || 0) + (Number(fy.other?.paid) || 0);
         }
         const yrDisc = Number(fy.discount) || 0;
-        gross += yrGross;
-        discount += yrDisc;
-        paid += yrPaid;
+        calcGross += Math.max(0, yrGross - yrDisc);
+        calcPaid += yrPaid;
       });
-      total = Math.max(0, gross - discount);
+      if (calcGross > 0) total = calcGross;
+      if (calcPaid > paid) paid = calcPaid;
     }
 
-    if (total === 0 && gross === 0 && courseBaseFee > 0) {
-      gross = courseBaseFee;
+    if (total === 0 && courseBaseFee > 0) {
       total = courseBaseFee;
+      gross = courseBaseFee;
     }
 
-    const studentTxns = transactions.filter(t => t.studentId?._id === student._id || t.studentId === student._id);
+    const studentTxns = transactions.filter(t => (t.studentId?._id || t.studentId?.id || t.studentId) === (student._id || student.id));
     const txnSum = studentTxns.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     if (txnSum > paid) {
       paid = txnSum;
@@ -272,33 +538,65 @@ export default function FinanceDashboard() {
     return { isConfigured, gross, discount, total, paid, balance, status, courseBaseFee, courseObj, studentTxns };
   };
 
-  // Filtered Students
+  // Filtered Students Roster
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
       const summary = getStudentFeeSummary(s);
-      const name = `${s.firstName || ""} ${s.lastName || ""}`.toLowerCase();
-      const enroll = (s.enrollmentNumber || "").toLowerCase();
-      const adm = (s.admissionNumber || "").toLowerCase();
-      const phone = (s.mobile || "").toLowerCase();
-      const query = searchQuery.toLowerCase();
+      const fName = s.firstName || s.first_name || "";
+      const lName = s.lastName || s.last_name || "";
+      const name = `${fName} ${lName}`.toLowerCase();
+      const enroll = (s.enrollmentNumber || s.enrollment_number || "").toLowerCase();
+      const adm = (s.admissionNumber || s.admission_number || "").toLowerCase();
+      const code = (s.studentId || s.student_id || "").toLowerCase();
+      const query = searchQuery.toLowerCase().trim();
 
-      const matchesSearch = !query || name.includes(query) || enroll.includes(query) || adm.includes(query) || phone.includes(query);
-      const sBranchId = typeof s.selectedBranch === "object" ? s.selectedBranch?._id : s.selectedBranch;
-      const sCourseId = typeof s.selectedProgram === "object" ? s.selectedProgram?._id : s.selectedProgram;
-
-      const matchesBranch = selectedBranch === "all" || sBranchId === selectedBranch;
+      const matchesSearch = !query || name.includes(query) || enroll.includes(query) || adm.includes(query) || code.includes(query);
+      const sCourseId = typeof s.selectedProgram === "object" ? s.selectedProgram?._id : (s.selectedProgram || s.selected_program);
       const matchesCourse = selectedCourse === "all" || sCourseId === selectedCourse;
 
       const matchesOS =
         osFilter === "all" ||
         (osFilter === "os_due" && summary.balance > 0) ||
-        (osFilter === "cleared" && summary.balance === 0 && summary.total > 0);
+        (osFilter === "cleared" && summary.paid > 0);
 
-      return matchesSearch && matchesBranch && matchesCourse && matchesOS;
+      return matchesSearch && matchesCourse && matchesOS;
     });
-  }, [students, searchQuery, selectedBranch, selectedCourse, osFilter, courses, transactions]);
+  }, [students, searchQuery, selectedCourse, osFilter, courses, transactions]);
 
-  // Aggregated Metrics
+  // Reset visible count when filter changes
+  useEffect(() => {
+    setVisibleCount(20);
+  }, [searchQuery, selectedCourse, osFilter]);
+
+  // Lazy loaded students for infinite scroll
+  const visibleStudents = useMemo(() => {
+    return filteredStudents.slice(0, visibleCount);
+  }, [filteredStudents, visibleCount]);
+
+  // Infinite Scroll IntersectionObserver
+  useEffect(() => {
+    const sentinel = scrollSentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleCount((prev) => {
+            if (prev < filteredStudents.length) {
+              return Math.min(prev + 20, filteredStudents.length);
+            }
+            return prev;
+          });
+        }
+      },
+      { root: null, rootMargin: "300px", threshold: 0.1 }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [filteredStudents.length]);
+
+  // Aggregated Overview Metrics
   const institutionalMetrics = useMemo(() => {
     let totalReceivable = 0;
     let totalCollected = 0;
@@ -326,10 +624,10 @@ export default function FinanceDashboard() {
 
       const student = t.studentId;
       const name = student ? `${student.firstName || ""} ${student.lastName || ""}`.toLowerCase() : "";
-      const enroll = (student?.enrollmentNumber || "").toLowerCase();
+      const enroll = (student?.enrollmentNumber || student?.admissionNumber || "").toLowerCase();
       const txnId = (t.transactionId || "").toLowerCase();
       const rcpt = (t.receiptNumber || "").toLowerCase();
-      const q = recordSearch.toLowerCase();
+      const q = recordSearch.toLowerCase().trim();
 
       const searchMatch = !q || name.includes(q) || enroll.includes(q) || txnId.includes(q) || rcpt.includes(q);
 
@@ -343,11 +641,12 @@ export default function FinanceDashboard() {
       const student = t.studentId || {};
       const course = t.courseId || {};
       return {
-        _id: t._id,
+        _id: t._id || t.id,
+        id: t._id || t.id,
         type: "student",
         receiptType: "Student Fee Receipt",
-        receiptNumber: t.receiptNumber || `RCP-STU-${t._id?.slice(-8).toUpperCase()}`,
-        transactionId: t.transactionId || `TXN-${t._id?.slice(-6)}`,
+        receiptNumber: t.receiptNumber || `RCP-STU-${t.id?.slice(-8).toUpperCase()}`,
+        transactionId: t.transactionId || `TXN-${t.id?.slice(-6)}`,
         date: t.paymentDate || t.createdAt,
         name: `${student.firstName || ""} ${student.lastName || ""}`.trim() || "Student",
         idNumber: student.enrollmentNumber || student.admissionNumber || student.studentId || "N/A",
@@ -356,14 +655,14 @@ export default function FinanceDashboard() {
         academicYear: t.academicYear || "Year 1",
         category: t.category || "tuition",
         categoryName: t.categoryName || "Tuition Fee",
-        amount: t.amount || 0,
+        amount: Number(t.amount) || 0,
         paymentMethod: t.paymentMethod || "Cash",
         collectedBy: t.collectedBy || "Accounts Office",
         notes: t.notes || "",
         items: [
           {
             description: `${t.categoryName || t.category || "Fee"} (${t.academicYear || "Year 1"}, Sem ${t.semester || 1})`,
-            amount: t.amount || 0
+            amount: Number(t.amount) || 0
           }
         ]
       };
@@ -372,25 +671,26 @@ export default function FinanceDashboard() {
     const employeeReceipts = payouts.map(p => {
       const payee = p.payeeId || {};
       return {
-        _id: p._id,
+        _id: p._id || p.id,
+        id: p._id || p.id,
         type: "employee",
         receiptType: "Employee Payment Voucher",
-        receiptNumber: p.receiptNumber || `RCP-EMP-${p._id?.slice(-8).toUpperCase()}`,
-        transactionId: p.transactionId || `TXN-${p._id?.slice(-6)}`,
+        receiptNumber: p.receiptNumber || `RCP-EMP-${p.id?.slice(-8).toUpperCase()}`,
+        transactionId: p.transactionId || `TXN-${p.id?.slice(-6)}`,
         date: p.paymentDate || p.createdAt,
         name: p.payeeName || `${payee.firstName || ""} ${payee.lastName || ""}`.trim() || "Employee",
         idNumber: payee.employeeId || payee._id?.slice(-6) || "EMP-001",
         designation: p.designation || payee.role || "Faculty / Staff",
         department: p.department || payee.department || "Academics",
         payoutType: p.payoutType || "Salary",
-        amount: p.amount || 0,
+        amount: Number(p.amount) || 0,
         paymentMethod: p.paymentMethod || "Bank Transfer",
         disbursedBy: p.disbursedBy || "Finance Officer",
         notes: p.notes || "",
         items: [
           {
             description: `${p.payoutType || "Salary"} Disbursal - ${p.monthYear || "Cycle"}`,
-            amount: p.amount || 0
+            amount: Number(p.amount) || 0
           }
         ]
       };
@@ -402,7 +702,7 @@ export default function FinanceDashboard() {
     else combined = [...studentReceipts, ...employeeReceipts].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     if (receiptSearchQuery && receiptSearchQuery.trim()) {
-      const q = receiptSearchQuery.toLowerCase();
+      const q = receiptSearchQuery.toLowerCase().trim();
       combined = combined.filter(
         r =>
           r.receiptNumber.toLowerCase().includes(q) ||
@@ -415,70 +715,63 @@ export default function FinanceDashboard() {
     return combined;
   }, [transactions, payouts, receiptFilterType, receiptSearchQuery]);
 
-  // Tab Definitions for the Dropdown & Pill Selector
-  const tabOptions = [
-    {
-      id: "student_accounts",
-      label: "Student Accounts & Dues (OS Ledger)",
-      icon: Users,
-      badge: `${institutionalMetrics.defaultersCount} Dues Pending`,
-      badgeColor: institutionalMetrics.defaultersCount > 0 ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"
-    },
-    {
-      id: "fee_records",
-      label: "Fee Collections & History",
-      icon: CreditCard,
-      badge: `${transactions.length} Transactions`,
-      badgeColor: "bg-slate-100 text-slate-700"
-    },
-    {
-      id: "categories",
-      label: "Fee Categories & Rates (Books, Uniform, Blazer, Fine)",
-      icon: Shirt,
-      badge: `${categories.length} Items`,
-      badgeColor: "bg-indigo-50 text-indigo-700"
-    },
-    {
-      id: "receipts",
-      label: "Receipts & Vouchers Hub (Student & Staff)",
-      icon: Printer,
-      badge: "Print & Thermal",
-      badgeColor: "bg-purple-50 text-purple-700"
-    },
-    {
-      id: "alerts",
-      label: "Overdue Alerts & Due Notices",
-      icon: Bell,
-      badge: `${alertsData.summary?.highRiskCount || 0} High Risk`,
-      badgeColor: "bg-rose-50 text-rose-700"
-    },
-    {
-      id: "payouts",
-      label: "Staff Payroll & Payouts",
-      icon: Briefcase,
-      badge: `${payouts.length} Vouchers`,
-      badgeColor: "bg-slate-100 text-slate-700"
-    },
-    {
-      id: "branch_course",
-      label: "Course Fee Setup & Matrices",
-      icon: Layers,
-      badge: `${courses.length} Programs`,
-      badgeColor: "bg-slate-100 text-slate-700"
-    }
+  // Navigation Tabs with Clean Icons
+  const tabList = [
+    { id: "student_accounts", label: "Student Fees", icon: Users },
+    { id: "fee_records", label: "Payment History", icon: Clock },
+    { id: "categories", label: "Fee Setup", icon: Settings },
+    { id: "receipts", label: "Receipts", icon: FileText },
+    { id: "alerts", label: "Due Reminders", icon: Bell },
+    { id: "payouts", label: "Staff Payments", icon: Briefcase },
+    { id: "branch_course", label: "Courses & Rates", icon: GraduationCap },
   ];
 
-  const currentTabObj = tabOptions.find(t => t.id === activeTab) || tabOptions[0];
-
-  // Open Statement Modal
-  const handleOpenStudentStatement = async (student: any) => {
+  // Open Statement Sidebar with Fast SWR Client Cache & Instant Response
+  const handleOpenStudentStatement = async (student: any, forceRefresh = false) => {
+    const studentId = student._id || student.id;
     setSelectedStudentForStatement(student);
     setIsStatementModalOpen(true);
+    setStatementSidebarTab("all");
+
+    // 1. Check Fast Client-side Cache (Memory + SessionStorage)
+    const memCached = statementCacheRef.current[studentId];
+    let sessionCached = null;
+    if (!memCached && typeof window !== "undefined") {
+      try {
+        const raw = sessionStorage.getItem(`statement_cache_${studentId}`);
+        if (raw) sessionCached = JSON.parse(raw);
+      } catch (e) {}
+    }
+    const cached = memCached || sessionCached;
+
+    if (cached && !forceRefresh) {
+      setStudentStatementData(cached);
+      setIsLoadingStatement(false);
+
+      // Background revalidation (silent SWR refresh)
+      fetch(`/api/finance/student-account/${studentId}`)
+        .then(res => res.json())
+        .then(fresh => {
+          if (fresh && !fresh.error) {
+            statementCacheRef.current[studentId] = fresh;
+            try { sessionStorage.setItem(`statement_cache_${studentId}`, JSON.stringify(fresh)); } catch (e) {}
+            setStudentStatementData(fresh);
+          }
+        })
+        .catch(() => {});
+      return;
+    }
+
+    // 2. If not in cache, clear previous statement data and show Skeleton UI
+    setStudentStatementData(null);
     setIsLoadingStatement(true);
+
     try {
-      const res = await fetch(`/api/finance/student-account/${student._id}`);
+      const res = await fetch(`/api/finance/student-account/${studentId}`);
       const data = await res.json();
-      if (res.ok) {
+      if (res.ok && !data.error) {
+        statementCacheRef.current[studentId] = data;
+        try { sessionStorage.setItem(`statement_cache_${studentId}`, JSON.stringify(data)); } catch (e) {}
         setStudentStatementData(data);
       } else {
         alert(data.error || "Could not load student statement");
@@ -491,40 +784,359 @@ export default function FinanceDashboard() {
     }
   };
 
-  // Open Add Fee Modal
-  const handleOpenAddFeeModal = (student?: any) => {
-    if (student) {
-      setSelectedStudentForFee(student);
-      setFeeForm({
-        studentId: student._id,
-        year: student.courseYear || Math.ceil((student.selectedSemester || 1) / 2) || 1,
-        category: "tuition",
-        categoryName: "Tuition Fee",
-        amount: "",
-        paymentMethod: "Cash",
-        receiptNumber: "",
-        transactionId: "",
-        paymentDate: new Date().toISOString().split("T")[0],
-        semester: student.selectedSemester || 1,
-        notes: ""
+  // Calculation of Edit Fee Structure Totals (Gross, Net, Paid, Due)
+  const editModalTotals = useMemo(() => {
+    let grossTotal = 0;
+    let totalDiscount = 0;
+    let paid = 0;
+    editFeeYears.forEach(y => {
+      let yrGross = 0;
+      (y.components || []).forEach((c: any) => {
+        yrGross += Number(c.amount) || 0;
+        paid += Number(c.paid) || 0;
       });
-    } else {
-      setSelectedStudentForFee(null);
-      setFeeForm({
-        studentId: "",
-        year: 1,
-        category: "tuition",
-        categoryName: "Tuition Fee",
-        amount: "",
-        paymentMethod: "Cash",
-        receiptNumber: "",
-        transactionId: "",
-        paymentDate: new Date().toISOString().split("T")[0],
-        semester: 1,
-        notes: ""
-      });
+      const disc = Number(y.discount) || 0;
+      grossTotal += yrGross;
+      totalDiscount += disc;
+    });
+    const netTotal = Math.max(0, grossTotal - totalDiscount);
+    return {
+      grossTotal,
+      totalDiscount,
+      total: netTotal,
+      paid,
+      balance: Math.max(0, netTotal - paid)
+    };
+  }, [editFeeYears]);
+
+  // Open Edit Fee Structure & Collect Fee Modal
+  const parseLedgerYearsToEditFeeYears = (years: any[]) => {
+    return (years || []).map((y: any, idx: number) => {
+      let components = y.components || [];
+      if (components.length === 0 && y.categories) {
+        components = Object.entries(y.categories).map(([k, c]: any) => ({
+          category: k.charAt(0).toUpperCase() + k.slice(1) + " Fee",
+          amount: Number(c.total) || 0,
+          paid: Number(c.paid) || 0,
+          frequency: "Annual"
+        }));
+      } else if (components.length === 0) {
+        components = [
+          { category: "Tuition Fee", amount: Number(y.tuition?.total) || 0, paid: Number(y.tuition?.paid) || 0, frequency: "Annual" }
+        ];
+        if (Number(y.exam?.total) > 0 || Number(y.exam?.paid) > 0) {
+          components.push({ category: "Exam Fee", amount: Number(y.exam?.total) || 0, paid: Number(y.exam?.paid) || 0, frequency: "Annual" });
+        }
+        if (Number(y.transport?.total) > 0 || Number(y.transport?.paid) > 0) {
+          components.push({ category: "Transport Fee", amount: Number(y.transport?.total) || 0, paid: Number(y.transport?.paid) || 0, frequency: "Annual" });
+        }
+        if (Number(y.other?.total) > 0 || Number(y.other?.paid) > 0) {
+          components.push({ category: "Other Fee", amount: Number(y.other?.total) || 0, paid: Number(y.other?.paid) || 0, frequency: "Annual" });
+        }
+      }
+
+      return {
+        year: y.year || idx + 1,
+        discount: Number(y.discount) || 0,
+        discountReason: y.discountReason || "",
+        components: components.map((c: any) => ({
+          category: c.category || "Tuition Fee",
+          amount: Number(c.amount) || 0,
+          paid: Number(c.paid) || 0,
+          frequency: "Annual"
+        }))
+      };
+    });
+  };
+
+  // Open Edit Fee Structure & Collect Fee Modal (Sub-10ms Instant Open + SWR Cache + Skeleton Fallback)
+  const handleOpenAddFeeModal = async (student?: any) => {
+    let target = student;
+    if (!target && students.length > 0) {
+      target = students[0];
     }
+    setSelectedStudentForFee(target);
     setIsAddFeeModalOpen(true);
+
+    if (!target) {
+      setEditFeeYears([
+        {
+          year: 1,
+          discount: 0,
+          discountReason: "",
+          components: [{ category: "Tuition Fee", amount: 0, paid: 0, frequency: "Annual" }]
+        }
+      ]);
+      setIsLoadingFeeStructure(false);
+      return;
+    }
+
+    const studentId = target._id || target.id;
+
+    // 1. Instant check from In-Memory Statement Cache (0ms)
+    const memCached = statementCacheRef.current[studentId];
+    if (memCached?.ledger?.years && memCached.ledger.years.length > 0) {
+      setEditFeeYears(parseLedgerYearsToEditFeeYears(memCached.ledger.years));
+      setIsLoadingFeeStructure(false);
+
+      // Silent background SWR revalidation
+      fetch(`/api/finance/student-account/${studentId}`)
+        .then(res => res.json())
+        .then(fresh => {
+          if (fresh?.ledger?.years && fresh.ledger.years.length > 0) {
+            statementCacheRef.current[studentId] = fresh;
+            try { sessionStorage.setItem(`statement_cache_${studentId}`, JSON.stringify(fresh)); } catch (e) {}
+            setEditFeeYears(parseLedgerYearsToEditFeeYears(fresh.ledger.years));
+          }
+        })
+        .catch(() => {});
+      return;
+    }
+
+    // 2. Instant check from SessionStorage Cache (< 2ms)
+    if (typeof window !== "undefined") {
+      try {
+        const raw = sessionStorage.getItem(`statement_cache_${studentId}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?.ledger?.years && parsed.ledger.years.length > 0) {
+            statementCacheRef.current[studentId] = parsed;
+            setEditFeeYears(parseLedgerYearsToEditFeeYears(parsed.ledger.years));
+            setIsLoadingFeeStructure(false);
+
+            // Silent background SWR revalidation
+            fetch(`/api/finance/student-account/${studentId}`)
+              .then(res => res.json())
+              .then(fresh => {
+                if (fresh?.ledger?.years && fresh.ledger.years.length > 0) {
+                  statementCacheRef.current[studentId] = fresh;
+                  try { sessionStorage.setItem(`statement_cache_${studentId}`, JSON.stringify(fresh)); } catch (e) {}
+                  setEditFeeYears(parseLedgerYearsToEditFeeYears(fresh.ledger.years));
+                }
+              })
+              .catch(() => {});
+            return;
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 3. Instant check from Student Record's own fees object (< 2ms)
+    let rawFees = target.fees;
+    if (typeof rawFees === "string") {
+      try {
+        rawFees = JSON.parse(rawFees);
+      } catch (e) {}
+    }
+
+    if (rawFees && Array.isArray(rawFees.years) && rawFees.years.length > 0) {
+      setEditFeeYears(parseLedgerYearsToEditFeeYears(rawFees.years));
+      setIsLoadingFeeStructure(false);
+
+      // Silent background SWR fetch
+      fetch(`/api/finance/student-account/${studentId}`)
+        .then(res => res.json())
+        .then(fresh => {
+          if (fresh?.ledger?.years && fresh.ledger.years.length > 0) {
+            statementCacheRef.current[studentId] = fresh;
+            try { sessionStorage.setItem(`statement_cache_${studentId}`, JSON.stringify(fresh)); } catch (e) {}
+            setEditFeeYears(parseLedgerYearsToEditFeeYears(fresh.ledger.years));
+          }
+        })
+        .catch(() => {});
+      return;
+    }
+
+    // 4. If never cached and no years configured, show Skeleton UI Layout while fetching
+    setEditFeeYears([]);
+    setIsLoadingFeeStructure(true);
+
+    try {
+      const res = await fetch(`/api/finance/student-account/${studentId}`);
+      const data = await res.json();
+      if (res.ok && data?.ledger?.years && data.ledger.years.length > 0) {
+        statementCacheRef.current[studentId] = data;
+        try { sessionStorage.setItem(`statement_cache_${studentId}`, JSON.stringify(data)); } catch (e) {}
+        setEditFeeYears(parseLedgerYearsToEditFeeYears(data.ledger.years));
+      } else {
+        const sCourseId = typeof target.selectedProgram === "object" ? target.selectedProgram?._id : (target.selectedProgram || target.selected_program);
+        const courseObj = courses.find(c => (c._id || c.id) === sCourseId);
+        const duration = Number(courseObj?.durationYears) || Number(courseObj?.duration) || Number(target.courseYear) || 4;
+        const courseTuition = Number(courseObj?.tuitionFee) || Number(target.courseTuitionFee || target.course_tuition_fee) || 0;
+        const perYearTuition = duration > 0 && courseTuition > 0 ? Math.round(courseTuition / duration) : 0;
+
+        setEditFeeYears(
+          Array.from({ length: duration }).map((_, idx) => ({
+            year: idx + 1,
+            discount: 0,
+            discountReason: "",
+            components: [{ category: "Tuition Fee", amount: perYearTuition, paid: 0, frequency: "Annual" }]
+          }))
+        );
+      }
+    } catch (e) {
+      console.warn("Could not fetch fresh student-account data:", e);
+    } finally {
+      setIsLoadingFeeStructure(false);
+    }
+  };
+
+  const handleEditFeeChange = (yearIndex: number, componentIndex: number, field: "amount" | "paid" | "category", value: string) => {
+    const updated = [...editFeeYears];
+    const yearObj = { ...updated[yearIndex] };
+    const comps = [...(yearObj.components || [])];
+
+    if (field === "category") {
+      comps[componentIndex] = { ...comps[componentIndex], [field]: value };
+    } else {
+      const numVal = Math.max(0, Number(value) || 0);
+      comps[componentIndex] = { ...comps[componentIndex], [field]: numVal };
+    }
+
+    yearObj.components = comps;
+    updated[yearIndex] = yearObj;
+    setEditFeeYears(updated);
+  };
+
+  const handleEditYearDiscount = (yearIndex: number, field: "discount" | "discountReason", value: string) => {
+    const updated = [...editFeeYears];
+    const yearObj = { ...updated[yearIndex] };
+    if (field === "discount") {
+      yearObj.discount = Math.max(0, Number(value) || 0);
+    } else {
+      yearObj.discountReason = value;
+    }
+    updated[yearIndex] = yearObj;
+    setEditFeeYears(updated);
+  };
+
+  const handleAddFeeComponent = (yearIndex: number) => {
+    const updated = [...editFeeYears];
+    const yearObj = { ...updated[yearIndex] };
+    const comps = [...(yearObj.components || [])];
+    comps.push({ category: "Custom Charge", amount: 0, paid: 0, frequency: "Annual" });
+    yearObj.components = comps;
+    updated[yearIndex] = yearObj;
+    setEditFeeYears(updated);
+  };
+
+  const handleRemoveFeeComponent = (yearIndex: number, componentIndex: number) => {
+    const updated = [...editFeeYears];
+    const yearObj = { ...updated[yearIndex] };
+    const comps = [...(yearObj.components || [])];
+    comps.splice(componentIndex, 1);
+    yearObj.components = comps;
+    updated[yearIndex] = yearObj;
+    setEditFeeYears(updated);
+  };
+
+  const handleQuickMarkCategoryPaid = (yearIndex: number, componentIndex: number) => {
+    const updated = [...editFeeYears];
+    const yearObj = { ...updated[yearIndex] };
+    const comps = [...(yearObj.components || [])];
+    comps[componentIndex] = { ...comps[componentIndex], paid: comps[componentIndex].amount || 0 };
+    yearObj.components = comps;
+    updated[yearIndex] = yearObj;
+    setEditFeeYears(updated);
+  };
+
+  const handleQuickMarkYearPaid = (yearIndex: number) => {
+    const updated = [...editFeeYears];
+    const yearObj = { ...updated[yearIndex] };
+    yearObj.components = (yearObj.components || []).map((c: any) => ({ ...c, paid: c.amount || 0 }));
+    updated[yearIndex] = yearObj;
+    setEditFeeYears(updated);
+  };
+
+  const handleMarkAllAsPaid = () => {
+    const updated = editFeeYears.map(yr => ({
+      ...yr,
+      components: (yr.components || []).map((c: any) => ({ ...c, paid: c.amount || 0 }))
+    }));
+    setEditFeeYears(updated);
+  };
+
+  const handleResetAllPaid = () => {
+    const updated = editFeeYears.map(yr => ({
+      ...yr,
+      components: (yr.components || []).map((c: any) => ({ ...c, paid: 0 }))
+    }));
+    setEditFeeYears(updated);
+  };
+
+  const handleAddAcademicYear = () => {
+    const nextYearNum = editFeeYears.length + 1;
+    setEditFeeYears([
+      ...editFeeYears,
+      {
+        year: nextYearNum,
+        discount: 0,
+        discountReason: "",
+        components: [{ category: "Tuition Fee", amount: 0, paid: 0, frequency: "Annual" }]
+      }
+    ]);
+  };
+
+  const handleRemoveAcademicYear = (index: number) => {
+    if (editFeeYears.length <= 1) return;
+    const updated = editFeeYears.filter((_, i) => i !== index).map((y, idx) => ({ ...y, year: idx + 1 }));
+    setEditFeeYears(updated);
+  };
+
+  const handleSaveStudentFeeStructure = async () => {
+    if (!selectedStudentForFee) return;
+    const studentId = selectedStudentForFee._id || selectedStudentForFee.id;
+
+    setIsSavingFeeEdit(true);
+    try {
+      const formattedYears = editFeeYears.map(yr => ({
+        year: yr.year,
+        discount: Number(yr.discount) || 0,
+        discountReason: yr.discountReason || "",
+        components: (yr.components || []).map((c: any) => ({
+          category: c.category || "",
+          amount: Number(c.amount) || 0,
+          paid: Number(c.paid) || 0,
+          frequency: c.frequency || "Annual"
+        }))
+      }));
+
+      const payload = {
+        fees: {
+          isConfigured: true,
+          years: formattedYears
+        }
+      };
+
+      const res = await fetch(`/api/students/${studentId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const updatedStudent = await res.json();
+      if (res.ok && !updatedStudent.error) {
+        showToast("Fee structure and paid amounts saved to database!");
+        setIsAddFeeModalOpen(false);
+
+        // Update local student roster instantly
+        setStudents(prev => prev.map(s => ((s._id || s.id) === studentId ? { ...s, ...updatedStudent } : s)));
+
+        // Bust statement cache
+        delete statementCacheRef.current[studentId];
+        try { sessionStorage.removeItem(`statement_cache_${studentId}`); } catch(e) {}
+
+        // Invalidate and refresh background finance data
+        fetchData(false, true);
+      } else {
+        alert(updatedStudent.error || "Failed to update fees.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error saving fee structure.");
+    } finally {
+      setIsSavingFeeEdit(false);
+    }
   };
 
   // Submit Payment
@@ -537,9 +1149,9 @@ export default function FinanceDashboard() {
 
     setIsSubmittingFee(true);
     try {
-      const finalCategory = feeForm.category || "consolidated_fee";
+      const finalCategory = feeForm.category || "tuition";
       const selectedCatObj = categories.find(c => c.code === finalCategory);
-      const catLabel = selectedCatObj?.name || "Consolidated Academic Fee";
+      const catLabel = selectedCatObj?.name || feeForm.categoryName || "Tuition Fee";
 
       const payload = {
         ...feeForm,
@@ -559,10 +1171,57 @@ export default function FinanceDashboard() {
       if (res.ok && data.success) {
         showToast("Payment recorded & Official Receipt generated!");
         setIsAddFeeModalOpen(false);
-        fetchData();
+
+        const paidAmount = Number(feeForm.amount) || 0;
+
+        // 1. Instant Real-Time Student State Update
+        if (data.student) {
+          setStudents(prev => prev.map(s => ((s._id || s.id) === (data.student._id || data.student.id) ? { ...s, ...data.student } : s)));
+        } else {
+          setStudents(prev => prev.map(s => {
+            if ((s._id || s.id) === feeForm.studentId) {
+              const prevPaid = Number(s.paidFee || s.paid_fee) || 0;
+              const total = Number(s.totalFee || s.total_fee) || 0;
+              const newPaid = prevPaid + paidAmount;
+              const balance = Math.max(0, total - newPaid);
+              const status = balance === 0 ? "paid" : (newPaid > 0 ? "partial" : "unpaid");
+              return {
+                ...s,
+                paidFee: newPaid,
+                paid_fee: newPaid,
+                feeBalance: balance,
+                fee_balance: balance,
+                feeStatus: status,
+                fee_status: status
+              };
+            }
+            return s;
+          }));
+        }
+
+        // 2. Instant Real-Time Transaction Append
+        if (data.transaction) {
+          setTransactions(prev => [data.transaction, ...prev]);
+        }
+
+        // 3. Instant Real-Time Stat Increment
+        setStats(prev => ({
+          ...prev,
+          totalCollected: (Number(prev.totalCollected) || 0) + paidAmount,
+          totalDue: Math.max(0, (Number(prev.totalReceivable) || 0) - ((Number(prev.totalCollected) || 0) + paidAmount))
+        }));
+
+        // 4. Background re-fetch from PostgreSQL & update Redis
+        fetchData(false, true);
+
+        // Invalidate student statement cache so fresh data loads on next view
+        if (feeForm.studentId) {
+          delete statementCacheRef.current[feeForm.studentId];
+          try { sessionStorage.removeItem(`statement_cache_${feeForm.studentId}`); } catch (e) {}
+        }
 
         if (data.transaction) {
-          const studentObj = selectedStudentForFee || students.find(s => s._id === feeForm.studentId);
+          const studentObj = selectedStudentForFee || students.find(s => (s._id || s.id) === feeForm.studentId);
           setSelectedReceiptForModal({
             type: "student",
             receiptType: "Student Fee Receipt",
@@ -605,6 +1264,9 @@ export default function FinanceDashboard() {
     if (!confirm("Are you sure you want to delete this receipt? This will reverse the payment from the student's balance.")) return;
 
     try {
+      // Optimistic real-time removal
+      setTransactions(prev => prev.filter(t => (t._id || t.id) !== txnId));
+
       const res = await fetch(`/api/finance/transactions/${txnId}`, {
         method: "DELETE",
       });
@@ -612,9 +1274,12 @@ export default function FinanceDashboard() {
       const data = await res.json();
       if (res.ok && data.success) {
         showToast("Receipt deleted and fee reversed successfully!");
-        fetchData();
+        fetchData(false, true);
         if (selectedStudentForStatement) {
-          handleOpenStudentStatement(selectedStudentForStatement);
+          const sId = selectedStudentForStatement._id || selectedStudentForStatement.id;
+          delete statementCacheRef.current[sId];
+          try { sessionStorage.removeItem(`statement_cache_${sId}`); } catch (e) {}
+          handleOpenStudentStatement(selectedStudentForStatement, true);
         }
       } else {
         alert(data.error || "Failed to delete receipt.");
@@ -636,7 +1301,7 @@ export default function FinanceDashboard() {
       const res = await fetch("/api/finance/categories", {
         method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(isEdit ? { id: editingCategory._id, ...categoryForm } : categoryForm)
+        body: JSON.stringify(isEdit ? { id: editingCategory._id || editingCategory.id, ...categoryForm } : categoryForm)
       });
 
       const data = await res.json();
@@ -662,7 +1327,7 @@ export default function FinanceDashboard() {
       const summary = getStudentFeeSummary(student);
       setAlertTargetStudent(student);
       setAlertForm({
-        studentId: student._id,
+        studentId: student._id || student.id,
         alertType: "Outstanding_Dues",
         title: `Fee Due Reminder: ₹${summary.balance.toLocaleString("en-IN")} Pending`,
         message: `Dear ${student.firstName}, your institutional fee balance of ₹${summary.balance.toLocaleString("en-IN")} is pending. Kindly deposit it at the Accounts Office at the earliest.`,
@@ -698,7 +1363,7 @@ export default function FinanceDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...alertForm,
-          studentId: alertForm.studentId || alertTargetStudent?._id
+          studentId: alertForm.studentId || alertTargetStudent?._id || alertTargetStudent?.id
         })
       });
 
@@ -718,14 +1383,6 @@ export default function FinanceDashboard() {
     }
   };
 
-  // Copy WhatsApp Reminder Message
-  const handleCopyWhatsAppMessage = (student: any) => {
-    const summary = getStudentFeeSummary(student);
-    const text = `*Maya Group of Institutions - Official Fee Reminder*\n\nDear ${student.firstName} ${student.lastName},\nYour current pending fee balance is *₹${summary.balance.toLocaleString("en-IN")}* for *${summary.courseObj?.name || "your course"}*.\n\nPlease visit the Accounts Office or clear your dues online.\n\nThank you,\nDepartment of Accounts`;
-    navigator.clipboard.writeText(text);
-    showToast("WhatsApp reminder text copied to clipboard!");
-  };
-
   // Submit Payout
   const handleCreatePayout = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -733,7 +1390,7 @@ export default function FinanceDashboard() {
 
     setIsSubmittingPayout(true);
     try {
-      const staffMember = staffList.find(s => s._id === payoutForm.payeeId);
+      const staffMember = staffList.find(s => (s._id || s.id) === payoutForm.payeeId);
       const randomSuffix = Math.floor(1000 + Math.random() * 9000);
       const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
       const receiptNo = `RCP-EMP-${dateStr}-${randomSuffix}`;
@@ -744,7 +1401,7 @@ export default function FinanceDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...payoutForm,
-          payeeName: `${staffMember?.firstName || ""} ${staffMember?.lastName || ""}`.trim(),
+          payeeName: `${staffMember?.firstName || ""} ${staffMember?.lastName || ""}`.trim() || "Staff Member",
           receiptNumber: receiptNo,
           transactionId: txnId,
           monthYear: new Date().toLocaleDateString("en-IN", { month: "short", year: "numeric" })
@@ -752,9 +1409,13 @@ export default function FinanceDashboard() {
       });
 
       if (res.ok) {
+        const newPayout = await res.json();
         showToast("Staff payout voucher generated successfully!");
         setIsPayoutModalOpen(false);
-        fetchData();
+        if (newPayout && (newPayout._id || newPayout.id)) {
+          setPayouts(prev => [newPayout, ...prev]);
+        }
+        fetchData(false, true);
 
         setSelectedReceiptForModal({
           type: "employee",
@@ -794,9 +1455,9 @@ export default function FinanceDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F4F6FA] pb-24 font-sans text-slate-800">
-      
-      {/* Universal Receipt Modal (Supports A4 & Thermal) */}
+    <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-slate-800">
+
+      {/* Universal Receipt Modal */}
       <ReceiptModal
         isOpen={isReceiptModalOpen}
         onClose={() => setIsReceiptModalOpen(false)}
@@ -810,107 +1471,60 @@ export default function FinanceDashboard() {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold shadow-2xl flex items-center gap-3 border border-slate-700 text-sm"
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-5 py-2.5 rounded-full font-bold shadow-2xl flex items-center gap-2.5 text-xs"
           >
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{toastMsg}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* ========================================================================= */}
-      {/* TOP HEADER & SECTION DROPDOWN (CLEAN ENGLISH & INTUITIVE)                 */}
+      {/* TOP NAVIGATION BAR (CLEAN SLIM TABS + ACTION BUTTONS)                     */}
       {/* ========================================================================= */}
-      <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30">
-        <div className="max-w-[1650px] mx-auto px-6 lg:px-8 py-4">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            
-            {/* Title & Section Dropdown */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-md shadow-indigo-600/30">
-                  <Landmark className="w-6 h-6" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-black text-slate-900 tracking-tight leading-none">
-                    Finance & Accounts
-                  </h1>
-                  <p className="text-xs font-semibold text-slate-400 mt-1">
-                    Maya ERP Management System
-                  </p>
-                </div>
-              </div>
+      <div className="bg-white border-b border-slate-200/80 sticky top-0 z-30 shadow-xs">
+        <div className="max-w-[1650px] mx-auto px-6 lg:px-8">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 py-3">
 
-              {/* PERFECT SECTION DROPDOWN SELECTOR */}
-              <div className="relative">
-                <button
-                  onClick={() => setIsTabDropdownOpen(!isTabDropdownOpen)}
-                  className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold rounded-2xl border border-slate-300 text-xs shadow-sm transition-all"
-                >
-                  <currentTabObj.icon className="w-4 h-4 text-indigo-600" />
-                  <span className="font-black text-slate-900">{currentTabObj.label}</span>
-                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isTabDropdownOpen ? "rotate-180" : ""}`} />
-                </button>
-
-                {isTabDropdownOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setIsTabDropdownOpen(false)}
-                    ></div>
-                    <div className="absolute left-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 p-2 space-y-1">
-                      <div className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                        Select Module Section
-                      </div>
-                      {tabOptions.map(t => {
-                        const Icon = t.icon;
-                        const isSelected = activeTab === t.id;
-                        return (
-                          <button
-                            key={t.id}
-                            onClick={() => {
-                              setActiveTab(t.id as any);
-                              setIsTabDropdownOpen(false);
-                            }}
-                            className={`w-full flex items-center justify-between p-3 rounded-xl text-left text-xs font-bold transition-all ${
-                              isSelected
-                                ? "bg-indigo-600 text-white font-black shadow-md shadow-indigo-600/20"
-                                : "text-slate-700 hover:bg-slate-50"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5">
-                              <Icon className={`w-4 h-4 ${isSelected ? "text-white" : "text-indigo-600"}`} />
-                              <span>{t.label}</span>
-                            </div>
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              isSelected ? "bg-white/20 text-white" : t.badgeColor
-                            }`}>
-                              {t.badge}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
+            {/* Horizontal Navigation Tabs */}
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1">
+              {tabList.map((t) => {
+                const Icon = t.icon;
+                const isActive = activeTab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setActiveTab(t.id as any)}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${isActive
+                      ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/50"
+                      : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
+                      }`}
+                  >
+                    <Icon className={`w-4 h-4 ${isActive ? "text-blue-600" : "text-slate-400"}`} />
+                    <span>{t.label}</span>
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Quick Action Buttons */}
-            <div className="flex flex-wrap items-center gap-2.5">
+            {/* Top Right Action Buttons */}
+            <div className="flex items-center gap-2.5 self-end lg:self-center shrink-0">
+
+
               <button
-                onClick={fetchData}
-                title="Refresh Data"
-                className="p-2.5 bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-xl transition-all"
+                onClick={() => fetchData(false, true)}
+                title="Bust & Re-query from Database"
+                className="flex items-center gap-1.5 px-3 py-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl text-xs font-semibold border border-slate-200 transition-colors cursor-pointer"
               >
-                <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-blue-600" : ""}`} />
+                <span className="hidden sm:inline">Refresh</span>
               </button>
 
               <button
                 onClick={() => handleOpenAddFeeModal()}
-                className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl shadow-lg shadow-emerald-600/25 transition-all text-xs"
+                className="flex items-center gap-2 px-5 py-2.5 bg-[#00875A] hover:bg-[#00704A] text-white font-bold rounded-xl text-xs shadow-sm transition-all cursor-pointer"
               >
-                <Plus className="w-4 h-4" /> Collect Student Fee
+                <Plus className="w-4 h-4" /> Collect Fee
               </button>
 
               <button
@@ -918,1257 +1532,1625 @@ export default function FinanceDashboard() {
                   setReceiptFilterType("all");
                   setActiveTab("receipts");
                 }}
-                className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold rounded-xl transition-all text-xs"
+                className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 font-bold rounded-xl text-xs transition-colors cursor-pointer"
               >
-                <Printer className="w-4 h-4" /> Print Receipts
-              </button>
-
-              <button
-                onClick={() => handleOpenAlertModal()}
-                className="flex items-center gap-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl transition-all text-xs"
-              >
-                <Bell className="w-4 h-4" /> Due Reminder Alert
-              </button>
-
-              <button
-                onClick={() => setIsPayoutModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-all"
-              >
-                <Wallet className="w-4 h-4" /> Staff Payout
+                <Printer className="w-4 h-4" /> Print Receipt
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="max-w-[1650px] mx-auto px-6 lg:px-8 mt-6">
+      {/* Main Container */}
+      <div className="max-w-[1650px] mx-auto px-6 lg:px-8 mt-5 space-y-5">
 
-        {/* 4 Summary Overview Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <Landmark className="w-6 h-6" />
-            </div>
-            <div>
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                Total Expected Fees
-              </span>
-              <div className="text-xl font-black text-slate-900 font-mono mt-0.5">
-                {formatCurrency(institutionalMetrics.totalReceivable)}
+        {/* ========================================================================= */}
+        {/* 4 SLEEK MODERN CARDS (LOW COLOR, SLIM DESIGN WITH MICRO BARS)            */}
+        {/* ========================================================================= */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+          {/* Card 1: Fees to Collect */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                <Landmark className="w-5 h-5" />
               </div>
-              <span className="text-[11px] text-slate-500 font-semibold">{students.length} Total Enrolled Students</span>
+              <div>
+                <span className="text-[11px] font-semibold text-slate-400 block">
+                  Fees to Collect
+                </span>
+                <div className="text-xl font-black text-slate-900 font-mono tracking-tight mt-0.5">
+                  {formatCurrency(institutionalMetrics.totalReceivable)}
+                </div>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  {students.length} students
+                </span>
+              </div>
             </div>
+            <MicroBarChart color="blue" />
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-6 h-6" />
-            </div>
-            <div>
-              <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider block">
-                Total Deposited Fee
-              </span>
-              <div className="text-xl font-black text-emerald-600 font-mono mt-0.5">
-                {formatCurrency(institutionalMetrics.totalCollected)}
+          {/* Card 2: Collected So Far */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <Wallet className="w-5 h-5" />
               </div>
-              <span className="text-[11px] text-emerald-700 font-bold">{institutionalMetrics.recoveryRate}% Total Collected</span>
+              <div>
+                <span className="text-[11px] font-semibold text-slate-400 block">
+                  Collected So Far
+                </span>
+                <div className="text-xl font-black text-slate-900 font-mono tracking-tight mt-0.5">
+                  {formatCurrency(institutionalMetrics.totalCollected)}
+                </div>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  This academic year
+                </span>
+              </div>
             </div>
+            <MicroBarChart color="emerald" />
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-              <AlertTriangle className="w-6 h-6" />
-            </div>
-            <div>
-              <span className="text-[11px] font-bold text-rose-500 uppercase tracking-wider block">
-                Outstanding (OS) Dues
-              </span>
-              <div className="text-xl font-black text-rose-600 font-mono mt-0.5">
-                {formatCurrency(institutionalMetrics.totalOS)}
+          {/* Card 3: Still to Pay (Dues) */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
               </div>
-              <span className="text-[11px] text-rose-700 font-bold">{institutionalMetrics.defaultersCount} Students Pending</span>
+              <div>
+                <span className="text-[11px] font-semibold text-slate-400 block">
+                  Still to Pay
+                </span>
+                <div className="text-xl font-black text-rose-600 font-mono tracking-tight mt-0.5">
+                  {formatCurrency(institutionalMetrics.totalOS)}
+                </div>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  {institutionalMetrics.defaultersCount} students have dues
+                </span>
+              </div>
             </div>
+            <MicroBarChart color="rose" />
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-              <ShoppingBag className="w-6 h-6" />
-            </div>
-            <div>
-              <span className="text-[11px] font-bold text-purple-600 uppercase tracking-wider block">
-                Fee Items & Kit Catalog
-              </span>
-              <div className="text-xl font-black text-purple-700 font-mono mt-0.5">
-                {categories.length} Items Configured
+          {/* Card 4: Fee Items */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                <FileText className="w-5 h-5" />
               </div>
-              <span className="text-[11px] text-purple-600 font-semibold">Books, Blazer, Uniform, Fine</span>
+              <div>
+                <span className="text-[11px] font-semibold text-slate-400 block">
+                  Fee Items
+                </span>
+                <div className="text-xl font-black text-slate-900 font-mono tracking-tight mt-0.5">
+                  {categories.length}
+                </div>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Books, uniform, blazer, fines
+                </span>
+              </div>
             </div>
+            <MicroBarChart color="purple" />
           </div>
+
         </div>
 
-        {/* ========================================================================= */}
-        {/* SECTION 1: STUDENT ACCOUNTS & OS DUES LEDGER                              */}
-        {/* ========================================================================= */}
-        {activeTab === "student_accounts" && (
-          <div className="space-y-4">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-              <div className="flex-1 w-full lg:max-w-lg relative">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search student by Name, Roll Number, Enrollment, or Mobile..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                />
-              </div>
+        {/* LOADING STATE VIA SKELETON ANIMATION */}
+        {isLoading ? (
+          <FinanceSkeleton />
+        ) : (
+          <>
+            {/* ========================================================================= */}
+            {/* SECTION 1: STUDENT FEES (EXACT MATCH TO ATTACHED SCREENSHOT)             */}
+            {/* ========================================================================= */}
+            {activeTab === "student_accounts" && (
+              <div className="space-y-4">
 
-              <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                {/* Search & Filter Bar */}
+                <div className="flex flex-col lg:flex-row items-center justify-between gap-3">
+
+                  {/* Search Input Box */}
+                  <div className="relative w-full lg:max-w-md">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search by student name or roll number..."
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200/80 rounded-2xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 shadow-xs"
+                    />
+                  </div>
+
+                  {/* Filter Pills */}
+                  <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                    <button
+                      onClick={() => setOsFilter("all")}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${osFilter === "all"
+                        ? "bg-indigo-50 text-indigo-600 border border-indigo-200 shadow-xs"
+                        : "bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50"
+                        }`}
+                    >
+                      Everyone
+                    </button>
+
+                    <button
+                      onClick={() => setOsFilter("os_due")}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${osFilter === "os_due"
+                        ? "bg-rose-50 text-rose-700 border border-rose-200 shadow-xs"
+                        : "bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50"
+                        }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                      <span>Has Due</span>
+                    </button>
+
+                    <button
+                      onClick={() => setOsFilter("cleared")}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${osFilter === "cleared"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs"
+                        : "bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50"
+                        }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                      <span>Paid</span>
+                    </button>
+
+                    {/* Course Filter Dropdown */}
+                    <div className="relative">
+                      <select
+                        value={selectedCourse}
+                        onChange={e => setSelectedCourse(e.target.value)}
+                        className="appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 focus:outline-none cursor-pointer shadow-xs"
+                      >
+                        <option value="all">All courses</option>
+                        {courses.map(c => (
+                          <option key={c._id || c.id} value={c._id || c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                      <GraduationCap className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Helper Information Banner with Pagination */}
+                <div className="bg-blue-50/60 border border-blue-100 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div className="flex items-center gap-3">
+                    <Info className="w-6 h-6 text-blue-500 shrink-0" />
+                    <div>
+                      <p className="font-bold text-slate-800 text-xs">
+                        Choose a student to see payments or collect a fee.
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        View fee details, payment history, receipts and more.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-center">
+                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white border border-blue-200/80 rounded-xl text-xs text-slate-600 font-semibold shadow-2xs">
+                      <span>Total</span>
+                      <strong className="text-slate-900 font-black">{filteredStudents.length} students</strong>
+                      <span className="text-slate-300">•</span>
+                      <span className="text-blue-600 font-bold">Showing {visibleStudents.length} loaded</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Modern Slim Student Roster Table */}
+                <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+
+                  {/* Table Header Row */}
+                  <div className="grid grid-cols-12 gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50/50 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    <div className="col-span-12 sm:col-span-4 lg:col-span-3">STUDENT</div>
+                    <div className="hidden sm:block sm:col-span-2 lg:col-span-2">STATUS</div>
+                    <div className="hidden sm:block sm:col-span-3 lg:col-span-3">FEE DETAILS</div>
+                    <div className="col-span-12 sm:col-span-3 lg:col-span-4 text-left sm:text-right">ACTIONS</div>
+                  </div>
+
+                  {/* Student Rows */}
+                  <div className="divide-y divide-slate-100">
+                    {visibleStudents.length > 0 ? (
+                      <>
+                        {visibleStudents.map((s: any) => {
+                          const summary = getStudentFeeSummary(s);
+                          const isPartlyPaid = summary.paid > 0 && summary.balance > 0;
+                          const isCleared = summary.balance === 0 && summary.total > 0;
+                          const isNotPaid = summary.paid === 0;
+
+                          const fName = s.firstName || s.first_name || "";
+                          const lName = s.lastName || s.last_name || "";
+                          const fullName = (s.name || `${fName} ${lName}`).trim() || "Student";
+                          const roll = s.enrollmentNumber || s.enrollment_number || s.admissionNumber || s.admission_number || s.studentId || s.student_id || "N/A";
+                          const courseCode = summary.courseObj?.code || s.courseCode || s.course_code || "COURSE";
+                          const sem = s.selectedSemester || s.selected_semester || s.courseYear || s.course_year || 1;
+                          const avatarColor = getAvatarColor(fullName);
+
+                          return (
+                            <div
+                              key={s._id || s.id}
+                              className="grid grid-cols-12 gap-4 px-5 py-4 items-center hover:bg-slate-50/60 transition-colors"
+                            >
+                              {/* Column 1: Student Details */}
+                              <div className="col-span-12 sm:col-span-4 lg:col-span-3 flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0 uppercase ${avatarColor}`}>
+                                  {fullName[0] || "S"}
+                                </div>
+                                <div className="min-w-0">
+                                  <h4 className="font-black text-slate-900 text-xs uppercase tracking-tight truncate">
+                                    {fullName}
+                                  </h4>
+                                  <p className="text-[11px] text-slate-400 font-medium truncate mt-0.5">
+                                    Roll: {roll} • {courseCode} • Sem {sem}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Column 2: Status Badge */}
+                              <div className="col-span-6 sm:col-span-2 lg:col-span-2">
+                                {isCleared && (
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200/60 rounded-full text-[11px] font-bold">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    <span>Paid</span>
+                                  </span>
+                                )}
+                                {isPartlyPaid && (
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200/60 rounded-full text-[11px] font-bold">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                    <span>Partly paid</span>
+                                  </span>
+                                )}
+                                {isNotPaid && (
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-700 border border-rose-200/60 rounded-full text-[11px] font-bold">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                    <span>Not paid</span>
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Column 3: Fee Details (Total, Paid, Left to Pay) */}
+                              <div className="col-span-6 sm:col-span-3 lg:col-span-3 flex items-center gap-6">
+                                <div>
+                                  <span className="text-[10px] text-slate-400 font-medium block">Total Fee</span>
+                                  <span className="text-xs font-bold font-mono text-slate-900">
+                                    {formatCurrency(summary.total)}
+                                  </span>
+                                </div>
+
+                                <div>
+                                  <span className="text-[10px] text-slate-400 font-medium block">Paid</span>
+                                  <span className="text-xs font-bold font-mono text-emerald-600">
+                                    {formatCurrency(summary.paid)}
+                                  </span>
+                                </div>
+
+                                <div>
+                                  <span className="text-[10px] text-slate-400 font-medium block">Left to Pay</span>
+                                  <span className={`text-xs font-bold font-mono ${summary.balance > 0 ? "text-rose-600 font-black" : "text-emerald-600"}`}>
+                                    {formatCurrency(summary.balance)}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Column 4: Actions (3 Slim Modern Buttons) */}
+                              <div className="col-span-12 sm:col-span-3 lg:col-span-4 flex items-center justify-start sm:justify-end gap-2 flex-wrap">
+                                <button
+                                  onClick={() => handleOpenAddFeeModal(s)}
+                                  className="inline-flex items-center gap-1 px-3 py-2 bg-[#00875A] hover:bg-[#00704A] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs"
+                                >
+                                  <span>₹</span> Collect fee
+                                </button>
+
+                                <button
+                                  onClick={() => handleOpenStudentStatement(s)}
+                                  className="inline-flex items-center gap-1 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs"
+                                >
+                                  <FileText className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>View statement</span>
+                                </button>
+
+                                <button
+                                  onClick={() => router.push(`/dashboard/students/${s._id || s.id}`)}
+                                  className="inline-flex items-center gap-1 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs"
+                                >
+                                  <User className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>View profile</span>
+                                </button>
+                              </div>
+
+                            </div>
+                          );
+                        })}
+
+                        {/* Infinite Scroll Lazy Loading Sentinel */}
+                        {visibleCount < filteredStudents.length ? (
+                          <div
+                            ref={scrollSentinelRef}
+                            className="p-5 flex items-center justify-center gap-2 text-slate-400 text-xs font-semibold bg-slate-50/50 border-t border-slate-100"
+                          >
+                            <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                            <span>Loading more students on scroll ({visibleStudents.length} of {filteredStudents.length})...</span>
+                          </div>
+                        ) : filteredStudents.length > 0 ? (
+                          <div className="py-4 text-center text-xs text-slate-400 font-medium bg-slate-50/20 border-t border-slate-100">
+                            All {filteredStudents.length} students loaded
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <div className="p-16 text-center">
+                        <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                        <h4 className="text-sm font-bold text-slate-700">No students match your search</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">Try clearing your filters or search keywords.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* SECTION 2: PAYMENT HISTORY                                                */}
+            {/* ========================================================================= */}
+            {activeTab === "fee_records" && (
+              <div className="space-y-4">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+                  <div className="relative w-full lg:max-w-md">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search payment records by student or receipt number..."
+                      value={recordSearch}
+                      onChange={e => setRecordSearch(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      value={recordCategoryFilter}
+                      onChange={e => setRecordCategoryFilter(e.target.value)}
+                      className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer"
+                    >
+                      <option value="all">All Fee Categories</option>
+                      {categories.map(c => (
+                        <option key={c._id || c.id} value={c.code}>{c.name}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={recordYearFilter}
+                      onChange={e => setRecordYearFilter(e.target.value)}
+                      className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer"
+                    >
+                      <option value="all">All Years</option>
+                      {[1, 2, 3, 4, 5].map(y => (
+                        <option key={y} value={`Year ${y}`}>Year {y}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={recordSemesterFilter}
+                      onChange={e => setRecordSemesterFilter(e.target.value)}
+                      className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 cursor-pointer"
+                    >
+                      <option value="all">All Semesters</option>
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
+                        <option key={s} value={String(s)}>Semester {s}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-400 uppercase font-black text-[10px]">
+                        <tr>
+                          <th className="py-3 px-4">Receipt ID</th>
+                          <th className="py-3 px-4">Student</th>
+                          <th className="py-3 px-4">Category</th>
+                          <th className="py-3 px-4">Amount</th>
+                          <th className="py-3 px-4">Method</th>
+                          <th className="py-3 px-4">Date</th>
+                          <th className="py-3 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                        {filteredTransactions.length > 0 ? (
+                          filteredTransactions.map((t: any) => {
+                            const student = t.studentId || {};
+                            return (
+                              <tr key={t._id || t.id} className="hover:bg-slate-50/70 transition-colors">
+                                <td className="py-3 px-4 font-mono font-bold text-blue-600">
+                                  {t.receiptNumber || t.transactionId || "RCP-N/A"}
+                                </td>
+                                <td className="py-3 px-4">
+                                  <p className="font-bold text-slate-900">{student.firstName} {student.lastName}</p>
+                                  <p className="text-[10px] text-slate-400">{student.enrollmentNumber || student.admissionNumber || "N/A"}</p>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <span className="px-2.5 py-0.5 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-700">
+                                    {t.categoryName || t.category?.toUpperCase() || "TUITION"}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 font-mono font-bold text-emerald-600">
+                                  {formatCurrency(t.amount)}
+                                </td>
+                                <td className="py-3 px-4">
+                                  <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-bold">
+                                    {t.paymentMethod || "Cash"}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-slate-400 font-mono">
+                                  {new Date(t.paymentDate || t.createdAt).toLocaleDateString("en-IN", {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric"
+                                  })}
+                                </td>
+                                <td className="py-3 px-4 text-right">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedReceiptForModal({
+                                          type: "student",
+                                          receiptType: "Student Fee Receipt",
+                                          receiptNumber: t.receiptNumber || `RCP-STU-${t.id?.slice(-8)}`,
+                                          transactionId: t.transactionId,
+                                          date: t.paymentDate,
+                                          name: `${student.firstName || ""} ${student.lastName || ""}`.trim() || "Student",
+                                          idNumber: student.enrollmentNumber || student.admissionNumber || "N/A",
+                                          program: t.courseId?.name || "Program",
+                                          semester: t.semester || 1,
+                                          academicYear: t.academicYear || "Year 1",
+                                          category: t.category,
+                                          categoryName: t.categoryName,
+                                          amount: Number(t.amount),
+                                          paymentMethod: t.paymentMethod,
+                                          collectedBy: t.collectedBy || "Accounts Office",
+                                          notes: t.notes,
+                                          items: [{ description: `${t.categoryName || "Fee"}`, amount: Number(t.amount) }]
+                                        });
+                                        setIsReceiptModalOpen(true);
+                                      }}
+                                      className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors cursor-pointer"
+                                      title="Print Receipt"
+                                    >
+                                      <Printer className="w-3.5 h-3.5" />
+                                    </button>
+
+                                    <button
+                                      onClick={() => handleDeleteTransaction(t._id || t.id)}
+                                      className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-500 rounded-lg transition-colors cursor-pointer"
+                                      title="Reverse / Delete"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td colSpan={7} className="py-12 text-center text-slate-400">
+                              No payment records found.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* SECTION 3: FEE SETUP & CATEGORIES                                         */}
+            {/* ========================================================================= */}
+            {activeTab === "categories" && (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">Fee Categories & Default Rates</h3>
+                    <p className="text-xs text-slate-400">Configure standard charges for tuition, uniforms, books, and fines</p>
+                  </div>
                   <button
-                    onClick={() => setOsFilter("all")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      osFilter === "all" ? "bg-white text-slate-900 shadow-sm font-black" : "text-slate-500 hover:text-slate-800"
-                    }`}
+                    onClick={() => {
+                      setEditingCategory(null);
+                      setCategoryForm({
+                        name: "",
+                        code: "",
+                        type: "Kit/Uniform",
+                        defaultAmount: "",
+                        frequency: "One-Time",
+                        isMandatory: false,
+                        description: ""
+                      });
+                      setIsCategoryModalOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer"
                   >
-                    All Students
-                  </button>
-                  <button
-                    onClick={() => setOsFilter("os_due")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      osFilter === "os_due" ? "bg-rose-600 text-white shadow-sm font-black" : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    Dues Pending ({institutionalMetrics.defaultersCount})
-                  </button>
-                  <button
-                    onClick={() => setOsFilter("cleared")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      osFilter === "cleared" ? "bg-emerald-600 text-white shadow-sm font-black" : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    Cleared
+                    <Plus className="w-3.5 h-3.5" /> Add Fee Item
                   </button>
                 </div>
 
-                <select
-                  value={selectedCourse}
-                  onChange={e => setSelectedCourse(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700"
-                >
-                  <option value="all">All Courses</option>
-                  {courses.map(c => (
-                    <option key={c._id} value={c._id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Students List */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
-              {filteredStudents.length > 0 ? (
-                filteredStudents.map((s: any) => {
-                  const summary = getStudentFeeSummary(s);
-                  const isCleared = summary.balance === 0 && summary.total > 0;
-
-                  return (
-                    <div
-                      key={s._id}
-                      className="p-5 hover:bg-slate-50/70 transition-colors flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4"
-                    >
-                      <div className="flex items-center gap-3.5">
-                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-black text-sm shrink-0 ${
-                          isCleared ? "bg-emerald-100 text-emerald-800" : summary.paid > 0 ? "bg-amber-100 text-amber-800" : "bg-rose-100 text-rose-800"
-                        }`}>
-                          {s.firstName?.[0] || "S"}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  {categories.map((c: any) => (
+                    <div key={c._id || c.id} className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-colors">
+                      <div>
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[10px] font-bold uppercase tracking-wider">
+                            {c.type || "General"}
+                          </span>
+                          <span className="text-[11px] font-medium text-slate-400">{c.frequency || "One-Time"}</span>
                         </div>
+                        <h4 className="font-bold text-slate-900 text-sm">{c.name}</h4>
+                        <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{c.description || "Institutional standard item rate"}</p>
+                      </div>
 
+                      <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between">
                         <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-sm font-black text-slate-900">
-                              {s.firstName} {s.lastName}
-                            </h3>
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                                isCleared
-                                  ? "bg-emerald-100 text-emerald-800"
-                                  : summary.paid > 0
-                                  ? "bg-amber-100 text-amber-800"
-                                  : "bg-rose-100 text-rose-800"
-                              }`}
+                          <p className="text-[10px] text-slate-400 font-semibold uppercase">Standard Rate</p>
+                          <p className="text-base font-bold font-mono text-slate-900">{formatCurrency(c.defaultAmount)}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setEditingCategory(c);
+                            setCategoryForm({
+                              name: c.name,
+                              code: c.code,
+                              type: c.type || "Kit/Uniform",
+                              defaultAmount: String(c.defaultAmount || 0),
+                              frequency: c.frequency || "One-Time",
+                              isMandatory: Boolean(c.isMandatory),
+                              description: c.description || ""
+                            });
+                            setIsCategoryModalOpen(true);
+                          }}
+                          className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold rounded-lg text-xs transition-colors cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* SECTION 4: PRINTABLE RECEIPTS HUB                                         */}
+            {/* ========================================================================= */}
+            {activeTab === "receipts" && (
+              <div className="space-y-4">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+                  <div className="relative w-full lg:max-w-md">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search receipts by receipt ID, payee, or roll number..."
+                      value={receiptSearchQuery}
+                      onChange={e => setReceiptSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                    <button
+                      onClick={() => setReceiptFilterType("all")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${receiptFilterType === "all" ? "bg-white text-slate-900 shadow-xs font-black" : "text-slate-500 hover:text-slate-800"
+                        }`}
+                    >
+                      All Receipts ({combinedReceipts.length})
+                    </button>
+                    <button
+                      onClick={() => setReceiptFilterType("student")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${receiptFilterType === "student" ? "bg-white text-slate-900 shadow-xs font-black" : "text-slate-500 hover:text-slate-800"
+                        }`}
+                    >
+                      Student Fees
+                    </button>
+                    <button
+                      onClick={() => setReceiptFilterType("employee")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${receiptFilterType === "employee" ? "bg-white text-slate-900 shadow-xs font-black" : "text-slate-500 hover:text-slate-800"
+                        }`}
+                    >
+                      Staff Payments
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-400 uppercase font-black text-[10px]">
+                        <tr>
+                          <th className="py-3 px-4">Receipt / Voucher</th>
+                          <th className="py-3 px-4">Beneficiary</th>
+                          <th className="py-3 px-4">Type</th>
+                          <th className="py-3 px-4">Amount</th>
+                          <th className="py-3 px-4">Date</th>
+                          <th className="py-3 px-4 text-right">Print Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                        {combinedReceipts.length > 0 ? (
+                          combinedReceipts.map((r: any) => (
+                            <tr key={r.id || r._id} className="hover:bg-slate-50 transition-colors">
+                              <td className="py-3 px-4 font-mono font-bold text-blue-600">
+                                {r.receiptNumber}
+                              </td>
+                              <td className="py-3 px-4">
+                                <p className="font-bold text-slate-900">{r.name}</p>
+                                <p className="text-[10px] text-slate-400">ID: {r.idNumber}</p>
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${r.type === "student" ? "bg-emerald-50 text-emerald-700" : "bg-purple-50 text-purple-700"
+                                  }`}>
+                                  {r.receiptType}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 font-mono font-bold text-slate-900">
+                                {formatCurrency(r.amount)}
+                              </td>
+                              <td className="py-3 px-4 text-slate-400 font-mono">
+                                {new Date(r.date).toLocaleDateString("en-IN", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric"
+                                })}
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <button
+                                  onClick={() => {
+                                    setSelectedReceiptForModal(r);
+                                    setIsReceiptModalOpen(true);
+                                  }}
+                                  className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold rounded-lg text-xs transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                                >
+                                  <Printer className="w-3.5 h-3.5 text-slate-500" /> Print
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={6} className="py-12 text-center text-slate-400">
+                              No receipts found.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* SECTION 5: DUE REMINDERS                                                  */}
+            {/* ========================================================================= */}
+            {activeTab === "alerts" && (
+              <div className="space-y-4">
+                <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+                  <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">Students with Pending Dues</h4>
+                      <p className="text-xs text-slate-400">Send reminder notice directly to students</p>
+                    </div>
+                  </div>
+
+                  <div className="divide-y divide-slate-100">
+                    {alertsData.defaulters.length > 0 ? (
+                      alertsData.defaulters.map((d: any, idx: number) => (
+                        <div key={idx} className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 hover:bg-slate-50 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-xs shrink-0">
+                              {d.name?.[0] || "S"}
+                            </div>
+                            <div>
+                              <p className="font-bold text-slate-900 text-xs">{d.name}</p>
+                              <p className="text-[11px] text-slate-400">
+                                Roll: {d.enrollmentNumber} • Program: {d.course}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                            <div className="text-left sm:text-right">
+                              <p className="text-[10px] text-slate-400 uppercase font-semibold">Pending Amount</p>
+                              <p className="text-sm font-bold font-mono text-rose-600">{formatCurrency(d.outstandingAmount)}</p>
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                const matchedStudent = students.find(s => (s._id || s.id) === d.studentId);
+                                handleOpenAlertModal(matchedStudent || {
+                                  _id: d.studentId,
+                                  firstName: d.name,
+                                  enrollmentNumber: d.enrollmentNumber
+                                });
+                              }}
+                              className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
                             >
-                              {isCleared ? "CLEARED" : summary.paid > 0 ? "PARTIAL DUE" : "FULL DUE"}
-                            </span>
-                            {summary.discount > 0 && (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                Disc: -{formatCurrency(summary.discount)}
+                              <Bell className="w-3.5 h-3.5" /> Send Notice
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-12 text-center text-slate-400 text-xs">
+                        All student fees are fully cleared. No pending dues!
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* SECTION 6: STAFF PAYMENTS                                                 */}
+            {/* ========================================================================= */}
+            {activeTab === "payouts" && (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">Staff Payouts & Expense Records</h3>
+                    <p className="text-xs text-slate-400">Record staff compensation and salary vouchers</p>
+                  </div>
+                  <button
+                    onClick={() => setIsPayoutModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Issue Payout
+                  </button>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-400 uppercase font-black text-[10px]">
+                        <tr>
+                          <th className="py-3 px-4">Voucher No</th>
+                          <th className="py-3 px-4">Staff Member</th>
+                          <th className="py-3 px-4">Designation</th>
+                          <th className="py-3 px-4">Type</th>
+                          <th className="py-3 px-4">Amount</th>
+                          <th className="py-3 px-4">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                        {payouts.length > 0 ? (
+                          payouts.map((p: any) => (
+                            <tr key={p._id || p.id} className="hover:bg-slate-50 transition-colors">
+                              <td className="py-3 px-4 font-mono font-bold text-blue-600">{p.receiptNumber || p.transactionId}</td>
+                              <td className="py-3 px-4 font-bold text-slate-900">{p.payeeName}</td>
+                              <td className="py-3 px-4 text-slate-500">{p.designation}</td>
+                              <td className="py-3 px-4">
+                                <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-md text-[10px] font-bold">
+                                  {p.payoutType}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 font-mono font-bold text-slate-900">{formatCurrency(p.amount)}</td>
+                              <td className="py-3 px-4 text-slate-400 font-mono">
+                                {new Date(p.paymentDate || p.createdAt).toLocaleDateString("en-IN", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric"
+                                })}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={6} className="py-12 text-center text-slate-400">
+                              No staff payout records yet.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* SECTION 7: COURSES & RATES                                                */}
+            {/* ========================================================================= */}
+            {activeTab === "branch_course" && (
+              <div className="space-y-4">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex justify-between items-center">
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">Academic Course Tuition Setup</h3>
+                    <p className="text-xs text-slate-400">Default tuition fees configured per program</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  {courses.map((c: any) => (
+                    <div key={c._id || c.id} className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+                      <div>
+                        <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[10px] font-bold uppercase tracking-wider mb-2 inline-block">
+                          {c.code || "COURSE"}
+                        </span>
+                        <h4 className="font-bold text-slate-900 text-sm mb-0.5">{c.name}</h4>
+                        <p className="text-xs text-slate-400 font-medium mb-3">Duration: {c.duration || 4} Years</p>
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-medium uppercase">Tuition Fee</p>
+                          <p className="text-base font-bold font-mono text-blue-600">{formatCurrency(c.tuitionFee)}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setEditingCourse(c);
+                            setCourseFeeForm({
+                              tuitionFee: String(c.tuitionFee || 0),
+                              semesterFee: "",
+                              applyToStudents: true
+                            });
+                            setIsCourseFeeModalOpen(true);
+                          }}
+                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+      </div>
+
+      {/* ========================================================================= */}
+      {/* MODAL 1: STUDENT STATEMENT & FINANCIAL LEDGER MODAL                       */}
+      {/* ========================================================================= */}
+      {/* ========================================================================= */}
+      {/* SLIDE-OVER SIDEBAR: STUDENT STATEMENT & FINANCIAL LEDGER (SLIDES FROM RIGHT)*/}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {isStatementModalOpen && (
+          <div className="fixed inset-0 z-50 overflow-hidden">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setIsStatementModalOpen(false)}
+              className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs transition-opacity"
+            />
+
+            {/* Slide-over panel container */}
+            <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10 pointer-events-none">
+              <motion.div
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
+                transition={{ type: "spring", damping: 28, stiffness: 280 }}
+                className="w-screen max-w-2xl bg-white shadow-2xl flex flex-col pointer-events-auto border-l border-slate-200/80 h-full"
+              >
+                {/* 1. Header (Sticky Top) */}
+                <div className="p-5 sm:p-6 border-b border-slate-100 bg-white shrink-0 sticky top-0 z-20">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-md text-[11px] font-bold uppercase tracking-wider">
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Student Financial Statement</span>
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setIsStatementModalOpen(false);
+                          handleOpenAddFeeModal(selectedStudentForStatement);
+                        }}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-[#00875A] hover:bg-[#00704A] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Collect Fee</span>
+                      </button>
+
+                      <button
+                        onClick={() => setIsStatementModalOpen(false)}
+                        className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors"
+                        title="Close sidebar"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Student Identity Card */}
+                  {(() => {
+                    const stu = studentStatementData?.student || selectedStudentForStatement || {};
+                    const fName = stu.firstName || stu.first_name || "";
+                    const lName = stu.lastName || stu.last_name || "";
+                    const fullName = (stu.name || `${fName} ${lName}`).trim() || "Student";
+                    const roll = stu.enrollmentNumber || stu.enrollment_number || stu.admissionNumber || stu.admission_number || stu.studentId || stu.student_id || "N/A";
+                    const courseName = stu.selectedProgram?.name || stu.courseName || stu.course_name || stu.courseCode || "Course";
+                    const courseCode = stu.selectedProgram?.code || stu.courseCode || stu.course_code || "";
+                    const branchName = stu.selectedBranch?.name || stu.branchName || "";
+                    const sem = stu.selectedSemester || stu.selected_semester || stu.courseYear || 1;
+                    const avatarColor = getAvatarColor(fullName);
+
+                    const summary = studentStatementData?.summary || {};
+                    const isCleared = (summary.totalOutstanding === 0 && summary.totalAssessed > 0) || summary.status === "Paid" || summary.status === "Cleared";
+                    const isPartial = summary.totalPaid > 0 && summary.totalOutstanding > 0;
+                    const isUnpaid = summary.totalPaid === 0;
+
+                    return (
+                      <div className="flex items-center gap-3.5 pt-1">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-base shrink-0 uppercase shadow-2xs ${avatarColor}`}>
+                          {fullName[0] || "S"}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-black text-slate-900 text-base uppercase tracking-tight truncate">
+                              {fullName}
+                            </h3>
+                            {isCleared && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200/60 rounded-full text-[10px] font-bold">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                <span>Paid & Cleared</span>
+                              </span>
+                            )}
+                            {isPartial && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-200/60 rounded-full text-[10px] font-bold">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                <span>Partially Paid</span>
+                              </span>
+                            )}
+                            {isUnpaid && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-rose-50 text-rose-700 border border-rose-200/60 rounded-full text-[10px] font-bold">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                <span>Not Paid</span>
                               </span>
                             )}
                           </div>
+                          <p className="text-xs text-slate-400 font-medium truncate mt-0.5">
+                            Roll: <strong className="text-slate-700 font-mono">{roll}</strong> • {courseName} {courseCode ? `(${courseCode})` : ""} • Sem {sem}
+                            {branchName ? ` • ${branchName}` : ""}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
 
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 font-medium mt-0.5">
-                            <span className="font-mono font-bold text-indigo-900">
-                              Roll: {s.enrollmentNumber || s.admissionNumber || "N/A"}
-                            </span>
-                            <span>•</span>
-                            <span>{summary.courseObj?.name || "Program"}</span>
-                            <span>•</span>
-                            <span>Sem {s.selectedSemester || 1}</span>
-                            {s.mobile && (
-                              <>
-                                <span>•</span>
-                                <span className="flex items-center gap-1 font-mono text-slate-600">
-                                  <Phone className="w-3 h-3" /> {s.mobile}
-                                </span>
-                              </>
-                            )}
+                {/* 2. Scrollable Body Content */}
+                <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
+                  {isLoadingStatement ? (
+                    <div className="space-y-6 animate-pulse">
+                      {/* Skeleton Metric Cards */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        {[1, 2, 3, 4].map(i => (
+                          <div key={i} className="bg-slate-100/80 p-3.5 rounded-2xl border border-slate-200/60 space-y-2">
+                            <div className="h-2.5 w-16 bg-slate-200 rounded-md" />
+                            <div className="h-6 w-24 bg-slate-200 rounded-lg" />
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Skeleton Section Header */}
+                      <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 bg-slate-200 rounded" />
+                          <div className="h-3.5 w-44 bg-slate-200 rounded-md" />
+                        </div>
+                        <div className="h-5 w-20 bg-slate-100 rounded-full" />
+                      </div>
+
+                      {/* Skeleton Transaction Cards */}
+                      <div className="space-y-3">
+                        {[1, 2, 3].map(i => (
+                          <div key={i} className="p-3.5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="space-y-2 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <div className="h-3.5 w-28 bg-slate-200 rounded" />
+                                  <div className="h-4 w-16 bg-slate-200/80 rounded-md" />
+                                  <div className="h-4 w-12 bg-slate-100 rounded" />
+                                </div>
+                                <div className="h-3 w-48 bg-slate-100 rounded" />
+                              </div>
+                              <div className="space-y-1.5 text-right">
+                                <div className="h-5 w-24 bg-slate-200 rounded-lg ml-auto" />
+                                <div className="h-2.5 w-16 bg-slate-100 rounded ml-auto" />
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                              <div className="h-3 w-20 bg-slate-100 rounded" />
+                              <div className="flex gap-2">
+                                <div className="h-6 w-24 bg-slate-200/80 rounded-lg" />
+                                <div className="h-6 w-6 bg-slate-100 rounded-lg" />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : studentStatementData ? (
+                    <>
+                      {/* Financial Metrics Summary Banner */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/70">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Assessed</span>
+                          <p className="text-base font-bold font-mono text-slate-900 mt-0.5">
+                            {formatCurrency(studentStatementData.summary?.totalGross || studentStatementData.summary?.totalAssessed || 0)}
+                          </p>
+                        </div>
+
+                        <div className="bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-100">
+                          <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Total Paid</span>
+                          <p className="text-base font-bold font-mono text-emerald-700 mt-0.5">
+                            {formatCurrency(studentStatementData.summary?.totalPaid || 0)}
+                          </p>
+                        </div>
+
+                        <div className="bg-rose-50/70 p-3.5 rounded-2xl border border-rose-100">
+                          <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider block">Left to Pay</span>
+                          <p className={`text-base font-bold font-mono mt-0.5 ${(studentStatementData.summary?.totalOutstanding || 0) > 0 ? "text-rose-700 font-black" : "text-emerald-700"}`}>
+                            {formatCurrency(studentStatementData.summary?.totalOutstanding || 0)}
+                          </p>
+                        </div>
+
+                        <div className="bg-blue-50/70 p-3.5 rounded-2xl border border-blue-100">
+                          <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">Concession</span>
+                          <p className="text-base font-bold font-mono text-blue-700 mt-0.5">
+                            {studentStatementData.summary?.totalDiscount > 0 ? `- ${formatCurrency(studentStatementData.summary?.totalDiscount)}` : "₹0"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Payment Transactions & Categories What Student Paid For */}
+                      {(() => {
+                        const txns = studentStatementData.transactions || [];
+
+                        return (
+                          <div className="space-y-3 pt-1">
+                            <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                              <div className="flex items-center gap-2">
+                                <Receipt className="w-4 h-4 text-emerald-600" />
+                                <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                                  Payment Transactions & Categories
+                                </h4>
+                              </div>
+                              <span className="text-[11px] text-slate-500 font-semibold bg-slate-100 px-2.5 py-0.5 rounded-full">
+                                {txns.length} payment record{txns.length === 1 ? "" : "s"}
+                              </span>
+                            </div>
+
+                                <div className="space-y-2.5">
+                                  {txns.length > 0 ? (
+                                    txns.map((t: any) => {
+                                      const catName = t.categoryName || t.category || "Tuition Fee";
+                                      const pDate = new Date(t.paymentDate || t.createdAt).toLocaleDateString("en-IN", {
+                                        day: "2-digit",
+                                        month: "short",
+                                        year: "numeric"
+                                      });
+
+                                      return (
+                                        <div
+                                          key={t.id || t._id}
+                                          className="p-3.5 bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-all"
+                                        >
+                                          <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                              <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="font-mono font-bold text-xs text-blue-600">
+                                                  {t.receiptNumber || t.transactionId}
+                                                </span>
+                                                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded-md text-[10px] font-bold border border-emerald-200/60">
+                                                  {catName}
+                                                </span>
+                                                <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-semibold">
+                                                  {t.paymentMethod || "Cash"}
+                                                </span>
+                                              </div>
+
+                                              <p className="text-[11px] text-slate-500 font-medium mt-1">
+                                                Paid for: <strong className="text-slate-800">{catName}</strong>
+                                                {t.semester ? ` • Semester ${t.semester}` : ""}
+                                                {t.academicYear ? ` • ${t.academicYear}` : ""}
+                                              </p>
+
+                                              {t.notes && (
+                                                <p className="text-[10px] text-slate-400 italic mt-0.5">
+                                                  Note: {t.notes}
+                                                </p>
+                                              )}
+                                            </div>
+
+                                            <div className="text-right shrink-0">
+                                              <span className="font-mono font-black text-sm text-emerald-600 block">
+                                                + {formatCurrency(t.amount)}
+                                              </span>
+                                              <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                                                {pDate}
+                                              </span>
+                                            </div>
+                                          </div>
+
+                                          {/* Row Actions: Print Receipt & Delete / Reverse */}
+                                          <div className="flex items-center justify-between pt-2.5 mt-2 border-t border-slate-100 text-xs">
+                                            <span className="text-[10px] text-slate-400 font-medium">
+                                              Status: <strong className="text-emerald-600">Confirmed</strong>
+                                            </span>
+
+                                            <div className="flex items-center gap-1.5">
+                                              <button
+                                                onClick={() => {
+                                                  const stu = studentStatementData?.student || selectedStudentForStatement;
+                                                  setSelectedReceiptForModal({
+                                                    type: "student",
+                                                    receiptType: "Student Fee Receipt",
+                                                    receiptNumber: t.receiptNumber || t.transactionId || `RCP-${Date.now()}`,
+                                                    transactionId: t.transactionId,
+                                                    date: t.paymentDate || t.createdAt,
+                                                    name: `${stu?.firstName || ""} ${stu?.lastName || ""}`.trim() || "Student",
+                                                    idNumber: stu?.enrollmentNumber || stu?.admissionNumber || stu?.studentId || "N/A",
+                                                    program: stu?.selectedProgram?.name || stu?.courseName || "Course",
+                                                    semester: t.semester,
+                                                    academicYear: t.academicYear || `Year ${stu?.courseYear || 1}`,
+                                                    category: t.category,
+                                                    categoryName: catName,
+                                                    amount: t.amount,
+                                                    paymentMethod: t.paymentMethod || "Cash",
+                                                    disbursedBy: "Accounts Department",
+                                                    notes: t.notes || "",
+                                                    items: [
+                                                      {
+                                                        description: `${catName} (${t.academicYear || `Sem ${t.semester || 1}`})`,
+                                                        amount: t.amount
+                                                      }
+                                                    ]
+                                                  });
+                                                  setIsReceiptModalOpen(true);
+                                                }}
+                                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold rounded-lg text-[11px] border border-slate-200/80 cursor-pointer transition-colors shadow-2xs"
+                                              >
+                                                <Printer className="w-3 h-3 text-slate-500" />
+                                                <span>Print Receipt</span>
+                                              </button>
+
+                                              <button
+                                                onClick={() => handleDeleteTransaction(t.id || t._id)}
+                                                className="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer transition-colors"
+                                                title="Delete receipt & reverse payment"
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })
+                                  ) : (
+                                    <div className="p-8 text-center bg-slate-50/80 rounded-2xl border border-slate-200/70 space-y-2">
+                                      <Receipt className="w-8 h-8 text-slate-300 mx-auto" />
+                                      <p className="text-xs font-bold text-slate-600">No payment transactions recorded yet.</p>
+                                      <p className="text-[11px] text-slate-400">
+                                        Once a fee payment is collected, the receipt and transaction category will appear here.
+                                      </p>
+                                      <button
+                                        onClick={() => {
+                                          setIsStatementModalOpen(false);
+                                          handleOpenAddFeeModal(selectedStudentForStatement);
+                                        }}
+                                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-[#00875A] text-white font-bold rounded-xl text-xs hover:bg-[#00704A] cursor-pointer mt-2 shadow-2xs"
+                                      >
+                                        <Plus className="w-3.5 h-3.5" /> Collect First Payment
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </>
+                  ) : null}
+                </div>
+
+                {/* 3. Footer (Sticky Bottom) */}
+                <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/90 shrink-0 flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Balance Left</span>
+                    <span className={`text-base font-bold font-mono ${(studentStatementData?.summary?.totalOutstanding || 0) > 0 ? "text-rose-600 font-black" : "text-emerald-600"}`}>
+                      {formatCurrency(studentStatementData?.summary?.totalOutstanding || 0)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsStatementModalOpen(false)}
+                      className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs"
+                    >
+                      Close
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsStatementModalOpen(false);
+                        handleOpenAddFeeModal(selectedStudentForStatement);
+                      }}
+                      className="px-4 py-2 bg-[#00875A] hover:bg-[#00704A] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs inline-flex items-center gap-1.5"
+                    >
+                      <span>₹</span> Collect Fee
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================================================= */}
+      {/* MODAL 2: EDIT FEE STRUCTURE & PAID AMOUNTS (COLLECT FEE POPUP)             */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {isAddFeeModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+              onClick={() => setIsAddFeeModalOpen(false)}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }} 
+              animate={{ opacity: 1, scale: 1, y: 0 }} 
+              exit={{ opacity: 0, scale: 0.95, y: 20 }} 
+              className="relative bg-white w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden z-10 max-h-[92vh] flex flex-col"
+            >
+              {(() => {
+                const activeStudent = selectedStudentForFee || students.find(s => (s._id || s.id) === feeForm.studentId);
+                const fName = activeStudent?.firstName || activeStudent?.first_name || "";
+                const lName = activeStudent?.lastName || activeStudent?.last_name || "";
+                const fullName = (activeStudent?.name || `${fName} ${lName}`).trim() || "Student";
+
+                return (
+                  <>
+                    {/* Header */}
+                    <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center border border-indigo-100 text-indigo-600">
+                          <Edit3 className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="font-black text-slate-800 text-base">Edit Fee Structure & Paid Amounts</h3>
+                          <p className="text-xs font-bold text-slate-400">
+                            Configure or modify fee records for {fullName}
+                          </p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => setIsAddFeeModalOpen(false)}
+                        className="w-8 h-8 rounded-full bg-white text-slate-400 hover:text-slate-600 flex items-center justify-center border border-slate-100 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Summary Bar */}
+                    <div className="px-8 py-3 bg-indigo-50/50 border-b border-indigo-100/50 flex flex-wrap justify-between items-center gap-4">
+                      {isLoadingFeeStructure && editFeeYears.length === 0 ? (
+                        <div className="flex items-center gap-5 text-xs font-bold animate-pulse">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-400 uppercase text-[10px]">Gross: </span>
+                            <div className="h-3.5 w-14 bg-slate-200/90 rounded" />
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-400 uppercase text-[10px]">Net Total: </span>
+                            <div className="h-3.5 w-16 bg-slate-200/90 rounded" />
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-400 uppercase text-[10px]">Paid: </span>
+                            <div className="h-3.5 w-12 bg-emerald-200/90 rounded" />
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-400 uppercase text-[10px]">Due: </span>
+                            <div className="h-3.5 w-12 bg-amber-200/90 rounded" />
                           </div>
                         </div>
-                      </div>
-
-                      <div className="flex items-center gap-4 sm:gap-6 bg-slate-50 p-2.5 px-4 rounded-xl border border-slate-200 text-xs w-full lg:w-auto justify-between lg:justify-start">
-                        <div>
-                          <span className="text-[10px] font-bold text-slate-400 uppercase block">
-                            {summary.discount > 0 ? "Net Payable" : "Total Assessed"}
-                          </span>
-                          <span className="font-mono font-black text-slate-800 text-sm">{formatCurrency(summary.total)}</span>
-                        </div>
-                        {summary.discount > 0 && (
-                          <>
-                            <div className="h-6 w-px bg-slate-200"></div>
-                            <div>
-                              <span className="text-[10px] font-bold text-emerald-600 uppercase block">Concession</span>
-                              <span className="font-mono font-black text-emerald-600 text-sm">-{formatCurrency(summary.discount)}</span>
+                      ) : (
+                        <div className="flex items-center gap-5 text-xs font-bold">
+                          <div>
+                            <span className="text-slate-400 uppercase text-[10px]">Gross: </span>
+                            <span className="font-black text-slate-700">{formatCurrency(editModalTotals.grossTotal)}</span>
+                          </div>
+                          {editModalTotals.totalDiscount > 0 && (
+                            <div className="bg-emerald-100/80 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-200">
+                              <span className="uppercase text-[10px] font-black">Discount: </span>
+                              <span className="font-black">-{formatCurrency(editModalTotals.totalDiscount)}</span>
                             </div>
-                          </>
-                        )}
-                        <div className="h-6 w-px bg-slate-200"></div>
-                        <div>
-                          <span className="text-[10px] font-bold text-emerald-600 uppercase block">Deposited</span>
-                          <span className="font-mono font-black text-emerald-600 text-sm">{formatCurrency(summary.paid)}</span>
+                          )}
+                          <div>
+                            <span className="text-slate-400 uppercase text-[10px]">Net Total: </span>
+                            <span className="font-black text-slate-900">{formatCurrency(editModalTotals.total)}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 uppercase text-[10px]">Paid: </span>
+                            <span className="font-black text-emerald-600">{formatCurrency(editModalTotals.paid)}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 uppercase text-[10px]">Due: </span>
+                            <span className="font-black text-amber-600">{formatCurrency(editModalTotals.balance)}</span>
+                          </div>
                         </div>
-                        <div className="h-6 w-px bg-slate-200"></div>
-                        <div>
-                          <span className="text-[10px] font-bold text-rose-500 uppercase block">Outstanding (OS)</span>
-                          <span className="font-mono font-black text-rose-600 text-sm">{formatCurrency(summary.balance)}</span>
-                        </div>
-                      </div>
+                      )}
 
-                      <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
-                        <button
-                          onClick={() => handleOpenAddFeeModal(s)}
-                          className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs transition-all shadow-md shadow-emerald-600/20"
+                      <div className="flex items-center gap-2">
+                        <button 
+                          type="button" 
+                          onClick={handleMarkAllAsPaid}
+                          disabled={isLoadingFeeStructure && editFeeYears.length === 0}
+                          className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-all flex items-center gap-1 shadow-sm cursor-pointer disabled:opacity-50"
                         >
-                          <Plus className="w-3.5 h-3.5" /> Collect Fee
+                          <Check className="w-3.5 h-3.5" /> Mark All as Paid
                         </button>
-
-                        <button
-                          onClick={() => handleOpenStudentStatement(s)}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-all"
-                          title="View Statement"
+                        <button 
+                          type="button" 
+                          onClick={handleResetAllPaid}
+                          disabled={isLoadingFeeStructure && editFeeYears.length === 0}
+                          className="px-3 py-1.5 bg-slate-200 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-300 transition-all cursor-pointer disabled:opacity-50"
                         >
-                          <FileText className="w-3.5 h-3.5 text-indigo-600" /> OS Statement
-                        </button>
-
-                        <Link
-                          href={`/dashboard/students/${s._id}`}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold rounded-xl text-xs transition-all"
-                          title="See Student Profile"
-                        >
-                          <User className="w-3.5 h-3.5" /> See Profile
-                        </Link>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="p-12 text-center text-slate-400">
-                  <Users className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                  <p className="font-bold">No students found matching your search.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* SECTION 2: FEE COLLECTION HISTORY                                         */}
-        {/* ========================================================================= */}
-        {activeTab === "fee_records" && (
-          <div className="space-y-6">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-              <div className="flex-1 w-full lg:max-w-md relative">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search receipt, student name, roll number..."
-                  value={recordSearch}
-                  onChange={e => setRecordSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                />
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={recordSemesterFilter}
-                  onChange={e => setRecordSemesterFilter(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700"
-                >
-                  <option value="all">All Semesters</option>
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <option key={i + 1} value={i + 1}>Semester {i + 1}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={recordCategoryFilter}
-                  onChange={e => setRecordCategoryFilter(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700"
-                >
-                  <option value="all">All Fee Categories</option>
-                  {categories.map(c => (
-                    <option key={c.code} value={c.code}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="p-4 border-b border-slate-100 font-black text-sm text-slate-800 flex justify-between items-center">
-                <span>Recent Collections & Deposits ({filteredTransactions.length})</span>
-                <span className="text-xs text-slate-400 font-normal">Click Print Receipt to view or print official vouchers</span>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
-                    <tr>
-                      <th className="p-3.5 pl-5">Receipt No</th>
-                      <th className="p-3.5">Student Name & Roll</th>
-                      <th className="p-3.5">Category</th>
-                      <th className="p-3.5">Payment Mode</th>
-                      <th className="p-3.5">Date</th>
-                      <th className="p-3.5">Amount</th>
-                      <th className="p-3.5 pr-5 text-right">Receipt Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium">
-                    {filteredTransactions.map((txn: any) => {
-                      const student = txn.studentId || {};
-                      const course = txn.courseId || {};
-                      return (
-                        <tr key={txn._id} className="hover:bg-slate-50">
-                          <td className="p-3.5 pl-5 font-mono font-bold text-indigo-900">
-                            {txn.receiptNumber || `RCP-${txn._id.slice(-6)}`}
-                          </td>
-                          <td className="p-3.5">
-                            <div className="font-bold text-slate-900">{student.firstName} {student.lastName}</div>
-                            <div className="text-[10px] text-slate-400 font-mono">{student.enrollmentNumber || "N/A"}</div>
-                          </td>
-                          <td className="p-3.5">
-                            <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md font-bold text-[10px]">
-                              {txn.categoryName || txn.category || "Tuition"}
-                            </span>
-                          </td>
-                          <td className="p-3.5">
-                            <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md font-bold text-[10px]">
-                              {txn.paymentMethod || "Cash"}
-                            </span>
-                          </td>
-                          <td className="p-3.5 text-slate-500">
-                            {new Date(txn.paymentDate || txn.createdAt).toLocaleDateString("en-IN")}
-                          </td>
-                          <td className="p-3.5 font-mono font-black text-sm text-emerald-600">
-                            {formatCurrency(txn.amount)}
-                          </td>
-                          <td className="p-3.5 pr-5 text-right">
-                            <button
-                              onClick={() => {
-                                setSelectedReceiptForModal({
-                                  type: "student",
-                                  receiptType: "Student Fee Receipt",
-                                  receiptNumber: txn.receiptNumber || `RCP-STU-${txn._id.slice(-8).toUpperCase()}`,
-                                  transactionId: txn.transactionId,
-                                  date: txn.paymentDate,
-                                  name: `${student.firstName || ""} ${student.lastName || ""}`.trim() || "Student",
-                                  idNumber: student.enrollmentNumber || student.admissionNumber || "N/A",
-                                  program: course.name || "Academic Program",
-                                  semester: txn.semester || 1,
-                                  academicYear: txn.academicYear || "Year 1",
-                                  category: txn.category || "tuition",
-                                  categoryName: txn.categoryName || "Tuition Fee",
-                                  amount: txn.amount,
-                                  paymentMethod: txn.paymentMethod,
-                                  collectedBy: "Accounts Office",
-                                  notes: txn.notes,
-                                  items: [
-                                    {
-                                      description: `${txn.categoryName || txn.category || "Fee"} (${txn.academicYear || "Year 1"}, Sem ${txn.semester || 1})`,
-                                      amount: txn.amount
-                                    }
-                                  ]
-                                });
-                                setIsReceiptModalOpen(true);
-                              }}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs shadow-sm"
-                            >
-                              <Printer className="w-3.5 h-3.5" /> Print Receipt
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* SECTION 3: FEE CATEGORIES (BOOKS, UNIFORM, BLAZER, FINE, ETC.)            */}
-        {/* ========================================================================= */}
-        {activeTab === "categories" && (
-          <div className="space-y-6">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
-              <div>
-                <h3 className="font-black text-slate-900 text-base">Fee Categories & Pricing Catalog</h3>
-                <p className="text-xs text-slate-500">Books, Uniform, Blazer, T-Shirt, Bag, Lab Coat & Penalties</p>
-              </div>
-
-              <button
-                onClick={() => {
-                  setEditingCategory(null);
-                  setCategoryForm({
-                    name: "",
-                    code: "",
-                    type: "Kit/Uniform",
-                    defaultAmount: "",
-                    frequency: "One-Time",
-                    isMandatory: false,
-                    description: ""
-                  });
-                  setIsCategoryModalOpen(true);
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs shadow-md"
-              >
-                <Plus className="w-4 h-4" /> Add New Category
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {categories.map((cat: any) => (
-                <div key={cat._id || cat.code} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                  <div>
-                    <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-black text-slate-900 text-base">{cat.name}</h4>
-                      <span className="px-2 py-0.5 bg-slate-100 rounded-md text-[10px] font-bold text-slate-600">
-                        {cat.frequency || "One-Time"}
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-slate-400 font-mono">Code: {cat.code}</p>
-                    <p className="text-xs text-slate-500 mt-2">{cat.description || "Standard student fee item."}</p>
-                  </div>
-
-                  <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center">
-                    <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase block">Standard Price</span>
-                      <span className="text-lg font-black text-indigo-900 font-mono">{formatCurrency(cat.defaultAmount || 0)}</span>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        setEditingCategory(cat);
-                        setCategoryForm({
-                          name: cat.name,
-                          code: cat.code,
-                          type: cat.type || "Kit/Uniform",
-                          defaultAmount: String(cat.defaultAmount || 0),
-                          frequency: cat.frequency || "One-Time",
-                          isMandatory: Boolean(cat.isMandatory),
-                          description: cat.description || ""
-                        });
-                        setIsCategoryModalOpen(true);
-                      }}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs"
-                    >
-                      Edit Price
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* SECTION 4: RECEIPTS & VOUCHERS                                            */}
-        {/* ========================================================================= */}
-        {activeTab === "receipts" && (
-          <div className="space-y-6">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div>
-                <h3 className="font-black text-slate-900 text-base">Receipts & Payment Vouchers</h3>
-                <p className="text-xs text-slate-500">Official printable slips for Student Fee & Staff Salary</p>
-              </div>
-
-              <div className="relative w-full md:w-80">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search receipt number or beneficiary name..."
-                  value={receiptSearchQuery}
-                  onChange={e => setReceiptSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {combinedReceipts.map((r: any) => (
-                <div key={r._id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
-                        r.type === "student" ? "bg-indigo-50 text-indigo-700" : "bg-slate-100 text-slate-800"
-                      }`}>
-                        {r.receiptType}
-                      </span>
-                      <span className="font-mono text-xs text-slate-400">
-                        {new Date(r.date).toLocaleDateString("en-IN")}
-                      </span>
-                    </div>
-
-                    <h4 className="font-black text-slate-900 text-sm">{r.name}</h4>
-                    <p className="text-xs font-mono text-slate-500">Receipt: {r.receiptNumber}</p>
-                    <p className="text-xs text-slate-600 mt-2 font-medium">
-                      Item: {r.categoryName || r.payoutType || "Fee Deposit"}
-                    </p>
-                  </div>
-
-                  <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center">
-                    <span className="text-base font-black text-emerald-600 font-mono">
-                      {formatCurrency(r.amount)}
-                    </span>
-
-                    <button
-                      onClick={() => {
-                        setSelectedReceiptForModal(r);
-                        setIsReceiptModalOpen(true);
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs shadow-sm"
-                    >
-                      <Printer className="w-3.5 h-3.5" /> Print Receipt
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* SECTION 5: OVERDUE ALERTS                                                 */}
-        {/* ========================================================================= */}
-        {activeTab === "alerts" && (
-          <div className="space-y-6">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
-              <div>
-                <h3 className="font-black text-slate-900 text-base">Fee Defaulter Alerts & Notices</h3>
-                <p className="text-xs text-slate-500">Send reminder alerts to students with pending balances</p>
-              </div>
-
-              <button
-                onClick={() => handleOpenAlertModal()}
-                className="flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs shadow-md shadow-rose-600/20"
-              >
-                <Send className="w-4 h-4" /> Send New Due Alert
-              </button>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="p-4 border-b border-slate-100 font-black text-sm text-slate-800">
-                Students with Pending Outstanding (OS) Dues
-              </div>
-
-              <div className="divide-y divide-slate-100">
-                {filteredStudents.filter(s => getStudentFeeSummary(s).balance > 0).map(s => {
-                  const summary = getStudentFeeSummary(s);
-                  return (
-                    <div key={s._id} className="p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-                      <div>
-                        <h4 className="font-bold text-sm text-slate-900">{s.firstName} {s.lastName}</h4>
-                        <p className="text-xs text-slate-400 font-mono">
-                          Roll: {s.enrollmentNumber || "N/A"} • Phone: {s.mobile || "N/A"}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <span className="text-[10px] font-bold text-rose-500 uppercase block">Pending Due</span>
-                          <span className="font-mono font-black text-rose-600 text-base">{formatCurrency(summary.balance)}</span>
-                        </div>
-
-                        <button
-                          onClick={() => handleCopyWhatsAppMessage(s)}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold"
-                        >
-                          <MessageSquare className="w-3.5 h-3.5" /> WhatsApp Message
-                        </button>
-
-                        <button
-                          onClick={() => handleOpenAlertModal(s)}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-xs"
-                        >
-                          <Bell className="w-3.5 h-3.5" /> Send Notice
+                          Reset Paid
                         </button>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* ========================================================================= */}
-        {/* SECTION 6: STAFF PAYROLL                                                  */}
-        {/* ========================================================================= */}
-        {activeTab === "payouts" && (
-          <div className="space-y-6">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
-              <div>
-                <h3 className="font-black text-slate-900 text-base">Staff Salaries & Payout Vouchers</h3>
-                <p className="text-xs text-slate-500">Employee payment disbursements and vouchers</p>
-              </div>
-
-              <button
-                onClick={() => setIsPayoutModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs shadow-md"
-              >
-                <Plus className="w-4 h-4" /> Disburse Staff Payment
-              </button>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
-                  <tr>
-                    <th className="p-3.5 pl-5">Voucher No</th>
-                    <th className="p-3.5">Employee Name</th>
-                    <th className="p-3.5">Type</th>
-                    <th className="p-3.5">Date</th>
-                    <th className="p-3.5">Amount</th>
-                    <th className="p-3.5 pr-5 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {payouts.map((p: any) => (
-                    <tr key={p._id} className="hover:bg-slate-50">
-                      <td className="p-3.5 pl-5 font-mono font-bold text-slate-900">
-                        {p.receiptNumber || `RCP-EMP-${p._id.slice(-6)}`}
-                      </td>
-                      <td className="p-3.5 font-bold text-slate-900">{p.payeeName}</td>
-                      <td className="p-3.5">
-                        <span className="px-2 py-0.5 bg-slate-100 rounded-md font-bold text-[10px]">
-                          {p.payoutType || "Salary"}
-                        </span>
-                      </td>
-                      <td className="p-3.5 text-slate-500">{new Date(p.paymentDate).toLocaleDateString("en-IN")}</td>
-                      <td className="p-3.5 font-mono font-black text-sm text-slate-900">{formatCurrency(p.amount)}</td>
-                      <td className="p-3.5 pr-5 text-right">
-                        <button
-                          onClick={() => {
-                            setSelectedReceiptForModal({
-                              type: "employee",
-                              receiptType: "Employee Payment Voucher",
-                              receiptNumber: p.receiptNumber || `RCP-EMP-${p._id.slice(-8).toUpperCase()}`,
-                              transactionId: p.transactionId,
-                              date: p.paymentDate,
-                              name: p.payeeName,
-                              idNumber: "EMP-001",
-                              designation: p.designation || "Staff",
-                              department: p.department || "Academics",
-                              payoutType: p.payoutType || "Salary",
-                              amount: p.amount,
-                              paymentMethod: p.paymentMethod,
-                              disbursedBy: "Finance Officer",
-                              notes: p.notes,
-                              items: [
-                                {
-                                  description: `${p.payoutType || "Salary"} Disbursal`,
-                                  amount: p.amount
-                                }
-                              ]
-                            });
-                            setIsReceiptModalOpen(true);
+                    {/* Quick Student Selector if opened without selected student */}
+                    {!selectedStudentForFee && (
+                      <div className="px-8 py-3 bg-slate-100/70 border-b border-slate-200 flex items-center gap-3">
+                        <span className="text-[11px] font-bold text-slate-500 whitespace-nowrap">Choose Student:</span>
+                        <select
+                          className="bg-white border border-slate-300 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-800 flex-1 outline-none"
+                          onChange={e => {
+                            const found = students.find(s => (s._id || s.id) === e.target.value);
+                            if (found) handleOpenAddFeeModal(found);
                           }}
-                          className="px-3 py-1.5 bg-slate-900 text-white font-bold rounded-lg text-xs"
                         >
-                          Print Voucher
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* SECTION 7: COURSE FEES                                                    */}
-        {/* ========================================================================= */}
-        {activeTab === "branch_course" && (
-          <div className="space-y-6">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
-              <div>
-                <h3 className="font-black text-slate-900 text-base">Course Tuition & Semester Fees</h3>
-                <p className="text-xs text-slate-500">Set standard fee rates per academic course</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {courses.map((c: any) => (
-                <div key={c._id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                  <div>
-                    <h4 className="font-black text-slate-900 text-base">{c.name}</h4>
-                    <p className="text-xs font-mono text-indigo-700">{c.code} • {c.duration || 4} Years</p>
-
-                    <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase block">Total Course Tuition</span>
-                      <span className="text-xl font-black text-slate-900 font-mono">{formatCurrency(c.tuitionFee || 0)}</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
-                    <Link
-                      href={`/dashboard/finance/course-fees/${c._id}`}
-                      className="px-3 py-1.5 bg-indigo-50 text-indigo-700 font-bold rounded-lg text-xs"
-                    >
-                      Configure Fee Structure
-                    </Link>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-      </div>
-
-      {/* ========================================================================= */}
-      {/* MODAL 1: ADD FEE / COLLECT PAYMENT                                        */}
-      {/* ========================================================================= */}
-      {(() => {
-        const getAvailableFeeComponents = () => {
-          if (!selectedStudentForFee) return [];
-          const yr = feeForm.year || 1;
-          
-          if (selectedStudentForFee.fees?.isConfigured && Array.isArray(selectedStudentForFee.fees.years)) {
-            const studentYear = selectedStudentForFee.fees.years.find((y: any) => y.year === yr);
-            if (studentYear?.components && studentYear.components.length > 0) {
-               return studentYear.components;
-            }
-          }
-          
-          const courseId = typeof selectedStudentForFee.selectedProgram === 'object' ? selectedStudentForFee.selectedProgram?._id : selectedStudentForFee.selectedProgram;
-          const course = courses.find((c: any) => c._id === courseId);
-          if (course && Array.isArray(course.feeStructureTemplate)) {
-             const courseYear = course.feeStructureTemplate.find((y: any) => y.year === yr);
-             if (courseYear?.components && courseYear.components.length > 0) {
-                return courseYear.components;
-             }
-          }
-          
-          return [];
-        };
-        const dynamicFeeComponents = getAvailableFeeComponents();
-
-        const getYearFeeSummary = () => {
-          if (!selectedStudentForFee) return { gross: 0, discount: 0, total: 0, paid: 0, due: 0, discountReason: "" };
-          const yr = feeForm.year || 1;
-          
-          let gross = 0;
-          let paid = 0;
-          let discount = 0;
-          let discountReason = "";
-
-          const calculateComponentTotal = (c: any) => {
-             const amt = Number(c.amount) || 0;
-             return c.frequency === "Quarterly" ? amt * 4 : amt;
-          };
-
-          if (selectedStudentForFee.fees?.isConfigured && Array.isArray(selectedStudentForFee.fees.years)) {
-            const studentYear = selectedStudentForFee.fees.years.find((y: any) => String(y.year) === String(yr));
-            if (studentYear?.components && studentYear.components.length > 0) {
-              gross = studentYear.components.reduce((sum: number, c: any) => sum + calculateComponentTotal(c), 0);
-              paid = studentYear.components.reduce((sum: number, c: any) => sum + (Number(c.paid) || 0), 0);
-            } else if (studentYear) {
-              gross = (Number(studentYear.tuition?.total) || 0) + (Number(studentYear.exam?.total) || 0) + (Number(studentYear.transport?.total) || 0) + (Number(studentYear.other?.total) || 0);
-              paid = (Number(studentYear.tuition?.paid) || 0) + (Number(studentYear.exam?.paid) || 0) + (Number(studentYear.transport?.paid) || 0) + (Number(studentYear.other?.paid) || 0);
-            }
-            if (studentYear) {
-              discount = Number(studentYear.discount) || 0;
-              discountReason = studentYear.discountReason || "";
-            }
-          } 
-          
-          if (gross === 0) {
-            const courseId = typeof selectedStudentForFee.selectedProgram === 'object' ? selectedStudentForFee.selectedProgram?._id : selectedStudentForFee.selectedProgram;
-            const course = courses.find((c: any) => c._id === courseId);
-            if (course) {
-               if (Array.isArray(course.feeStructureTemplate)) {
-                 const courseYear = course.feeStructureTemplate.find((y: any) => String(y.year) === String(yr));
-                 if (courseYear?.components && courseYear.components.length > 0) {
-                   gross = courseYear.components.reduce((sum: number, c: any) => sum + calculateComponentTotal(c), 0);
-                 }
-               }
-               if (gross === 0) {
-                 gross = Number(course.tuitionFee) || 0;
-               }
-            }
-          }
-
-          const netTotal = Math.max(0, gross - discount);
-          
-          const studentTxns = transactions.filter(t => 
-             (t.studentId?._id === selectedStudentForFee._id || t.studentId === selectedStudentForFee._id) &&
-             String(t.academicYear).includes(String(yr))
-          );
-          const txnPaid = studentTxns.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-          
-          paid = Math.max(paid, txnPaid);
-          const due = Math.max(0, netTotal - paid);
-          
-          return { gross, discount, total: netTotal, paid, due, discountReason };
-        };
-        const yearSummary = getYearFeeSummary();
-
-        const getAvailableYears = () => {
-          if (!selectedStudentForFee) return [1];
-          const courseId = typeof selectedStudentForFee.selectedProgram === 'object' ? selectedStudentForFee.selectedProgram?._id : selectedStudentForFee.selectedProgram;
-          const course = courses.find((c: any) => c._id === courseId);
-          if (course) {
-             if (Array.isArray(course.feeStructureTemplate) && course.feeStructureTemplate.length > 0) {
-                 return course.feeStructureTemplate.map((t: any) => t.year).sort();
-             }
-             const yearsCount = course.duration || Math.ceil((course.totalSemesters || 8) / 2);
-             return Array.from({ length: yearsCount }).map((_, idx) => idx + 1);
-          }
-          return [1];
-        };
-        const dynamicYears = getAvailableYears();
-
-        return isAddFeeModalOpen && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100"
-          >
-            <div className="flex justify-between items-center mb-5 pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
-                  <CreditCard className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-black text-slate-900 text-base">Collect Student Fee</h3>
-                  <p className="text-xs text-slate-400">Direct receipt generation upon save</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsAddFeeModalOpen(false)}
-                className="p-2 text-slate-400 hover:text-slate-800 rounded-xl"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmitAddFee} className="space-y-4 text-xs font-semibold">
-              <div>
-                <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-black mb-1">
-                  1. Select Student <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={feeForm.studentId}
-                  onChange={e => {
-                    const s = students.find(st => st._id === e.target.value);
-                    setSelectedStudentForFee(s);
-                    setFeeForm(prev => ({
-                      ...prev,
-                      studentId: e.target.value,
-                      year: s?.courseYear || 1,
-                      semester: s?.selectedSemester || 1
-                    }));
-                  }}
-                  required
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 text-sm focus:outline-none"
-                >
-                  <option value="">-- Choose Student by Name or Roll No --</option>
-                  {students.map(s => (
-                    <option key={s._id} value={s._id}>
-                      {s.firstName} {s.lastName} (Roll: {s.enrollmentNumber || s.admissionNumber || "N/A"})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-black mb-1">
-                  2. Academic Year <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={feeForm.year}
-                  onChange={e => setFeeForm(prev => ({ ...prev, year: Number(e.target.value) }))}
-                  required
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 mb-3"
-                >
-                  {dynamicYears.map((y: number) => (
-                    <option key={y} value={y}>Academic Year {y}</option>
-                  ))}
-                </select>
-                
-                {selectedStudentForFee && (
-                  <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 flex items-center justify-between">
-                    <div className="text-center px-2">
-                      <p className="text-[9px] font-black text-indigo-400 uppercase">
-                        {yearSummary.discount > 0 ? "Net Payable" : "Total Fee"}
-                      </p>
-                      <p className="text-sm font-black text-indigo-900">₹{yearSummary.total.toLocaleString("en-IN")}</p>
-                    </div>
-                    {yearSummary.discount > 0 && (
-                      <div className="text-center px-2 border-l border-indigo-200">
-                        <p className="text-[9px] font-black text-emerald-600 uppercase">Concession</p>
-                        <p className="text-sm font-black text-emerald-700">-₹{yearSummary.discount.toLocaleString("en-IN")}</p>
+                          <option value="">-- Choose Student --</option>
+                          {students.map(s => (
+                            <option key={s._id || s.id} value={s._id || s.id}>
+                              {s.firstName} {s.lastName} (Roll: {s.enrollmentNumber || s.admissionNumber || s.studentId || "N/A"})
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     )}
-                    <div className="text-center px-2 border-l border-indigo-200">
-                      <p className="text-[9px] font-black text-indigo-400 uppercase">Deposited</p>
-                      <p className="text-sm font-black text-emerald-600">₹{yearSummary.paid.toLocaleString("en-IN")}</p>
-                    </div>
-                    <div className="text-center px-2 border-l border-indigo-200">
-                      <p className="text-[9px] font-black text-indigo-400 uppercase">Due Balance</p>
-                      <p className="text-sm font-black text-rose-600">₹{yearSummary.due.toLocaleString("en-IN")}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
 
-              <div>
-                <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-black mb-1">
-                  3. Fee Breakdown (For Reference)
-                </label>
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                  {dynamicFeeComponents.length > 0 ? (
-                    dynamicFeeComponents.map((c: any, idx: number) => (
-                      <div key={`dyn-${idx}`} className="flex items-center justify-between p-3 border border-slate-200 bg-slate-50 rounded-xl">
-                        <span className="font-bold text-slate-800 text-[13px]">{c.category}</span>
-                        {c.amount && <span className="font-black text-indigo-900 text-[13px]">₹{c.amount}</span>}
-                      </div>
-                    ))
-                  ) : (
-                    categories.map(c => (
-                      <div key={`cat-${c.code}`} className="flex items-center justify-between p-3 border border-slate-200 bg-slate-50 rounded-xl">
-                        <span className="font-bold text-slate-800 text-[13px]">{c.name}</span>
-                        {c.defaultAmount && <span className="font-black text-indigo-900 text-[13px]">₹{c.defaultAmount}</span>}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
+                    {/* Scrollable Years & Fee Items */}
+                    <div className="p-8 space-y-6 overflow-y-auto flex-1">
+                      {isLoadingFeeStructure && editFeeYears.length === 0 ? (
+                        <CollectFeeModalSkeleton />
+                      ) : (
+                        <>
+                          {editFeeYears.map((yr, yIdx) => {
+                            let yrGross = 0;
+                            let yrPaid = 0;
+                            (yr.components || []).forEach((c: any) => {
+                              yrGross += Number(c.amount) || 0;
+                              yrPaid += Number(c.paid) || 0;
+                            });
+                            const yrDiscount = Number(yr.discount) || 0;
+                            const yrNet = Math.max(0, yrGross - yrDiscount);
+                            const yrDue = Math.max(0, yrNet - yrPaid);
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-black mb-1">
-                    Amount (INR) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={feeForm.amount}
-                    onChange={e => setFeeForm(prev => ({ ...prev, amount: e.target.value }))}
-                    placeholder="e.g. 15000"
-                    required
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-900 font-mono text-sm"
-                  />
-                </div>
+                            return (
+                              <div key={yIdx} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
+                                <div className="flex justify-between items-center border-b border-slate-200/80 pb-3">
+                                  <div className="flex items-center gap-3">
+                                    <span className="w-7 h-7 bg-indigo-600 text-white rounded-lg flex items-center justify-center font-black text-xs">
+                                      {yr.year}
+                                    </span>
+                                    <span className="font-black text-slate-800 text-sm">Academic Year {yr.year}</span>
+                                    <span className="text-xs font-semibold text-slate-400">
+                                      (Gross: {formatCurrency(yrGross)}
+                                      {yrDiscount > 0 ? ` | Disc: -${formatCurrency(yrDiscount)}` : ""}
+                                      {` | Net: ${formatCurrency(yrNet)} | Paid: ${formatCurrency(yrPaid)} | Due: ${formatCurrency(yrDue)}`})
+                                    </span>
+                                  </div>
 
-                <div>
-                  <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-black mb-1">
-                    Receipt ID / Number <span className="text-slate-400 font-normal lowercase">(optional - manual)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={feeForm.receiptNumber}
-                    onChange={e => setFeeForm(prev => ({ ...prev, receiptNumber: e.target.value }))}
-                    placeholder="Auto-generated if empty (e.g. REC-101)"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-sm font-mono focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-black mb-1">
-                    Payment Mode
-                  </label>
-                  <select
-                    value={feeForm.paymentMethod}
-                    onChange={e => setFeeForm(prev => ({ ...prev, paymentMethod: e.target.value }))}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-sm"
-                  >
-                    <option value="Cash">Cash</option>
-                    <option value="Online">Online / UPI (PhonePe, GPay)</option>
-                    <option value="Bank Transfer">Bank Transfer / NEFT</option>
-                    <option value="Cheque">Cheque</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-black mb-1">
-                    Payment Date <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={feeForm.paymentDate}
-                    onChange={e => setFeeForm(prev => ({ ...prev, paymentDate: e.target.value }))}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-sm focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-500 uppercase tracking-wider text-[10px] font-black mb-1">
-                  Remarks / Note
-                </label>
-                <input
-                  type="text"
-                  value={feeForm.notes}
-                  onChange={e => setFeeForm(prev => ({ ...prev, notes: e.target.value }))}
-                  placeholder="e.g. Paid at campus counter"
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-700"
-                />
-              </div>
-
-              <div className="pt-3 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsAddFeeModalOpen(false)}
-                  className="px-4 py-2.5 text-slate-500 font-bold hover:bg-slate-100 rounded-xl"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingFee}
-                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl shadow-lg shadow-emerald-600/20 flex items-center gap-2"
-                >
-                  {isSubmittingFee ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
-                  Save & Print Official Receipt
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-        );
-      })()}
-
-      {/* ========================================================================= */}
-      {/* MODAL 2: STATEMENT / OS KHATA MODAL                                       */}
-      {/* ========================================================================= */}
-      {isStatementModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto"
-          >
-            <div className="flex justify-between items-start mb-4 pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="text-lg font-black text-slate-900">
-                  {selectedStudentForStatement?.firstName} {selectedStudentForStatement?.lastName}
-                </h3>
-                <p className="text-xs text-slate-400 font-mono">
-                  Roll: {selectedStudentForStatement?.enrollmentNumber || "N/A"} • {selectedStudentForStatement?.selectedProgram?.name || "Program"}
-                </p>
-              </div>
-              <button onClick={() => setIsStatementModalOpen(false)} className="p-1.5 text-slate-400 hover:text-slate-800 rounded-xl">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {isLoadingStatement ? (
-              <div className="py-12 text-center text-slate-400">
-                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-indigo-600" />
-                <p className="text-xs font-bold">Loading student fee account...</p>
-              </div>
-            ) : studentStatementData ? (
-              <div className="space-y-4">
-                <div className="grid grid-cols-4 gap-2.5 p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-center">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Gross Total</span>
-                    <span className="font-mono font-black text-slate-900 text-sm">
-                      {formatCurrency(studentStatementData.ledger?.totalGross || studentStatementData.ledger?.totalAssessed)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-emerald-600 uppercase block">Concession</span>
-                    <span className="font-mono font-black text-emerald-600 text-sm">
-                      {studentStatementData.ledger?.totalDiscount > 0 ? `-${formatCurrency(studentStatementData.ledger?.totalDiscount)}` : "₹0"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-blue-600 uppercase block">Deposited</span>
-                    <span className="font-mono font-black text-blue-600 text-sm">
-                      {formatCurrency(studentStatementData.ledger?.totalPaid)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-rose-500 uppercase block">Outstanding</span>
-                    <span className="font-mono font-black text-rose-600 text-sm">
-                      {formatCurrency(studentStatementData.ledger?.outstandingAmount)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* YEAR-WISE BREAKDOWN */}
-                {studentStatementData.ledger?.years && studentStatementData.ledger.years.length > 0 && (
-                  <div>
-                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-2">Year-wise Fee Breakdown</h4>
-                    <div className="space-y-3">
-                      {studentStatementData.ledger.years.map((y: any) => (
-                        <div key={y.year} className="border border-slate-200 rounded-xl bg-white overflow-hidden">
-                          <div className="flex flex-wrap justify-between items-center p-3 bg-slate-50 border-b border-slate-100 gap-2">
-                            <span className="font-bold text-sm text-slate-800">Year {y.year}</span>
-                            <div className="flex flex-wrap gap-3 text-xs font-mono">
-                              <span className="text-slate-500">Gross: <span className="font-bold text-slate-900">{formatCurrency(y.yearGross || y.yearTotal)}</span></span>
-                              {y.discount > 0 && (
-                                <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">
-                                  Disc: -{formatCurrency(y.discount)}
-                                </span>
-                              )}
-                              <span className="text-slate-500">Net: <span className="font-bold text-slate-900">{formatCurrency(y.yearTotal)}</span></span>
-                              <span className="text-slate-500">Paid: <span className="font-bold text-emerald-600">{formatCurrency(y.yearPaid)}</span></span>
-                              <span className="text-slate-500">OS: <span className="font-bold text-rose-600">{formatCurrency(y.yearOS)}</span></span>
-                            </div>
-                          </div>
-                          {y.components && y.components.length > 0 && (
-                            <div className="p-3 bg-white flex flex-wrap gap-2">
-                              {y.components.map((c: any, i: number) => (
-                                <div key={i} className="px-2.5 py-1 rounded-md bg-slate-50 border border-slate-100 flex items-center gap-2 text-[10px]">
-                                  <span className="font-bold text-slate-600">{c.category}</span>
-                                  <span className="text-slate-400 font-mono">{formatCurrency(c.amount)}</span>
+                                  <div className="flex items-center gap-2">
+                                    <button 
+                                      type="button" 
+                                      onClick={() => handleQuickMarkYearPaid(yIdx)}
+                                      className="text-[11px] font-bold text-emerald-700 bg-emerald-100/70 hover:bg-emerald-200 px-2.5 py-1 rounded-md transition-all flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Check className="w-3 h-3" /> Mark Year Paid
+                                    </button>
+                                    {editFeeYears.length > 1 && (
+                                      <button 
+                                        type="button" 
+                                        onClick={() => handleRemoveAcademicYear(yIdx)}
+                                        className="text-slate-400 hover:text-rose-500 p-1 cursor-pointer"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
-                              ))}
-                            </div>
-                          )}
-                          {y.discount > 0 && (
-                            <div className="px-3 py-1.5 bg-emerald-50/70 border-t border-emerald-100 flex items-center justify-between text-[11px] text-emerald-800">
-                              <span className="font-semibold">Special Waiver / Scholarship:</span>
-                              <span className="font-mono font-bold">-{formatCurrency(y.discount)} {y.discountReason ? `(${y.discountReason})` : ""}</span>
-                            </div>
-                          )}
-                        </div>
-                      ))}
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  {(yr.components || []).map((comp: any, cIdx: number) => (
+                                    <div key={cIdx} className="bg-white p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+                                      <div className="flex justify-between items-center">
+                                        <input 
+                                          type="text"
+                                          value={comp.category || ""}
+                                          onChange={e => handleEditFeeChange(yIdx, cIdx, "category", e.target.value)}
+                                          className="text-xs font-bold text-slate-800 bg-transparent border-none outline-none focus:ring-0 p-0 hover:bg-slate-100 rounded px-1 -ml-1 transition-colors w-[60%]"
+                                        />
+                                        <div className="flex items-center gap-2">
+                                          <button 
+                                            type="button" 
+                                            onClick={() => handleQuickMarkCategoryPaid(yIdx, cIdx)}
+                                            className="text-[10px] font-bold text-indigo-600 hover:underline whitespace-nowrap cursor-pointer"
+                                          >
+                                            Set Paid = Total
+                                          </button>
+                                          <button 
+                                            type="button" 
+                                            onClick={() => handleRemoveFeeComponent(yIdx, cIdx)}
+                                            className="text-slate-400 hover:text-rose-500 transition-colors p-1 cursor-pointer"
+                                            title="Remove Component"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                          <span className="text-[10px] font-bold text-slate-400 uppercase">Total (₹)</span>
+                                          <input 
+                                            type="number"
+                                            value={comp.amount ?? 0}
+                                            onChange={e => handleEditFeeChange(yIdx, cIdx, "amount", e.target.value)}
+                                            className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-slate-800 text-xs"
+                                          />
+                                        </div>
+                                        <div>
+                                          <span className="text-[10px] font-bold text-emerald-600 uppercase">Paid (₹)</span>
+                                          <input 
+                                            type="number"
+                                            value={comp.paid ?? 0}
+                                            onChange={e => handleEditFeeChange(yIdx, cIdx, "paid", e.target.value)}
+                                            className="w-full mt-0.5 bg-slate-50 border border-slate-200 p-2 rounded-lg font-bold text-emerald-700 text-xs"
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {/* Year Discount & Concession Configuration */}
+                                <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-4 space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
+                                        %
+                                      </div>
+                                      <div>
+                                        <span className="text-xs font-black text-emerald-950 uppercase tracking-wide">
+                                          Discount / Concession / Scholarship (Year {yr.year})
+                                        </span>
+                                        <p className="text-[10px] font-semibold text-emerald-700">Direct deduction from this year&apos;s total payable amount</p>
+                                      </div>
+                                    </div>
+                                    {yrDiscount > 0 && (
+                                      <span className="text-[10px] font-black text-emerald-800 bg-emerald-200/70 px-2.5 py-0.5 rounded-full">
+                                        -{formatCurrency(yrDiscount)} Applied
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                    <div>
+                                      <label className="text-[10px] font-black uppercase text-emerald-800 block mb-1">
+                                        Discount Amount (₹)
+                                      </label>
+                                      <input 
+                                        type="number"
+                                        min="0"
+                                        value={yr.discount ?? 0}
+                                        onChange={e => handleEditYearDiscount(yIdx, "discount", e.target.value)}
+                                        placeholder="e.g. 15000"
+                                        className="w-full bg-white border border-emerald-300 p-2.5 rounded-xl font-black text-emerald-800 text-xs outline-none focus:ring-2 focus:ring-emerald-500/30"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[10px] font-black uppercase text-emerald-800 block mb-1">
+                                        Reason / Scheme / Scholarship Note
+                                      </label>
+                                      <input 
+                                        type="text"
+                                        value={yr.discountReason ?? ""}
+                                        onChange={e => handleEditYearDiscount(yIdx, "discountReason", e.target.value)}
+                                        placeholder="e.g. Merit Scholarship / Early Bird / Concession"
+                                        className="w-full bg-white border border-emerald-300 p-2.5 rounded-xl font-bold text-slate-800 text-xs outline-none focus:ring-2 focus:ring-emerald-500/30"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                <button 
+                                  type="button" 
+                                  onClick={() => handleAddFeeComponent(yIdx)}
+                                  className="w-full mt-2 py-2 border border-dashed border-slate-300 hover:border-indigo-400 text-slate-500 hover:text-indigo-600 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 hover:bg-indigo-50/50 cursor-pointer"
+                                >
+                                  <Plus className="w-4 h-4" /> Add Extra Charge
+                                </button>
+                              </div>
+                            );
+                          })}
+
+                          <button 
+                            type="button" 
+                            onClick={handleAddAcademicYear}
+                            className="w-full py-3 border-2 border-dashed border-indigo-200 hover:border-indigo-400 text-indigo-600 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 hover:bg-indigo-50/50 cursor-pointer"
+                          >
+                            <Plus className="w-4 h-4" /> Add Another Academic Year
+                          </button>
+                        </>
+                      )}
                     </div>
-                  </div>
-                )}
 
-                <div>
-                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-2">Past Receipts & Payments</h4>
-                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden text-xs">
-                    {studentStatementData.transactions?.map((t: any) => (
-                      <div key={t._id} className="p-3 flex justify-between items-center hover:bg-slate-50">
-                        <div>
-                          <span className="font-mono font-bold text-indigo-900 block">{t.receiptNumber || `RCP-${t._id.slice(-6)}`}</span>
-                          <span className="text-[10px] text-slate-400">{new Date(t.paymentDate).toLocaleDateString("en-IN")} • {t.paymentMethod}</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="font-mono font-black text-emerald-600">{formatCurrency(t.amount)}</span>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => {
-                                setSelectedReceiptForModal({
-                                  type: "student",
-                                  receiptType: "Student Fee Receipt",
-                                  receiptNumber: t.receiptNumber || `RCP-STU-${t._id.slice(-8).toUpperCase()}`,
-                                  transactionId: t.transactionId,
-                                  date: t.paymentDate,
-                                  name: studentStatementData.student?.fullName || "Student",
-                                  idNumber: studentStatementData.student?.enrollmentNumber || "N/A",
-                                  program: studentStatementData.student?.course || "Course",
-                                  semester: t.semester || 1,
-                                  academicYear: t.academicYear || "Year 1",
-                                  category: t.category || "tuition",
-                                  categoryName: t.categoryName || "Tuition Fee",
-                                  amount: t.amount,
-                                  paymentMethod: t.paymentMethod,
-                                  collectedBy: "Accounts Office",
-                                  notes: t.notes,
-                                  items: [{ description: `${t.categoryName || t.category || "Fee"}`, amount: t.amount }]
-                                });
-                                setIsReceiptModalOpen(true);
-                              }}
-                              className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg transition-all"
-                              title="Print"
-                            >
-                              <Printer className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteTransaction(t._id)}
-                              className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-all"
-                              title="Delete & Reverse Payment"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="pt-2 flex justify-end gap-2">
-                  <button onClick={() => setIsStatementModalOpen(false)} className="px-4 py-2 text-slate-500 font-bold hover:bg-slate-100 rounded-xl text-xs">
-                    Close
-                  </button>
-                  <button
-                    onClick={() => {
-                      setIsStatementModalOpen(false);
-                      handleOpenAddFeeModal(selectedStudentForStatement);
-                    }}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs"
-                  >
-                    + Collect Fee
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </motion.div>
-        </div>
-      )}
+                    {/* Footer */}
+                    <div className="px-8 py-4 border-t border-slate-100 flex justify-between items-center bg-slate-50">
+                      <button 
+                        type="button" 
+                        onClick={() => setIsAddFeeModalOpen(false)}
+                        className="px-5 py-2.5 border border-slate-200 text-slate-600 font-bold rounded-xl text-xs hover:bg-slate-100 transition-all cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        type="button" 
+                        disabled={isSavingFeeEdit}
+                        onClick={handleSaveStudentFeeStructure}
+                        className="px-6 py-2.5 bg-indigo-600 text-white font-black rounded-xl text-xs hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/20 flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                      >
+                        {isSavingFeeEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                        Save Fee Structure & Payments
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* ========================================================================= */}
-      {/* MODAL 3: DUE REMINDER ALERT MODAL                                         */}
+      {/* MODAL 3: SEND OVERDUE REMINDER NOTICE                                     */}
       {/* ========================================================================= */}
       {isAlertModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100"
-          >
-            <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
-              <h3 className="font-black text-slate-900 text-base">Send Overdue Fee Alert</h3>
-              <button onClick={() => setIsAlertModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-800">
-                <X className="w-5 h-5" />
-              </button>
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl border border-slate-100">
+            <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm">Send Due Reminder Notice</h3>
+              <button onClick={() => setIsAlertModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-800 cursor-pointer"><X className="w-4 h-4" /></button>
             </div>
-
-            <form onSubmit={handleSubmitAlert} className="space-y-3.5 text-xs font-semibold">
+            <form onSubmit={handleSubmitAlert} className="space-y-3 text-xs font-semibold">
               {!alertTargetStudent && (
                 <div>
                   <label className="block text-slate-500 font-bold mb-1">Select Student</label>
@@ -2176,44 +3158,39 @@ export default function FinanceDashboard() {
                     value={alertForm.studentId}
                     onChange={e => setAlertForm(prev => ({ ...prev, studentId: e.target.value }))}
                     required
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
+                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold cursor-pointer"
                   >
                     <option value="">-- Choose Student --</option>
                     {students.map(s => (
-                      <option key={s._id} value={s._id}>{s.firstName} {s.lastName}</option>
+                      <option key={s._id || s.id} value={s._id || s.id}>{s.firstName} {s.lastName}</option>
                     ))}
                   </select>
                 </div>
               )}
-
               <div>
-                <label className="block text-slate-500 font-bold mb-1">Notice Title</label>
+                <label className="block text-slate-500 font-bold mb-1">Title</label>
                 <input
                   type="text"
                   value={alertForm.title}
                   onChange={e => setAlertForm(prev => ({ ...prev, title: e.target.value }))}
                   required
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
+                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
                 />
               </div>
-
               <div>
                 <label className="block text-slate-500 font-bold mb-1">Message Content</label>
                 <textarea
                   value={alertForm.message}
                   onChange={e => setAlertForm(prev => ({ ...prev, message: e.target.value }))}
-                  rows={4}
+                  rows={3}
                   required
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
+                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-800"
                 />
               </div>
-
               <div className="pt-2 flex justify-end gap-2">
-                <button type="button" onClick={() => setIsAlertModalOpen(false)} className="px-4 py-2 text-slate-500 font-bold rounded-xl">
-                  Cancel
-                </button>
-                <button type="submit" disabled={isSubmittingAlert} className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-md">
-                  {isSubmittingAlert ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send Alert"}
+                <button type="button" onClick={() => setIsAlertModalOpen(false)} className="px-3.5 py-1.5 text-slate-500 font-bold rounded-xl cursor-pointer">Cancel</button>
+                <button type="submit" disabled={isSubmittingAlert} className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-xs cursor-pointer">
+                  {isSubmittingAlert ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Send Notice"}
                 </button>
               </div>
             </form>
@@ -2225,25 +3202,25 @@ export default function FinanceDashboard() {
       {/* MODAL 4: ADD/EDIT CATEGORY MODAL                                          */}
       {/* ========================================================================= */}
       {isCategoryModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
-            <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
-              <h3 className="font-black text-slate-900 text-base">{editingCategory ? "Edit Fee Item" : "New Fee Item / Category"}</h3>
-              <button onClick={() => setIsCategoryModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-800"><X className="w-5 h-5" /></button>
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl border border-slate-100">
+            <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm">{editingCategory ? "Edit Fee Item" : "New Fee Item"}</h3>
+              <button onClick={() => setIsCategoryModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-800 cursor-pointer"><X className="w-4 h-4" /></button>
             </div>
-            <form onSubmit={handleSubmitCategory} className="space-y-3.5 text-xs font-semibold">
+            <form onSubmit={handleSubmitCategory} className="space-y-3 text-xs font-semibold">
               <div>
-                <label className="block text-slate-500 font-bold mb-1">Item Name (e.g. Blazer, Uniform, Books)</label>
-                <input type="text" value={categoryForm.name} onChange={e => setCategoryForm(prev => ({ ...prev, name: e.target.value }))} required className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900" />
+                <label className="block text-slate-500 font-bold mb-1">Item Name (e.g. Uniform, Blazer, Books)</label>
+                <input type="text" value={categoryForm.name} onChange={e => setCategoryForm(prev => ({ ...prev, name: e.target.value }))} required className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900" />
               </div>
               <div>
-                <label className="block text-slate-500 font-bold mb-1">Standard Rate / Price (INR)</label>
-                <input type="number" value={categoryForm.defaultAmount} onChange={e => setCategoryForm(prev => ({ ...prev, defaultAmount: e.target.value }))} placeholder="e.g. 2500" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-900" />
+                <label className="block text-slate-500 font-bold mb-1">Standard Rate (INR)</label>
+                <input type="number" value={categoryForm.defaultAmount} onChange={e => setCategoryForm(prev => ({ ...prev, defaultAmount: e.target.value }))} placeholder="e.g. 2500" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-900" />
               </div>
               <div className="pt-2 flex justify-end gap-2">
-                <button type="button" onClick={() => setIsCategoryModalOpen(false)} className="px-4 py-2 text-slate-500 font-bold rounded-xl">Cancel</button>
-                <button type="submit" disabled={isSubmittingCategory} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md">
-                  {isSubmittingCategory ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save Rate"}
+                <button type="button" onClick={() => setIsCategoryModalOpen(false)} className="px-3.5 py-1.5 text-slate-500 font-bold rounded-xl cursor-pointer">Cancel</button>
+                <button type="submit" disabled={isSubmittingCategory} className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-xs cursor-pointer">
+                  {isSubmittingCategory ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save Rate"}
                 </button>
               </div>
             </form>
@@ -2255,31 +3232,31 @@ export default function FinanceDashboard() {
       {/* MODAL 5: STAFF PAYOUT MODAL                                               */}
       {/* ========================================================================= */}
       {isPayoutModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
-            <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
-              <h3 className="font-black text-slate-900 text-base">Staff Salary / Disbursal Voucher</h3>
-              <button onClick={() => setIsPayoutModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-800"><X className="w-5 h-5" /></button>
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl border border-slate-100">
+            <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm">Staff Payout Voucher</h3>
+              <button onClick={() => setIsPayoutModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-800 cursor-pointer"><X className="w-4 h-4" /></button>
             </div>
-            <form onSubmit={handleCreatePayout} className="space-y-3.5 text-xs font-semibold">
+            <form onSubmit={handleCreatePayout} className="space-y-3 text-xs font-semibold">
               <div>
-                <label className="block text-slate-500 font-bold mb-1">Select Employee</label>
+                <label className="block text-slate-500 font-bold mb-1">Staff Member</label>
                 <select value={payoutForm.payeeId} onChange={e => {
-                  const staff = staffList.find(s => s._id === e.target.value);
+                  const staff = staffList.find(s => (s._id || s.id) === e.target.value);
                   setPayoutForm(prev => ({ ...prev, payeeId: e.target.value, designation: staff?.role || "Staff" }));
-                }} required className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold">
+                }} required className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold cursor-pointer">
                   <option value="">-- Choose Staff Member --</option>
-                  {staffList.map(s => (<option key={s._id} value={s._id}>{s.firstName} {s.lastName} ({s.role || "Staff"})</option>))}
+                  {staffList.map(s => (<option key={s._id || s.id} value={s._id || s.id}>{s.firstName} {s.lastName} ({s.role || "Staff"})</option>))}
                 </select>
               </div>
               <div>
                 <label className="block text-slate-500 font-bold mb-1">Amount (INR)</label>
-                <input type="number" value={payoutForm.amount} onChange={e => setPayoutForm(prev => ({ ...prev, amount: e.target.value }))} required className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold" />
+                <input type="number" value={payoutForm.amount} onChange={e => setPayoutForm(prev => ({ ...prev, amount: e.target.value }))} required className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold" />
               </div>
               <div className="pt-2 flex justify-end gap-2">
-                <button type="button" onClick={() => setIsPayoutModalOpen(false)} className="px-4 py-2 text-slate-500 font-bold rounded-xl">Cancel</button>
-                <button type="submit" disabled={isSubmittingPayout} className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl">
-                  {isSubmittingPayout ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save & Print Voucher"}
+                <button type="button" onClick={() => setIsPayoutModalOpen(false)} className="px-3.5 py-1.5 text-slate-500 font-bold rounded-xl cursor-pointer">Cancel</button>
+                <button type="submit" disabled={isSubmittingPayout} className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl cursor-pointer">
+                  {isSubmittingPayout ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save Voucher"}
                 </button>
               </div>
             </form>
@@ -2291,17 +3268,17 @@ export default function FinanceDashboard() {
       {/* MODAL 6: COURSE FEE EDIT MODAL                                            */}
       {/* ========================================================================= */}
       {isCourseFeeModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
-            <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
-              <h3 className="font-black text-slate-900 text-base">Course Tuition Fee</h3>
-              <button onClick={() => setIsCourseFeeModalOpen(false)} className="p-1 text-slate-400"><X className="w-5 h-5" /></button>
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl border border-slate-100">
+            <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm">Course Tuition Fee</h3>
+              <button onClick={() => setIsCourseFeeModalOpen(false)} className="p-1 text-slate-400 cursor-pointer"><X className="w-4 h-4" /></button>
             </div>
             <form onSubmit={async e => {
               e.preventDefault();
               setIsSavingCourseFee(true);
               try {
-                const res = await fetch(`/api/courses/${editingCourse._id}`, {
+                const res = await fetch(`/api/courses/${editingCourse._id || editingCourse.id}`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ tuitionFee: Number(courseFeeForm.tuitionFee) || 0, applyToStudents: true })
@@ -2314,14 +3291,14 @@ export default function FinanceDashboard() {
               } finally {
                 setIsSavingCourseFee(false);
               }
-            }} className="space-y-3.5 text-xs font-semibold">
+            }} className="space-y-3 text-xs font-semibold">
               <div>
                 <label className="block text-slate-500 font-bold mb-1">Total Course Fee (INR)</label>
-                <input type="number" value={courseFeeForm.tuitionFee} onChange={e => setCourseFeeForm(prev => ({ ...prev, tuitionFee: e.target.value }))} required className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold" />
+                <input type="number" value={courseFeeForm.tuitionFee} onChange={e => setCourseFeeForm(prev => ({ ...prev, tuitionFee: e.target.value }))} required className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold" />
               </div>
               <div className="pt-2 flex justify-end gap-2">
-                <button type="button" onClick={() => setIsCourseFeeModalOpen(false)} className="px-4 py-2 text-slate-500 font-bold rounded-xl">Cancel</button>
-                <button type="submit" disabled={isSavingCourseFee} className="px-5 py-2 bg-indigo-600 text-white font-bold rounded-xl">Save</button>
+                <button type="button" onClick={() => setIsCourseFeeModalOpen(false)} className="px-3.5 py-1.5 text-slate-500 font-bold rounded-xl cursor-pointer">Cancel</button>
+                <button type="submit" disabled={isSavingCourseFee} className="px-4 py-1.5 bg-blue-600 text-white font-bold rounded-xl cursor-pointer">Save</button>
               </div>
             </form>
           </motion.div>

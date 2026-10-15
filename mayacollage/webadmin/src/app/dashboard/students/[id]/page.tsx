@@ -237,6 +237,7 @@ export default function StudentDetailScreen() {
 
   // Category filter in fees tab
   const [categoryFilter, setCategoryFilter] = useState<string>("All");
+  const [feeStatusFilter, setFeeStatusFilter] = useState<"all" | "paid" | "unpaid">("all");
 
   // Quick Edit States: Personal Details
   const [isEditingPersonal, setIsEditingPersonal] = useState(false);
@@ -314,10 +315,10 @@ export default function StudentDetailScreen() {
         fetch("/api/branches").then(res => res.json()).catch(() => []),
         fetch("/api/courses").then(res => res.json()).catch(() => []),
         fetch(`/api/students/${studentId}`).then(res => res.json()).catch(() => null),
-        fetch(`/api/finance/transactions?studentId=${studentId}`).then(res => res.json()).catch(() => []),
+        fetch(`/api/finance/transactions?studentId=${studentId}&t=${Date.now()}`).then(res => res.json()).catch(() => []),
         fetch("/api/transport/buses").then(res => res.json()).catch(() => []),
         fetch("/api/finance/categories").then(res => res.json()).catch(() => []),
-        fetch(`/api/finance/student-account/${studentId}`).then(res => res.json()).catch(() => null)
+        fetch(`/api/finance/student-account/${studentId}?t=${Date.now()}`).then(res => res.json()).catch(() => null)
       ]);
 
       const validBranches = Array.isArray(branchesData) ? branchesData : [];
@@ -662,24 +663,69 @@ export default function StudentDetailScreen() {
     }).format(amount || 0);
   };
 
-  // Student Fee Calculations
-  const feeSummary = useMemo(() => {
-    if (!studentStatementData || !studentStatementData.ledger) {
-      return { isConfigured: false, total: 0, paid: 0, balance: 0, status: "not_configured", percentage: 0 };
+  // Helper to extract normalized components from any year object (supports both components array and categories dictionary)
+  const getYearComponents = (fy: any) => {
+    if (!fy) return [];
+    if (Array.isArray(fy.components) && fy.components.length > 0) {
+      return fy.components.map((c: any) => {
+        const total = Number(c.amount) || 0;
+        const paid = Number(c.paid) || 0;
+        const due = c.os !== undefined ? Number(c.os) : Math.max(0, total - paid);
+        const isPaid = due === 0 && total > 0;
+        const isPartial = paid > 0 && due > 0;
+        const isUnpaid = paid === 0 && total > 0;
+        return {
+          title: c.category || "Fee Component",
+          code: (c.category || "tuition").toLowerCase().replace(/[^a-z0-9]/g, '_'),
+          total,
+          paid,
+          due,
+          frequency: c.frequency || "Annual",
+          isPaid,
+          isPartial,
+          isUnpaid
+        };
+      });
     }
+    if (fy.categories && typeof fy.categories === 'object') {
+      return Object.entries(fy.categories).map(([k, cat]: any) => {
+        const title = k.charAt(0).toUpperCase() + k.slice(1) + " Fee";
+        const total = Number(cat.total) || 0;
+        const paid = Number(cat.paid) || 0;
+        const due = cat.os !== undefined ? Number(cat.os) : Math.max(0, total - paid);
+        const isPaid = due === 0 && total > 0;
+        const isPartial = paid > 0 && due > 0;
+        const isUnpaid = paid === 0 && total > 0;
+        return {
+          title,
+          code: k,
+          total,
+          paid,
+          due,
+          frequency: "Annual",
+          isPaid,
+          isPartial,
+          isUnpaid
+        };
+      });
+    }
+    return [];
+  };
 
-    const ledger = studentStatementData.ledger;
-    const gross = ledger.totalGross || ledger.totalAssessed || 0;
-    const discount = ledger.totalDiscount || 0;
-    const total = ledger.totalAssessed || 0;
-    const paid = ledger.totalPaid || 0;
-    const balance = ledger.outstandingAmount || 0;
-    
-    // Check if it's configured by checking if we have any years or total > 0
-    const isConfigured = Boolean(ledger.years && ledger.years.length > 0);
+  // Student Fee Calculations (Unified PostgreSQL + Ledger resolver)
+  const feeSummary = useMemo(() => {
+    const years = studentStatementData?.years || studentStatementData?.ledger?.years || studentData?.fees?.years || [];
+    const summary = studentStatementData?.summary || studentStatementData?.ledger || {};
+
+    const gross = summary.totalGross || summary.totalAssessed || years.reduce((s: number, y: any) => s + (y.yearGross || y.yearTotal || 0), 0);
+    const discount = summary.totalDiscount || years.reduce((s: number, y: any) => s + (Number(y.discount) || 0), 0);
+    const total = summary.totalAssessed || Math.max(0, gross - discount);
+    const paid = summary.totalPaid || years.reduce((s: number, y: any) => s + (Number(y.yearPaid) || 0), 0);
+    const balance = summary.totalOutstanding ?? summary.outstandingAmount ?? Math.max(0, total - paid);
+
+    const isConfigured = Boolean(years && years.length > 0) || Boolean(studentData?.fees?.isConfigured) || (total > 0);
 
     let status: "not_configured" | "paid" | "partial" | "unpaid" = "not_configured";
-    
     if (isConfigured) {
       if (total === 0 || paid >= total) status = "paid";
       else if (paid > 0) status = "partial";
@@ -688,13 +734,41 @@ export default function StudentDetailScreen() {
 
     const percentage = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
 
-    return { isConfigured, gross, discount, total, paid, balance, status, percentage };
-  }, [studentStatementData]);
+    // Component counts for filter tabs
+    let totalComps = 0;
+    let paidComps = 0;
+    let unpaidComps = 0;
+
+    years.forEach((yr: any) => {
+      const comps = getYearComponents(yr);
+      comps.forEach(c => {
+        totalComps++;
+        if (c.isPaid) paidComps++;
+        else if (c.due > 0) unpaidComps++;
+      });
+    });
+
+    return { 
+      isConfigured, 
+      gross, 
+      discount, 
+      total, 
+      paid, 
+      balance, 
+      status, 
+      percentage, 
+      years,
+      totalComps,
+      paidComps,
+      unpaidComps
+    };
+  }, [studentStatementData, studentData]);
 
   // Open Edit Fee Modal
   const handleOpenEditFeeModal = () => {
-    if (studentStatementData?.ledger?.years && studentStatementData.ledger.years.length > 0) {
-      const clonedYears = studentStatementData.ledger.years.map((y: any, idx: number) => {
+    const years = studentStatementData?.years || studentStatementData?.ledger?.years || studentData?.fees?.years || [];
+    if (years && years.length > 0) {
+      const clonedYears = years.map((y: any, idx: number) => {
         let components = y.components || [];
         if (components.length === 0 && y.categories) {
            components = Object.entries(y.categories).map(([k, c]: any) => ({
@@ -718,7 +792,7 @@ export default function StudentDetailScreen() {
       });
       setEditFeeYears(clonedYears);
     } else {
-      const selectedCourse = courses.find(c => c._id === (typeof studentData.selectedProgram === 'object' ? studentData.selectedProgram?._id : studentData.selectedProgram));
+      const selectedCourse = courses.find(c => c._id === (typeof studentData?.selectedProgram === 'object' ? studentData?.selectedProgram?._id : studentData?.selectedProgram));
       const duration = selectedCourse?.durationYears || 4;
       setEditFeeYears(Array.from({ length: duration }).map((_, idx) => ({
         year: idx + 1,
@@ -734,7 +808,8 @@ export default function StudentDetailScreen() {
   // Open Add Fee Payment Modal
   const handleOpenPayFeeModal = (defaultYear = 1, defaultCategory = "tuition", defaultAmount?: number) => {
     const matchedCategory = feeCategories.find(c => c.code === defaultCategory || c.name?.toLowerCase() === defaultCategory.toLowerCase());
-    const targetYr = studentStatementData?.ledger?.years?.find((y: any) => y.year === defaultYear);
+    const years = studentStatementData?.years || studentStatementData?.ledger?.years || studentData?.fees?.years || [];
+    const targetYr = years.find((y: any) => y.year === defaultYear);
 
     let initialAmount = "";
     if (defaultAmount !== undefined && defaultAmount > 0) {
@@ -2502,20 +2577,68 @@ export default function StudentDetailScreen() {
                     </button>
                   </div>
                 ) : (
-                  /* YEAR-BY-YEAR DETAILED CARDS */
+                  /* YEAR-BY-YEAR DETAILED CARDS WITH PAID & UNPAID FILTERING */
                   <div className="space-y-5">
-                    <div className="flex justify-between items-center px-1">
-                      <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider">Academic Year Breakdown</h4>
-                      <button 
-                        onClick={handleOpenEditFeeModal}
-                        className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" /> Modify All Years
-                      </button>
+                    {/* Header & Filter Controls */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 px-1">
+                      <div>
+                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-wider">Academic Year Breakdown</h4>
+                        <p className="text-xs text-slate-500 font-medium">Track paid installments, outstanding balances, and collected receipts</p>
+                      </div>
+
+                      {/* Filter Pills */}
+                      <div className="flex items-center gap-2 p-1.5 bg-slate-100 rounded-2xl">
+                        <button
+                          type="button"
+                          onClick={() => setFeeStatusFilter("all")}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                            feeStatusFilter === "all" 
+                              ? "bg-white text-slate-900 shadow-xs font-black" 
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          <span>All Fees</span>
+                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-slate-200 text-slate-700">
+                            {feeSummary.totalComps || 0}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setFeeStatusFilter("paid")}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                            feeStatusFilter === "paid" 
+                              ? "bg-white text-emerald-800 shadow-xs font-black" 
+                              : "text-slate-600 hover:text-emerald-700"
+                          }`}
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Paid</span>
+                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800">
+                            {feeSummary.paidComps || 0}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setFeeStatusFilter("unpaid")}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                            feeStatusFilter === "unpaid" 
+                              ? "bg-white text-rose-800 shadow-xs font-black" 
+                              : "text-slate-600 hover:text-rose-700"
+                          }`}
+                        >
+                          <Clock className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Unpaid / Due</span>
+                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800">
+                            {feeSummary.unpaidComps || 0}
+                          </span>
+                        </button>
+                      </div>
                     </div>
 
-                    {studentStatementData?.ledger?.years?.map((fy: any) => {
-                      const yrTotal = fy.yearTotal || 0;
+                    {feeSummary.years.map((fy: any) => {
+                      const yrTotal = fy.yearNet ?? fy.yearTotal ?? 0;
                       const yrPaid = fy.yearPaid || 0;
                       const yrDue = fy.yearOS || 0;
 
@@ -2563,61 +2686,113 @@ export default function StudentDetailScreen() {
                             </div>
                           </div>
 
-                          {/* Dynamic Categories / Components */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                            {fy.components && fy.components.length > 0 ? (
-                              fy.components.map((cat: any, idx: number) => {
-                                const total = cat.amount || 0;
+                          {/* Dynamic Categories / Components (Filtered by Paid / Unpaid) */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                            {(() => {
+                              const allComps = getYearComponents(fy);
+                              const visibleComps = allComps.filter(c => {
+                                if (feeStatusFilter === "paid") return c.isPaid;
+                                if (feeStatusFilter === "unpaid") return c.due > 0;
+                                return true;
+                              });
+
+                              if (visibleComps.length === 0) {
                                 return (
-                                  <div key={`${cat.category}-${idx}`} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-xs font-bold text-slate-800">{cat.category}</span>
-                                    </div>
-                                    <div className="text-sm font-black text-slate-900">{formatCurrency(total)}</div>
+                                  <div className="col-span-full py-6 text-center text-xs font-bold text-slate-400 bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
+                                    {feeStatusFilter === "paid" 
+                                      ? `No paid fee components recorded yet for Academic Year ${fy.year}.` 
+                                      : `All fee components for Academic Year ${fy.year} have been fully paid & cleared!`}
                                   </div>
                                 );
-                              })
-                            ) : (
-                              Object.entries(fy.categories || {}).map(([key, cat]: any) => {
-                                const title = key.charAt(0).toUpperCase() + key.slice(1) + " Fee";
-                                const total = cat.total || 0;
-                                const paid = cat.paid || 0;
-                                const catDue = cat.os || Math.max(0, total - paid);
-                                
+                              }
+
+                              return visibleComps.map((cat: any, idx: number) => {
                                 return (
-                                  <div key={title} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-xs font-bold text-slate-800">{title}</span>
-                                      {catDue === 0 && total > 0 ? (
-                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                      ) : catDue > 0 ? (
-                                        <Clock className="w-3.5 h-3.5 text-amber-600" />
-                                      ) : null}
+                                  <div 
+                                    key={`${cat.title}-${idx}`} 
+                                    className={`p-4 rounded-2xl border transition-all flex flex-col justify-between space-y-3 ${
+                                      cat.isPaid 
+                                        ? 'bg-emerald-50/40 border-emerald-200/60 hover:border-emerald-300' 
+                                        : cat.isPartial 
+                                          ? 'bg-amber-50/40 border-amber-200/60 hover:border-amber-300' 
+                                          : 'bg-slate-50/80 border-slate-200/80 hover:border-rose-200'
+                                    }`}
+                                  >
+                                    {/* Component Header & Status Badge */}
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div>
+                                        <span className="text-xs font-black text-slate-900 block">{cat.title}</span>
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{cat.frequency || 'Annual'}</span>
+                                      </div>
+
+                                      {cat.isPaid ? (
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 flex items-center gap-1 shrink-0">
+                                          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Paid
+                                        </span>
+                                      ) : cat.isPartial ? (
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 shrink-0">
+                                          Partial
+                                        </span>
+                                      ) : (
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 shrink-0">
+                                          Due
+                                        </span>
+                                      )}
                                     </div>
-                                    <div className="text-sm font-black text-slate-900">{formatCurrency(total)}</div>
-                                    <div className="text-[11px] font-semibold flex justify-between">
-                                      <span className="text-emerald-600">Paid: {formatCurrency(paid)}</span>
-                                      {catDue > 0 && <span className="text-amber-600">Due: {formatCurrency(catDue)}</span>}
+
+                                    {/* 3 Metrics: Total, Paid, Due */}
+                                    <div className="grid grid-cols-3 gap-2 py-2 px-2.5 bg-white/90 rounded-xl border border-slate-100 text-[11px]">
+                                      <div>
+                                        <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Total</p>
+                                        <p className="font-black text-slate-900">{formatCurrency(cat.total)}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-[9px] font-black uppercase tracking-wider text-emerald-600">Paid</p>
+                                        <p className="font-black text-emerald-600">{formatCurrency(cat.paid)}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-[9px] font-black uppercase tracking-wider text-rose-600">Due</p>
+                                        <p className={`font-black ${cat.due > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                                          {formatCurrency(cat.due)}
+                                        </p>
+                                      </div>
                                     </div>
+
+                                    {/* Action Button */}
+                                    {cat.due > 0 ? (
+                                      <button 
+                                        type="button"
+                                        onClick={() => handleOpenPayFeeModal(fy.year, cat.code, cat.due)}
+                                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5"
+                                      >
+                                        <CreditCard className="w-3.5 h-3.5" />
+                                        <span>Pay {cat.title} ({formatCurrency(cat.due)})</span>
+                                      </button>
+                                    ) : (
+                                      <div className="w-full py-1.5 bg-emerald-100/60 text-emerald-800 text-[11px] font-bold rounded-xl text-center flex items-center justify-center gap-1">
+                                        <Check className="w-3.5 h-3.5 text-emerald-700" />
+                                        <span>Fully Paid & Cleared</span>
+                                      </div>
+                                    )}
                                   </div>
                                 );
-                              })
-                            )}
+                              });
+                            })()}
 
                             {/* DISCOUNT APPLIED CARD */}
-                            {fy.discount > 0 && (
-                              <div className="bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-200/80 space-y-1">
+                            {fy.discount > 0 && feeStatusFilter !== "unpaid" && (
+                              <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-200/80 space-y-1">
                                 <div className="flex items-center justify-between">
                                   <span className="text-xs font-black text-emerald-900 flex items-center gap-1.5">
                                     <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                                    Concession / Disc.
+                                    Fee Concession / Discount
                                   </span>
                                   <span className="text-[9px] font-black text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full">
-                                    Deducted
+                                    Applied
                                   </span>
                                 </div>
-                                <div className="text-sm font-black text-emerald-700">- {formatCurrency(fy.discount)}</div>
-                                <div className="text-[10px] font-semibold text-emerald-600 truncate">
+                                <div className="text-base font-black text-emerald-700">- {formatCurrency(fy.discount)}</div>
+                                <div className="text-[11px] font-semibold text-emerald-600 truncate">
                                   {fy.discountReason || "Special Waiver / Scholarship"}
                                 </div>
                               </div>

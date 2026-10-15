@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
-import connectDB from '@/lib/mongodb';
-import { Student } from '@/models/Student';
-import { Course } from '@/models/Course';
-import { Branch } from '@/models/Branch';
-import { FeeTransaction } from '@/models/FeeTransaction';
+import { query as pgQuery } from '@/lib/postgres';
+import { mapPgTransactions } from '@/lib/financeMapper';
 import { getCache, setCache, DEFAULT_CACHE_TTL } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
@@ -16,27 +13,59 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // 1. Try Redis cache (30 min TTL)
     const cachedData = await getCache(cacheKey);
     if (cachedData) {
-      return NextResponse.json(cachedData);
+      return NextResponse.json(cachedData, {
+        headers: { "X-Cache-Source": "Upstash-Redis" }
+      });
     }
 
-    await connectDB();
-
-    const studentDoc = await Student.findById(studentId)
-      .populate('selectedBranch', 'name code')
-      .populate('selectedProgram', 'name code tuitionFee totalSemesters duration semesterFees coordinator feeStructureTemplate')
-      .lean();
-
-    const transactions = await FeeTransaction.find({ studentId }).sort({ paymentDate: -1, createdAt: -1 }).lean();
-
-    if (!studentDoc) {
+    // 2. Query Neon PostgreSQL for student with branch & course info
+    const stuSql = `
+      SELECT 
+        s.*,
+        b.name as branch_name,
+        b.code as branch_code,
+        c.name as course_name,
+        c.code as course_code,
+        c.duration as course_duration,
+        c.tuition_fee as course_tuition_fee,
+        c.total_semesters as course_total_semesters,
+        c.semester_fees as course_semester_fees,
+        c.coordinator as course_coordinator
+      FROM students s
+      LEFT JOIN branches b ON s.selected_branch = b.id
+      LEFT JOIN courses c ON s.selected_program = c.id
+      WHERE s.id = $1
+    `;
+    const stuRes = await pgQuery(stuSql, [studentId]);
+    if (stuRes.rows.length === 0) {
       return NextResponse.json({ error: 'Student not found' }, { status: 404 });
     }
 
-    const student: any = studentDoc;
-    const course: any = student.selectedProgram;
-    const duration = course?.duration || 4;
-    const totalSemesters = course?.totalSemesters || duration * 2;
-    const courseTuition = course?.tuitionFee || 0;
+    const studentRow = stuRes.rows[0];
+
+    // 3. Query all transactions for this student
+    const txnsSql = `
+      SELECT 
+        t.*,
+        c.name as course_name,
+        c.code as course_code,
+        c.duration as course_duration
+      FROM fee_transactions t
+      LEFT JOIN courses c ON t.course_id = c.id
+      WHERE t.student_id = $1
+      ORDER BY t.payment_date DESC, t.created_at DESC
+    `;
+    const txnsRes = await pgQuery(txnsSql, [studentId]);
+    const transactions = mapPgTransactions(txnsRes.rows);
+
+    const duration = Number(studentRow.course_duration) || 4;
+    const totalSemesters = Number(studentRow.course_total_semesters) || (duration * 2);
+    const courseTuition = Number(studentRow.course_tuition_fee) || 0;
+
+    let feesObj: any = typeof studentRow.fees === 'string' ? JSON.parse(studentRow.fees) : (studentRow.fees || {});
+    if (!feesObj || typeof feesObj !== 'object') {
+      feesObj = { isConfigured: false, years: [] };
+    }
 
     // Build years list
     let yearsData = [];
@@ -45,10 +74,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     let totalAssessed = 0;
     let totalPaid = 0;
 
-    if (student.fees?.isConfigured && Array.isArray(student.fees?.years) && student.fees.years.length > 0) {
-      yearsData = student.fees.years.map((y: any, idx: number) => {
+    if (feesObj.isConfigured && Array.isArray(feesObj.years) && feesObj.years.length > 0) {
+      yearsData = feesObj.years.map((y: any, idx: number) => {
         const yNum = y.year || idx + 1;
-        
         let yearGross = 0;
         let yearPaid = 0;
         let categories: any = {};
@@ -76,7 +104,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
           yearGross = tuitionTot + examTot + transportTot + otherTot;
           yearPaid = tuitionPaid + examPaid + transportPaid + otherPaid;
-          
+
           categories = {
             tuition: { total: tuitionTot, paid: tuitionPaid, os: Math.max(0, tuitionTot - tuitionPaid) },
             exam: { total: examTot, paid: examPaid, os: Math.max(0, examTot - examPaid) },
@@ -99,114 +127,108 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           yearGross,
           discount,
           discountReason,
-          yearTotal: yearNet,
+          yearNet,
           yearPaid,
           yearOS,
-          status: yearOS === 0 && yearNet > 0 ? 'Cleared' : yearPaid > 0 ? 'Partial' : 'Pending'
-        };
-      });
-    } else if (course?.feeStructureTemplate && course.feeStructureTemplate.length > 0) {
-      yearsData = course.feeStructureTemplate.map((ft: any) => {
-        const yNum = ft.year;
-        const yearTotal = ft.totalYearlyFee || 0;
-        
-        const yrTxns = transactions.filter((t: any) => 
-          t.academicYear === `Year ${yNum}` || 
-          t.semester === (yNum * 2 - 1) || 
-          t.semester === (yNum * 2)
-        );
-        const yearPaid = yrTxns.reduce((sum: number, t: any) => sum + (Number(t.amount) || 0), 0);
-        const yearOS = Math.max(0, yearTotal - yearPaid);
-
-        totalAssessed += yearTotal;
-        totalPaid += yearPaid;
-
-        return {
-          year: yNum,
-          components: ft.components,
-          yearTotal,
-          yearPaid,
-          yearOS,
-          status: yearOS === 0 && yearTotal > 0 ? 'Cleared' : yearPaid > 0 ? 'Partial' : 'Pending'
+          status: yearOS === 0 && yearNet > 0 ? 'Paid' : (yearPaid > 0 ? 'Partial' : 'Unpaid')
         };
       });
     } else {
-      const yearlyTuition = duration > 0 ? Math.round(courseTuition / duration) : courseTuition;
-      yearsData = Array.from({ length: duration }).map((_, idx) => {
-        const yNum = idx + 1;
-        const yrTxns = transactions.filter((t: any) => t.academicYear === `Year ${yNum}` || t.semester === (yNum * 2 - 1) || t.semester === (yNum * 2));
-        const paidThisYear = yrTxns.reduce((sum: number, t: any) => sum + (Number(t.amount) || 0), 0);
-        const yearTotal = yearlyTuition;
-        const yearOS = Math.max(0, yearTotal - paidThisYear);
+      // Default to program course base fee
+      const perYear = duration > 0 ? Math.round(courseTuition / duration) : courseTuition;
+      for (let i = 1; i <= duration; i++) {
+        const yearTxns = transactions.filter((t: any) => t.semester === (i * 2 - 1) || t.semester === (i * 2) || t.academicYear === `Year ${i}`);
+        const yrPaid = yearTxns.reduce((sum: number, t: any) => sum + (Number(t.amount) || 0), 0);
+        const yrOS = Math.max(0, perYear - yrPaid);
 
-        totalAssessed += yearTotal;
-        totalPaid += paidThisYear;
+        totalGross += perYear;
+        totalAssessed += perYear;
+        totalPaid += yrPaid;
 
-        return {
-          year: yNum,
+        yearsData.push({
+          year: i,
+          components: [
+            { category: 'Tuition Fee', amount: perYear, paid: yrPaid, os: yrOS, frequency: 'Annual' }
+          ],
           categories: {
-            tuition: { total: yearlyTuition, paid: paidThisYear, os: yearOS },
-            exam: { total: 0, paid: 0, os: 0 },
-            transport: { total: 0, paid: 0, os: 0 },
-            other: { total: 0, paid: 0, os: 0 }
+            tuition: { total: perYear, paid: yrPaid, os: yrOS }
           },
-          yearTotal,
-          yearPaid: paidThisYear,
-          yearOS,
-          status: yearOS === 0 ? 'Cleared' : paidThisYear > 0 ? 'Partial' : 'Pending'
-        };
-      });
+          yearGross: perYear,
+          discount: 0,
+          discountReason: '',
+          yearNet: perYear,
+          yearPaid: yrPaid,
+          yearOS: yrOS,
+          status: yrOS === 0 && perYear > 0 ? 'Paid' : (yrPaid > 0 ? 'Partial' : 'Unpaid')
+        });
+      }
     }
 
-    const totalTxnPaid = transactions.reduce((sum: number, t: any) => sum + (Number(t.amount) || 0), 0);
-    if (totalTxnPaid > totalPaid) {
-      totalPaid = totalTxnPaid;
+    // Reconcile total transactions paid sum if higher
+    const txnSum = transactions.reduce((acc: number, t: any) => acc + (Number(t.amount) || 0), 0);
+    if (txnSum > totalPaid) {
+      totalPaid = txnSum;
     }
 
-    const outstandingAmount = Math.max(0, totalAssessed - totalPaid);
+    const totalOutstanding = Math.max(0, totalAssessed - totalPaid);
+    let overallStatus = 'Cleared';
+    if (totalPaid === 0 && totalAssessed > 0) overallStatus = 'Unpaid';
+    else if (totalOutstanding > 0) overallStatus = 'Partial';
+    else overallStatus = 'Paid';
 
-    const payload = {
+    const result = {
       student: {
-        _id: student._id,
-        enrollmentNumber: student.enrollmentNumber || 'N/A',
-        admissionNumber: student.admissionNumber || 'N/A',
-        studentId: student.studentId || 'N/A',
-        firstName: student.firstName,
-        lastName: student.lastName,
-        fullName: `${student.firstName || ''} ${student.middleName || ''} ${student.lastName || ''}`.trim(),
-        mobile: student.mobile,
-        parentMobile: student.parentMobile,
-        email: student.email,
-        branch: student.selectedBranch?.name || 'N/A',
-        course: course?.name || 'N/A',
-        courseCode: course?.code || '',
-        duration,
-        totalSemesters,
-        selectedSemester: student.selectedSemester || 1,
-        courseYear: student.courseYear || 1,
-        batch: student.batch || student.sessionYear || 'N/A',
-        photo: student.applicantPhoto || student.documents?.studentPhoto || null
+        _id: studentRow.id,
+        id: studentRow.id,
+        firstName: studentRow.first_name,
+        middleName: studentRow.middle_name,
+        lastName: studentRow.last_name,
+        enrollmentNumber: studentRow.enrollment_number,
+        admissionNumber: studentRow.admission_number,
+        studentId: studentRow.student_id,
+        mobile: studentRow.mobile,
+        parentMobile: studentRow.parent_mobile,
+        email: studentRow.email,
+        applicantPhoto: studentRow.applicant_photo,
+        studentStatus: studentRow.student_status,
+        sessionYear: studentRow.session_year,
+        courseYear: studentRow.course_year,
+        selectedSemester: studentRow.selected_semester,
+        selectedBranch: {
+          _id: studentRow.selected_branch,
+          name: studentRow.branch_name,
+          code: studentRow.branch_code
+        },
+        selectedProgram: {
+          _id: studentRow.selected_program,
+          name: studentRow.course_name,
+          code: studentRow.course_code,
+          duration: duration,
+          totalSemesters: totalSemesters,
+          tuitionFee: courseTuition
+        }
       },
-      ledger: {
-        totalGross: totalGross || totalAssessed,
+      summary: {
+        totalGross,
         totalDiscount,
         totalAssessed,
         totalPaid,
-        outstandingAmount,
-        status: outstandingAmount === 0 ? 'Cleared' : totalPaid > 0 ? 'Partial' : 'Pending OS',
-        recoveryPercentage: totalAssessed > 0 ? Math.round((totalPaid / totalAssessed) * 100) : 100,
-        years: yearsData
+        totalOutstanding,
+        status: overallStatus
       },
+      years: yearsData,
       transactions
     };
 
-    // 2. Cache in Redis for 30 minutes
-    await setCache(cacheKey, payload, DEFAULT_CACHE_TTL);
+    // 4. Cache in Redis for 30 minutes
+    await setCache(cacheKey, result, DEFAULT_CACHE_TTL);
 
-    return NextResponse.json(payload);
+    return NextResponse.json(result, {
+      headers: { "X-Cache-Source": "Neon-PostgreSQL" }
+    });
 
   } catch (error: any) {
     console.error('Error in GET /api/finance/student-account/[id]:', error);
-    return NextResponse.json({ error: error.message || 'Failed to fetch student account details' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Failed to fetch student account statement' }, { status: 500 });
   }
 }

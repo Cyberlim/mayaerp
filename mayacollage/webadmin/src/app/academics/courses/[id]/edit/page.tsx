@@ -36,6 +36,7 @@ export default function EditCourse() {
     duration: "",
     intakeCapacity: "",
     totalSemesters: "",
+    tuitionFee: "",
     coordinator: "",
     labIndex: "",
   });
@@ -85,6 +86,7 @@ export default function EditCourse() {
           duration: data.duration?.toString() || "",
           intakeCapacity: data.intakeCapacity?.toString() || "",
           totalSemesters: data.totalSemesters?.toString() || "",
+          tuitionFee: data.tuitionFee?.toString() || "",
           coordinator: data.coordinator || "",
           labIndex: data.labIndex || "",
         });

@@ -1,23 +1,28 @@
 import { NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import { Bus } from "@/models/Bus";
+import { query as pgQuery } from "@/lib/postgres";
+import { delCachePattern } from "@/lib/redis";
 
 export const dynamic = 'force-dynamic';
 
 export const DEMO_BUSES = [
   {
-    busNo: "BUS-01 (DL-1P-9842)",
-    driverName: "Ramesh Chandra",
-    conductorName: "Mohan Lal",
-    capacity: 40,
-    routeName: "South Delhi - Noida Express Line",
+    busNo: "BUS-01 (UP-86-T-9542)",
+    driverName: "Charan Singh",
+    conductorName: "Rakesh Sharma",
+    capacity: 42,
+    routeName: "Maya Institute to Kachora / Sikandra Rao",
     status: "Active",
     stops: [
-      { stationName: "Lajpat Nagar Ring Road", price: 16000 },
-      { stationName: "Ashram Chowk", price: 15000 },
-      { stationName: "Mayur Vihar Phase 1", price: 13500 },
-      { stationName: "Noida Sector 18 Metro", price: 12000 },
-      { stationName: "Noida Sector 62 Main Gate", price: 10000 }
+      { stationName: "Kachora", price: 2000 },
+      { stationName: "Sikandra Rao", price: 1800 },
+      { stationName: "Sua Mohanpura", price: 1800 },
+      { stationName: "Bastoi", price: 1500 },
+      { stationName: "Rati Ka Nagla", price: 1500 },
+      { stationName: "Salempur", price: 1200 },
+      { stationName: "Thulai", price: 1000 },
+      { stationName: "Nagla Tajna", price: 1000 },
+      { stationName: "Kailora / Vahanpur", price: 1000 },
+      { stationName: "Mendu", price: 500 }
     ]
   },
   {
@@ -53,36 +58,60 @@ export const DEMO_BUSES = [
 ];
 
 export async function POST() {
-    try {
-        await connectDB();
-        const results = [];
-
-        for (const b of DEMO_BUSES) {
-            const existing = await Bus.findOne({ busNo: b.busNo });
-            if (!existing) {
-                const created = await Bus.create(b);
-                results.push({ action: 'created', bus: created });
-            } else {
-                existing.driverName = b.driverName;
-                existing.conductorName = b.conductorName;
-                existing.capacity = b.capacity;
-                existing.routeName = b.routeName;
-                existing.stops = b.stops;
-                await existing.save();
-                results.push({ action: 'updated', bus: existing });
-            }
-        }
-
-        const count = await Bus.countDocuments();
-        return NextResponse.json({
-            success: true,
-            message: `Successfully seeded ${results.length} college fleet buses with routes & stops!`,
-            totalBuses: count,
-            buses: results
-        }, { status: 200 });
-
-    } catch (error: any) {
-        console.error("Transport Seed Error:", error);
-        return NextResponse.json({ message: "Error seeding buses", error: error.message }, { status: 500 });
+  try {
+    const results = [];
+    for (const b of DEMO_BUSES) {
+      const existing = await pgQuery(`SELECT id FROM buses WHERE bus_no = $1 LIMIT 1`, [b.busNo]);
+      if (existing.rows.length === 0) {
+        const busId = `bus_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        await pgQuery(`
+          INSERT INTO buses (
+            id, bus_no, driver_name, conductor_name, capacity, filled, route_name, status, stops, students, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, '[]'::jsonb, NOW(), NOW())
+        `, [
+          busId,
+          b.busNo,
+          b.driverName,
+          b.conductorName,
+          b.capacity,
+          b.routeName,
+          b.status,
+          JSON.stringify(b.stops)
+        ]);
+        results.push({ action: "created", busNo: b.busNo });
+      } else {
+        await pgQuery(`
+          UPDATE buses SET
+            driver_name = $2,
+            conductor_name = $3,
+            capacity = $4,
+            route_name = $5,
+            stops = $6,
+            updated_at = NOW()
+          WHERE id = $1
+        `, [
+          existing.rows[0].id,
+          b.driverName,
+          b.conductorName,
+          b.capacity,
+          b.routeName,
+          JSON.stringify(b.stops)
+        ]);
+        results.push({ action: "updated", busNo: b.busNo });
+      }
     }
+
+    await delCachePattern("transport:*");
+    const countRes = await pgQuery(`SELECT COUNT(*) as total FROM buses`);
+
+    return NextResponse.json({
+      success: true,
+      message: `Successfully seeded college fleet buses in PostgreSQL!`,
+      totalBuses: Number(countRes.rows[0].total),
+      results
+    }, { status: 200 });
+  } catch (error: any) {
+    console.error("Transport Seed Error (PostgreSQL):", error);
+    return NextResponse.json({ message: "Error seeding buses", error: error.message }, { status: 500 });
+  }
 }

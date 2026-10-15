@@ -69,6 +69,110 @@ interface BusFleet {
   updatedAt?: string;
 }
 
+function TransportSkeleton() {
+  return (
+    <div className="max-w-7xl mx-auto space-y-8 pb-16 font-sans text-slate-800 animate-pulse">
+      {/* Header Banner Skeleton */}
+      <div className="bg-gradient-to-r from-amber-600/30 via-orange-500/20 to-rose-600/30 rounded-3xl p-8 border border-amber-500/20 relative overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2.5">
+              <div className="h-6 w-32 bg-amber-400/30 rounded-full" />
+              <div className="h-4 w-40 bg-amber-300/20 rounded-lg" />
+            </div>
+            <div className="h-9 w-80 bg-amber-400/40 rounded-2xl" />
+            <div className="h-4 w-full max-w-lg bg-amber-300/30 rounded-xl" />
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="h-10 w-36 bg-white/20 rounded-2xl" />
+            <div className="h-10 w-10 bg-white/20 rounded-2xl" />
+            <div className="h-10 w-32 bg-white/30 rounded-2xl" />
+            <div className="h-10 w-28 bg-white/80 rounded-2xl" />
+          </div>
+        </div>
+
+        {/* Tab Switcher Skeleton */}
+        <div className="flex flex-wrap gap-2 mt-8 pt-6 border-t border-white/20">
+          <div className="h-10 w-40 bg-white/90 rounded-2xl" />
+          <div className="h-10 w-48 bg-white/20 rounded-2xl" />
+          <div className="h-10 w-44 bg-white/20 rounded-2xl" />
+        </div>
+      </div>
+
+      {/* 5 KPI Cards Skeleton */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 lg:gap-6">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-3">
+            <div className="flex justify-between items-start">
+              <div className="w-10 h-10 rounded-2xl bg-amber-50" />
+              <div className="h-4 w-14 bg-slate-100 rounded-full" />
+            </div>
+            <div className="h-3 w-24 bg-slate-200 rounded" />
+            <div className="h-7 w-28 bg-slate-300 rounded-xl" />
+          </div>
+        ))}
+      </div>
+
+      {/* Toolbar / Search Filter Skeleton */}
+      <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="flex flex-1 gap-3 w-full">
+          <div className="h-12 w-full max-w-md bg-slate-100 rounded-2xl" />
+          <div className="h-12 w-36 bg-slate-100 rounded-2xl" />
+        </div>
+        <div className="flex gap-3 w-full md:w-auto">
+          <div className="h-12 w-32 bg-slate-100 rounded-2xl" />
+        </div>
+      </div>
+
+      {/* Fleet Cards Grid Skeleton */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[1, 2, 3].map((card) => (
+          <div key={card} className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-5">
+            <div className="flex justify-between items-start">
+              <div className="space-y-2">
+                <div className="h-6 w-32 bg-amber-500/20 rounded-xl" />
+                <div className="h-4 w-44 bg-slate-200 rounded" />
+              </div>
+              <div className="h-6 w-20 bg-emerald-100 rounded-full" />
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <div className="h-3 w-28 bg-slate-200 rounded" />
+                <div className="h-3 w-16 bg-slate-200 rounded" />
+              </div>
+              <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-amber-400/40 w-1/2 rounded-full" />
+              </div>
+            </div>
+            <div className="p-3.5 bg-slate-50 rounded-2xl space-y-2">
+              <div className="flex justify-between">
+                <div className="h-3 w-20 bg-slate-200 rounded" />
+                <div className="h-3 w-28 bg-slate-300 rounded" />
+              </div>
+              <div className="flex justify-between">
+                <div className="h-3 w-20 bg-slate-200 rounded" />
+                <div className="h-3 w-28 bg-slate-300 rounded" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="h-3 w-24 bg-slate-200 rounded" />
+              <div className="flex flex-wrap gap-1.5">
+                {[1, 2, 3, 4].map(s => (
+                  <div key={s} className="h-6 w-20 bg-slate-100 rounded-lg" />
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2 pt-3 border-t border-slate-100">
+              <div className="h-9 flex-1 bg-slate-100 rounded-xl" />
+              <div className="h-9 w-24 bg-amber-100/60 rounded-xl" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function TransportDashboard() {
   const [activeTab, setActiveTab] = useState<"fleet" | "students" | "routes">("fleet");
   const [buses, setBuses] = useState<BusFleet[]>([]);
@@ -108,9 +212,64 @@ export default function TransportDashboard() {
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [studentSearchLoading, setStudentSearchLoading] = useState(false);
 
+  // Local cache memory for student search (prevents heavy database hits & enables 0ms search)
+  const [cachedStudents, setCachedStudents] = useState<any[]>([]);
+  const [cacheLoaded, setCacheLoaded] = useState(false);
+  const [isPreloadingStudents, setIsPreloadingStudents] = useState(false);
+
   const showToast = (type: 'success' | 'error' | 'info', text: string) => {
     setToastMessage({ type, text });
     setTimeout(() => setToastMessage(null), 4500);
+  };
+
+  // Load / Preload all students into local cache memory
+  const loadStudentsIntoCache = async (forceRefresh = false) => {
+    try {
+      // 1. Check in-memory state first if not forced
+      if (!forceRefresh && cachedStudents.length > 0) {
+        return cachedStudents;
+      }
+
+      // 2. Check browser sessionStorage cache (valid for 20 mins)
+      if (!forceRefresh && typeof window !== "undefined") {
+        try {
+          const raw = sessionStorage.getItem("maya_transport_students_cache");
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed.timestamp && Date.now() - parsed.timestamp < 20 * 60 * 1000 && Array.isArray(parsed.data)) {
+              setCachedStudents(parsed.data);
+              setCacheLoaded(true);
+              return parsed.data;
+            }
+          }
+        } catch (e) {
+          console.warn("Session cache read error:", e);
+        }
+      }
+
+      // 3. Fetch from PostgreSQL endpoint with Redis caching
+      setIsPreloadingStudents(true);
+      const res = await fetch(`/api/transport/students/search?all=true${forceRefresh ? '&refresh=true' : ''}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCachedStudents(data);
+        setCacheLoaded(true);
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem("maya_transport_students_cache", JSON.stringify({
+              timestamp: Date.now(),
+              data
+            }));
+          } catch (e) {}
+        }
+        return data;
+      }
+    } catch (err) {
+      console.error("Failed to load students into local cache memory:", err);
+    } finally {
+      setIsPreloadingStudents(false);
+    }
+    return [];
   };
 
   const fetchBuses = async () => {
@@ -133,6 +292,7 @@ export default function TransportDashboard() {
 
   useEffect(() => {
     fetchBuses();
+    loadStudentsIntoCache(); // Warm up local cache memory in background
   }, []);
 
   // Seed Demo Buses
@@ -272,8 +432,9 @@ export default function TransportDashboard() {
     setAssignPaymentStatus("Pending");
     setSelectedStudent(null);
     setStudentSearchQuery("");
-    setStudentSearchResults([]);
     setShowAssignModal(true);
+    // Ensure students are loaded in local cache memory
+    loadStudentsIntoCache();
   };
 
   // On Bus selection change in Assign Modal
@@ -299,22 +460,54 @@ export default function TransportDashboard() {
     }
   };
 
-  // Search student
+  // Character-by-character instant suggestions directly from local cache memory (0ms search, 0 DB queries)
+  const studentSuggestions = useMemo(() => {
+    if (!cachedStudents || cachedStudents.length === 0) return [];
+    const q = studentSearchQuery.trim().toLowerCase();
+    
+    // If no query typed yet, suggest first 20 students from local cache
+    if (!q) {
+      return cachedStudents.slice(0, 20);
+    }
+
+    const tokens = q.split(/\s+/).filter(Boolean);
+    return cachedStudents.filter(st => {
+      const name = `${st.firstName || ''} ${st.lastName || ''}`.toLowerCase();
+      const sId = (st.studentId || '').toLowerCase();
+      const adm = (st.admissionNumber || '').toLowerCase();
+      const mob = (st.mobile || '').toLowerCase();
+      const email = (st.email || '').toLowerCase();
+      const prog = (st.selectedProgram || st.courseName || '').toLowerCase();
+      const branch = (st.selectedBranch || st.branchName || '').toLowerCase();
+
+      const haystack = `${name} ${sId} ${adm} ${mob} ${email} ${prog} ${branch}`;
+      return tokens.every(tok => haystack.includes(tok));
+    }).slice(0, 35);
+  }, [cachedStudents, studentSearchQuery]);
+
+  // Fallback search directly against PostgreSQL if user explicitly clicks Search button
   const handleSearchStudent = async () => {
     if (!studentSearchQuery.trim()) return;
     try {
       setStudentSearchLoading(true);
-      const res = await fetch(`/api/library/students/search?q=${encodeURIComponent(studentSearchQuery.trim())}`);
+      const res = await fetch(`/api/transport/students/search?q=${encodeURIComponent(studentSearchQuery.trim())}`);
       if (res.ok) {
         const data = await res.json();
-        setStudentSearchResults(data);
-        if (data.length === 1) {
-          setSelectedStudent(data[0]);
+        // Merge into local cache if new
+        if (Array.isArray(data) && data.length > 0) {
+          setCachedStudents(prev => {
+            const existingIds = new Set(prev.map(p => p.id || p._id));
+            const newOnes = data.filter(d => !existingIds.has(d.id || d._id));
+            return [...prev, ...newOnes];
+          });
+          if (data.length === 1 && !selectedStudent) {
+            setSelectedStudent(data[0]);
+          }
         }
       }
     } catch (err) {
       console.error(err);
-      showToast('error', 'Student search error');
+      showToast('error', 'Student search error in PostgreSQL database');
     } finally {
       setStudentSearchLoading(false);
     }
@@ -334,7 +527,7 @@ export default function TransportDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           busId: assignBusId,
-          studentId: selectedStudent._id,
+          studentId: selectedStudent._id || selectedStudent.id,
           stopName: assignStopName,
           customFare: assignCustomFare !== "" ? Number(assignCustomFare) : undefined,
           paymentStatus: assignPaymentStatus
@@ -415,18 +608,21 @@ export default function TransportDashboard() {
     }
   };
 
-  // Filtered Buses
+  // High-performance multi-token search algorithm for fleet
   const filteredBuses = useMemo(() => {
-    return buses.filter(b => {
-      const q = fleetSearch.toLowerCase().trim();
-      const matchesSearch = !q || 
-        b.busNo.toLowerCase().includes(q) || 
-        b.routeName.toLowerCase().includes(q) || 
-        b.driverName.toLowerCase().includes(q) ||
-        b.stops.some(s => s.stationName.toLowerCase().includes(q));
+    const rawQuery = fleetSearch.toLowerCase().trim();
+    const tokens = rawQuery ? rawQuery.split(/\s+/).filter(Boolean) : [];
 
+    return buses.filter(b => {
       const matchesStatus = statusFilter === "all" || b.status === statusFilter;
-      return matchesSearch && matchesStatus;
+      if (!matchesStatus) return false;
+      if (tokens.length === 0) return true;
+
+      const stopsText = b.stops?.map(s => s.stationName).join(" ") || "";
+      const studentsText = b.students?.map(s => `${s.student?.firstName || ''} ${s.student?.lastName || ''} ${s.student?.studentId || ''}`).join(" ") || "";
+      const haystack = `${b.busNo} ${b.routeName} ${b.driverName} ${b.conductorName} ${stopsText} ${studentsText}`.toLowerCase();
+
+      return tokens.every(token => haystack.includes(token));
     });
   }, [buses, fleetSearch, statusFilter]);
 
@@ -445,22 +641,35 @@ export default function TransportDashboard() {
     return list;
   }, [buses]);
 
-  // Filtered Assigned Students
+  // High-performance multi-token search algorithm for student commuters
   const filteredStudents = useMemo(() => {
-    return allAssignedStudents.filter(({ bus, assignment }) => {
-      const q = studentSearch.toLowerCase().trim();
-      const s = assignment.student;
-      const sName = `${s.firstName || ''} ${s.lastName || ''}`.toLowerCase();
-      const sId = (s.studentId || '').toLowerCase();
-      const sAdm = (s.admissionNumber || '').toLowerCase();
-      const sStop = (assignment.stopName || '').toLowerCase();
-      const bNo = bus.busNo.toLowerCase();
+    const rawQuery = studentSearch.toLowerCase().trim();
+    const tokens = rawQuery ? rawQuery.split(/\s+/).filter(Boolean) : [];
 
-      const matchesQuery = !q || sName.includes(q) || sId.includes(q) || sAdm.includes(q) || sStop.includes(q) || bNo.includes(q);
+    return allAssignedStudents.filter(({ bus, assignment }) => {
       const matchesBus = selectedBusFilter === "all" || bus._id === selectedBusFilter;
       const matchesPayment = paymentFilter === "all" || assignment.paymentStatus === paymentFilter;
+      if (!matchesBus || !matchesPayment) return false;
+      if (tokens.length === 0) return true;
 
-      return matchesQuery && matchesBus && matchesPayment;
+      const s = assignment.student;
+      const haystack = [
+        s?.firstName,
+        s?.lastName,
+        `${s?.firstName || ''} ${s?.lastName || ''}`,
+        s?.studentId,
+        s?.admissionNumber,
+        s?.email,
+        s?.mobile,
+        s?.selectedBranch,
+        s?.selectedProgram,
+        assignment?.stopName,
+        bus?.busNo,
+        bus?.routeName,
+        assignment?.paymentStatus
+      ].filter(Boolean).join(" ").toLowerCase();
+
+      return tokens.every(token => haystack.includes(token));
     });
   }, [allAssignedStudents, studentSearch, selectedBusFilter, paymentFilter]);
 
@@ -474,12 +683,7 @@ export default function TransportDashboard() {
   const totalTransportFeesPending = Math.max(0, totalTransportFeesAssessed - totalTransportFeesCollected);
 
   if (loading) {
-    return (
-      <div className="flex flex-col justify-center items-center h-full min-h-[500px] space-y-4">
-        <div className="w-12 h-12 border-4 border-amber-500/20 border-t-amber-600 rounded-full animate-spin"></div>
-        <p className="text-slate-500 font-bold text-sm tracking-wide animate-pulse">Connecting to Campus Transport & Fleet Database...</p>
-      </div>
-    );
+    return <TransportSkeleton />;
   }
 
   return (
@@ -1454,62 +1658,147 @@ export default function TransportDashboard() {
                 </div>
               </div>
 
-              {/* 3. Search Student */}
+              {/* 3. Search & Select Student from Local Cache Memory */}
               <div className="space-y-3 pt-2">
-                <label className="block font-black text-slate-800 uppercase tracking-wider text-xs">
-                  Search & Select Student
-                </label>
-                <div className="flex gap-2">
+                <div className="flex items-center justify-between">
+                  <label className="block font-black text-slate-800 uppercase tracking-wider text-xs">
+                    Search & Select Student
+                  </label>
+                  
+                  {/* Local Cache Memory Indicator & Sync Button */}
+                  <div className="flex items-center gap-2">
+                    {isPreloadingStudents && cachedStudents.length === 0 ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-[10px] font-bold border border-amber-200 animate-pulse">
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        Caching from PostgreSQL...
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200/60">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                          {cachedStudents.length} Students in Local Cache (0ms Instant)
+                        </span>
+                        <button 
+                          type="button"
+                          onClick={() => loadStudentsIntoCache(true)}
+                          disabled={isPreloadingStudents}
+                          title="Sync & refresh local cache memory from PostgreSQL"
+                          className="p-1 text-slate-400 hover:text-amber-600 rounded-lg hover:bg-slate-100 transition-colors"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${isPreloadingStudents ? 'animate-spin text-amber-600' : ''}`} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Instant Search Input */}
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <Search className="w-4 h-4" />
+                  </div>
                   <input 
                     type="text"
                     value={studentSearchQuery}
                     onChange={(e) => setStudentSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSearchStudent()}
-                    placeholder="Enter Student Name, ID (e.g. BPH23001), or Admission No..."
-                    className="flex-1 bg-slate-50 border-0 rounded-2xl px-4 py-3 text-sm font-bold text-slate-800 outline-none ring-2 ring-transparent focus:ring-amber-200"
+                    placeholder="Type by character: Name, Student ID (e.g. BPH), Admission No, Mobile..."
+                    className="w-full bg-slate-50 border-0 rounded-2xl pl-10 pr-10 py-3 text-sm font-bold text-slate-800 outline-none ring-2 ring-transparent focus:ring-amber-200"
                   />
-                  <button 
-                    type="button"
-                    onClick={handleSearchStudent}
-                    disabled={studentSearchLoading || !studentSearchQuery.trim()}
-                    className="px-5 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-2xl font-black text-xs transition-all disabled:opacity-50 flex items-center gap-1.5"
-                  >
-                    <Search className="w-4 h-4" /> Search
-                  </button>
+                  {studentSearchQuery && (
+                    <button 
+                      type="button"
+                      onClick={() => setStudentSearchQuery("")}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
 
-                {/* Candidate Results */}
-                {studentSearchResults.length > 0 && (
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                    {studentSearchResults.map((st) => (
-                      <div
-                        key={st._id}
-                        onClick={() => setSelectedStudent(st)}
-                        className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-center justify-between text-xs ${
-                          selectedStudent?._id === st._id 
-                            ? 'border-amber-500 bg-amber-50/60 ring-2 ring-amber-300' 
-                            : 'border-slate-100 hover:bg-slate-50'
-                        }`}
-                      >
-                        <div>
-                          <p className="font-bold text-slate-800">{st.firstName} {st.lastName}</p>
-                          <p className="text-slate-500 font-medium">ID: {st.studentId || st.admissionNumber}</p>
-                        </div>
-                        <span className="text-amber-700 font-bold">{st.email}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Selected Student Preview */}
-                {selectedStudent && (
-                  <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex items-center justify-between gap-3 text-xs">
-                    <div>
-                      <p className="font-black text-slate-900 text-sm">{selectedStudent.firstName} {selectedStudent.lastName}</p>
-                      <p className="text-emerald-800 font-bold">Student ID: {selectedStudent.studentId || selectedStudent.admissionNumber}</p>
+                {/* Local Cache Memory Suggestions Dropdown */}
+                <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1 p-1 bg-slate-50/50 rounded-2xl border border-slate-100">
+                  {isPreloadingStudents && cachedStudents.length === 0 ? (
+                    <div className="p-4 space-y-2">
+                      <div className="h-8 bg-slate-200/60 rounded-xl animate-pulse" />
+                      <div className="h-8 bg-slate-200/60 rounded-xl animate-pulse" />
+                      <div className="h-8 bg-slate-200/60 rounded-xl animate-pulse" />
                     </div>
-                    <span className="px-2.5 py-1 bg-emerald-200 text-emerald-800 rounded-lg font-black text-[11px]">
-                      Selected
+                  ) : studentSuggestions.length > 0 ? (
+                    studentSuggestions.map((st) => {
+                      const isSelected = (selectedStudent?._id || selectedStudent?.id) === (st._id || st.id);
+                      return (
+                        <div
+                          key={st._id || st.id}
+                          onClick={() => setSelectedStudent(st)}
+                          className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between text-xs ${
+                            isSelected 
+                              ? 'border-amber-500 bg-amber-50/80 ring-2 ring-amber-300 shadow-sm' 
+                              : 'border-white bg-white hover:border-amber-200 hover:bg-amber-50/40 shadow-xs'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-sm">
+                              {(st.firstName?.[0] || 'S').toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="font-black text-slate-900">{st.firstName} {st.lastName}</p>
+                                <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded-md font-bold text-[10px]">
+                                  {st.studentId || st.admissionNumber}
+                                </span>
+                              </div>
+                              <p className="text-slate-500 font-medium text-[11px]">
+                                {[st.selectedProgram || st.courseName, st.selectedBranch || st.branchName, st.courseYear ? `Yr ${st.courseYear}` : '']
+                                  .filter(Boolean)
+                                  .join(" • ")}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            {st.mobile && (
+                              <span className="text-slate-400 font-semibold text-[11px] hidden sm:inline">
+                                {st.mobile}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              className={`px-3 py-1 rounded-lg font-bold text-[11px] transition-all ${
+                                isSelected 
+                                  ? 'bg-amber-600 text-white' 
+                                  : 'bg-slate-100 text-slate-700 hover:bg-amber-100 hover:text-amber-800'
+                              }`}
+                            >
+                              {isSelected ? "Selected" : "Select"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="p-4 text-center text-slate-400 text-xs font-medium">
+                      No students matching "{studentSearchQuery}" in local cache memory.
+                    </div>
+                  )}
+                </div>
+
+                {/* Selected Student Card */}
+                {selectedStudent && (
+                  <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex items-center justify-between gap-3 text-xs shadow-xs">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white font-black flex items-center justify-center text-sm shadow-sm">
+                        {(selectedStudent.firstName?.[0] || 'S').toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-black text-slate-900 text-sm">{selectedStudent.firstName} {selectedStudent.lastName}</p>
+                        <p className="text-emerald-800 font-bold">
+                          ID: {selectedStudent.studentId || selectedStudent.admissionNumber} • {selectedStudent.selectedProgram || selectedStudent.courseName || 'Maya Student'}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-3 py-1.5 bg-emerald-200 text-emerald-900 rounded-xl font-black text-xs flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                      Ready to Enroll
                     </span>
                   </div>
                 )}

@@ -91,26 +91,58 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
       if (Array.isArray(body.fees.years)) {
         body.fees.years.forEach((yr: any) => {
-          const tTot = Number(yr.tuition?.total) || 0;
-          const tPd = Number(yr.tuition?.paid) || 0;
-          const eTot = Number(yr.exam?.total) || 0;
-          const ePd = Number(yr.exam?.paid) || 0;
-          const trTot = Number(yr.transport?.total) || 0;
-          const trPd = Number(yr.transport?.paid) || 0;
-          const oTot = Number(yr.other?.total) || 0;
-          const oPd = Number(yr.other?.paid) || 0;
+          let yrGross = 0;
+          let yrPaid = 0;
 
-          tuitionFee += tTot;
-          tuitionPaid += tPd;
-          examFee += eTot;
-          examPaid += ePd;
-          transportFee += trTot;
-          transportPaid += trPd;
-          otherFee += oTot;
-          otherPaid += oPd;
+          if (Array.isArray(yr.components) && yr.components.length > 0) {
+            yr.components.forEach((c: any) => {
+              const amt = Number(c.amount) || 0;
+              const pd = Number(c.paid) || 0;
+              const catLower = (c.category || "").toLowerCase();
 
-          totalFee += (tTot + eTot + trTot + oTot);
-          paidFee += (tPd + ePd + trPd + oPd);
+              if (catLower.includes("tuition")) {
+                tuitionFee += amt;
+                tuitionPaid += pd;
+              } else if (catLower.includes("exam")) {
+                examFee += amt;
+                examPaid += pd;
+              } else if (catLower.includes("transport") || catLower.includes("bus")) {
+                transportFee += amt;
+                transportPaid += pd;
+              } else {
+                otherFee += amt;
+                otherPaid += pd;
+              }
+
+              yrGross += amt;
+              yrPaid += pd;
+            });
+          } else {
+            const tTot = Number(yr.tuition?.total) || 0;
+            const tPd = Number(yr.tuition?.paid) || 0;
+            const eTot = Number(yr.exam?.total) || 0;
+            const ePd = Number(yr.exam?.paid) || 0;
+            const trTot = Number(yr.transport?.total) || 0;
+            const trPd = Number(yr.transport?.paid) || 0;
+            const oTot = Number(yr.other?.total) || 0;
+            const oPd = Number(yr.other?.paid) || 0;
+
+            tuitionFee += tTot;
+            tuitionPaid += tPd;
+            examFee += eTot;
+            examPaid += ePd;
+            transportFee += trTot;
+            transportPaid += trPd;
+            otherFee += oTot;
+            otherPaid += oPd;
+
+            yrGross = tTot + eTot + trTot + oTot;
+            yrPaid = tPd + ePd + trPd + oPd;
+          }
+
+          const yrDiscount = Number(yr.discount) || 0;
+          totalFee += Math.max(0, yrGross - yrDiscount);
+          paidFee += yrPaid;
         });
       }
     }
@@ -222,6 +254,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       setCache(cacheKey, updatedStudent, DEFAULT_CACHE_TTL),
       delCachePattern("students:*"),
       delCache(`fee:student-account:${id}`),
+      delCache("finance:all-data"),
       delCachePattern("fee:student-accounts:*"),
       delCachePattern("fee:alerts:*")
     ]);

@@ -1,46 +1,58 @@
 import { NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import { FeeTransaction } from "@/models/FeeTransaction";
-import { Course } from "@/models/Course";
-import { Student } from "@/models/Student";
+import { query as pgQuery } from "@/lib/postgres";
+import { getCache, setCache, DEFAULT_CACHE_TTL } from "@/lib/redis";
 
 export const dynamic = 'force-dynamic';
 
+const CACHE_KEY = "fee:stats";
+
 export async function GET() {
   try {
-    await connectDB();
+    // 1. Try Redis cache (30 min TTL)
+    const cachedStats = await getCache(CACHE_KEY);
+    if (cachedStats) {
+      return NextResponse.json(cachedStats, {
+        headers: { "X-Cache-Source": "Upstash-Redis" }
+      });
+    }
 
-    const [transactions, students, courses] = await Promise.all([
-      FeeTransaction.find({ status: 'Completed' }),
-      Student.find({ studentStatus: 'Active' }),
-      Course.find({})
+    // 2. Query PostgreSQL real financial aggregates
+    const [stuStatsRes, txnSumRes] = await Promise.all([
+      pgQuery(`
+        SELECT 
+          COUNT(*) as active_count,
+          COALESCE(SUM(total_fee), 0) as total_receivable,
+          COALESCE(SUM(paid_fee), 0) as total_collected_stu,
+          COALESCE(SUM(fee_balance), 0) as total_due
+        FROM students 
+        WHERE student_status = 'Active'
+      `),
+      pgQuery("SELECT COALESCE(SUM(amount), 0) as total FROM fee_transactions WHERE status = 'Completed'")
     ]);
 
-    const totalCollected = transactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const activeStudentCount = parseInt(stuStatsRes.rows[0]?.active_count || "0", 10);
+    const totalReceivable = Number(stuStatsRes.rows[0]?.total_receivable) || 0;
+    const txnCollected = Number(txnSumRes.rows[0]?.total) || 0;
+    const stuCollected = Number(stuStatsRes.rows[0]?.total_collected_stu) || 0;
+    const totalCollected = Math.max(txnCollected, stuCollected);
+    const totalDue = Math.max(0, totalReceivable - totalCollected);
 
-    let totalReceivable = 0;
-    const activeStudentCount = students.length;
-
-    const courseMap = new Map();
-    for (const c of courses) {
-      courseMap.set(c._id.toString(), c.tuitionFee || 0);
-    }
-
-    for (const s of students) {
-      if (s.selectedProgram) {
-        const fee = courseMap.get(s.selectedProgram.toString()) || 0;
-        totalReceivable += fee;
-      }
-    }
-
-    return NextResponse.json({
+    const stats = {
       totalCollected,
       totalReceivable,
+      totalDue,
       activeStudentCount
+    };
+
+    // 3. Cache in Redis
+    await setCache(CACHE_KEY, stats, DEFAULT_CACHE_TTL);
+
+    return NextResponse.json(stats, {
+      headers: { "X-Cache-Source": "Neon-PostgreSQL" }
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Finance Stats Error:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }

@@ -1,9 +1,5 @@
 import { NextResponse } from 'next/server';
-import connectDB from '@/lib/mongodb';
-import { Student } from '@/models/Student';
-import { Course } from '@/models/Course';
-import { Branch } from '@/models/Branch';
-import { FeeTransaction } from '@/models/FeeTransaction';
+import { query as pgQuery } from '@/lib/postgres';
 import { getCache, setCache, DEFAULT_CACHE_TTL } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
@@ -17,52 +13,92 @@ export async function GET(request: Request) {
     // 1. Check Redis cache (30 min TTL)
     const cachedData = await getCache(cacheKey);
     if (cachedData) {
-      return NextResponse.json(cachedData);
+      return NextResponse.json(cachedData, {
+        headers: { "X-Cache-Source": "Upstash-Redis" }
+      });
     }
 
-    await connectDB();
     const search = searchParams.get('search') || '';
     const branchId = searchParams.get('branchId') || '';
     const courseId = searchParams.get('courseId') || '';
     const osStatus = searchParams.get('status') || 'all'; // all, os_due, cleared
 
-    const query: any = { studentStatus: 'Active' };
-    if (branchId && branchId !== 'all') query.selectedBranch = branchId;
-    if (courseId && courseId !== 'all') query.selectedProgram = courseId;
+    const conditions: string[] = ["s.student_status = 'Active'"];
+    const params: any[] = [];
+    let pIdx = 1;
 
-    const [students, courses, transactions] = await Promise.all([
-      Student.find(query)
-        .populate('selectedBranch', 'name code')
-        .populate('selectedProgram', 'name code tuitionFee totalSemesters duration semesterFees')
-        .lean(),
-      Course.find({}).lean(),
-      FeeTransaction.find({ status: 'Completed' }).lean()
-    ]);
-
-    // Build lookup for student transactions
-    const txnMap = new Map<string, any[]>();
-    for (const t of transactions) {
-      const sId = t.studentId?.toString();
-      if (!sId) continue;
-      if (!txnMap.has(sId)) txnMap.set(sId, []);
-      txnMap.get(sId)!.push(t);
+    if (branchId && branchId !== 'all') {
+      conditions.push(`s.selected_branch = $${pIdx++}`);
+      params.push(branchId);
+    }
+    if (courseId && courseId !== 'all') {
+      conditions.push(`s.selected_program = $${pIdx++}`);
+      params.push(courseId);
+    }
+    if (search && search.trim() !== '') {
+      conditions.push(`(
+        s.first_name ILIKE $${pIdx} OR 
+        s.last_name ILIKE $${pIdx} OR 
+        s.enrollment_number ILIKE $${pIdx} OR 
+        s.admission_number ILIKE $${pIdx} OR 
+        s.mobile ILIKE $${pIdx}
+      )`);
+      params.push(`%${search.trim()}%`);
+      pIdx++;
     }
 
-    // Process OS (Outstanding) calculations for each student
-    let studentAccounts = students.map((s: any) => {
-      const course = s.selectedProgram;
-      const duration = course?.duration || 4;
-      const courseTuition = course?.tuitionFee || 0;
-      
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const sql = `
+      SELECT 
+        s.id,
+        s.enrollment_number,
+        s.admission_number,
+        s.student_id,
+        s.first_name,
+        s.middle_name,
+        s.last_name,
+        s.mobile,
+        s.email,
+        s.applicant_photo,
+        s.fees,
+        s.total_fee,
+        s.paid_fee,
+        s.fee_balance,
+        s.fee_status,
+        s.selected_branch,
+        s.selected_program,
+        s.course_year,
+        b.name as branch_name,
+        b.code as branch_code,
+        c.name as course_name,
+        c.code as course_code,
+        c.tuition_fee as course_tuition_fee,
+        c.duration as course_duration,
+        COALESCE(SUM(t.amount), 0) as total_txn_paid
+      FROM students s
+      LEFT JOIN branches b ON s.selected_branch = b.id
+      LEFT JOIN courses c ON s.selected_program = c.id
+      LEFT JOIN fee_transactions t ON s.id = t.student_id AND t.status = 'Completed'
+      ${whereClause}
+      GROUP BY s.id, b.name, b.code, c.name, c.code, c.tuition_fee, c.duration
+      ORDER BY s.first_name ASC
+    `;
+
+    const res = await pgQuery(sql, params);
+
+    // Format student accounts
+    let studentAccounts = res.rows.map((row: any) => {
+      const courseTuition = Number(row.course_tuition_fee) || 0;
+      let feesObj: any = typeof row.fees === 'string' ? JSON.parse(row.fees) : (row.fees || {});
+
       let totalAssessed = 0;
-      let totalPaid = 0;
+      let totalPaid = Number(row.total_txn_paid) || 0;
 
-      const studentTxns = txnMap.get(s._id.toString()) || [];
-      const txnPaidSum = studentTxns.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-
-      // Check configured fee structure in student record
-      if (s.fees?.isConfigured && Array.isArray(s.fees.years) && s.fees.years.length > 0) {
-        s.fees.years.forEach((y: any) => {
+      if (feesObj.isConfigured && Array.isArray(feesObj.years) && feesObj.years.length > 0) {
+        let scAssessed = 0;
+        let scPaid = 0;
+        feesObj.years.forEach((y: any) => {
           let yrGross = 0;
           let yrPaid = 0;
           if (y.components && y.components.length > 0) {
@@ -75,18 +111,13 @@ export async function GET(request: Request) {
             yrPaid += (Number(y.tuition?.paid) || 0) + (Number(y.exam?.paid) || 0) + (Number(y.transport?.paid) || 0) + (Number(y.other?.paid) || 0);
           }
           const yrDiscount = Number(y.discount) || 0;
-          const yrNet = Math.max(0, yrGross - yrDiscount);
-          totalAssessed += yrNet;
-          totalPaid += yrPaid;
+          scAssessed += Math.max(0, yrGross - yrDiscount);
+          scPaid += yrPaid;
         });
+        totalAssessed = scAssessed;
+        if (scPaid > totalPaid) totalPaid = scPaid;
       } else {
         totalAssessed = courseTuition;
-        totalPaid = txnPaidSum;
-      }
-
-      // If student has recorded more paid transactions than schema indicates, use max
-      if (txnPaidSum > totalPaid) {
-        totalPaid = txnPaidSum;
       }
 
       const outstandingAmount = Math.max(0, totalAssessed - totalPaid);
@@ -96,75 +127,43 @@ export async function GET(request: Request) {
       else status = 'Paid';
 
       return {
-        _id: s._id,
-        enrollmentNumber: s.enrollmentNumber || 'N/A',
-        admissionNumber: s.admissionNumber || 'N/A',
-        studentId: s.studentId || 'N/A',
-        fullName: `${s.firstName || ''} ${s.middleName || ''} ${s.lastName || ''}`.trim(),
-        mobile: s.mobile,
-        parentMobile: s.parentMobile,
-        email: s.email,
-        branch: s.selectedBranch?.name || 'N/A',
-        branchCode: s.selectedBranch?.code || '',
-        course: course?.name || 'Unassigned',
-        courseCode: course?.code || '',
-        courseDuration: duration,
-        selectedSemester: s.selectedSemester || 1,
-        courseYear: s.courseYear || Math.ceil((s.selectedSemester || 1) / 2),
-        batch: s.batch || s.sessionYear || 'N/A',
+        _id: row.id,
+        id: row.id,
+        enrollmentNumber: row.enrollment_number || 'N/A',
+        admissionNumber: row.admission_number || '',
+        studentId: row.student_id || row.admission_number || '',
+        name: `${row.first_name || ''} ${row.last_name || ''}`.trim(),
+        mobile: row.mobile || '',
+        email: row.email || '',
+        applicantPhoto: row.applicant_photo || '',
+        branchName: row.branch_name || 'N/A',
+        branchCode: row.branch_code || '',
+        courseName: row.course_name || 'N/A',
+        courseCode: row.course_code || '',
+        courseYear: row.course_year || 1,
         totalAssessed,
         totalPaid,
         outstandingAmount,
         status,
-        hasOutstanding: outstandingAmount > 0,
-        transactionCount: studentTxns.length,
-        lastPaymentDate: studentTxns.length > 0 ? studentTxns[0].paymentDate : null,
-        feesConfig: s.fees || null
+        isConfigured: Boolean(feesObj.isConfigured)
       };
     });
 
-    if (search && search.trim() !== '') {
-      const q = search.toLowerCase();
-      studentAccounts = studentAccounts.filter((sa: any) =>
-        sa.fullName.toLowerCase().includes(q) ||
-        sa.enrollmentNumber.toLowerCase().includes(q) ||
-        sa.admissionNumber.toLowerCase().includes(q) ||
-        sa.mobile?.includes(q) ||
-        sa.courseCode.toLowerCase().includes(q)
-      );
-    }
-
     if (osStatus === 'os_due') {
-      studentAccounts = studentAccounts.filter((sa: any) => sa.outstandingAmount > 0);
+      studentAccounts = studentAccounts.filter(s => s.outstandingAmount > 0);
     } else if (osStatus === 'cleared') {
-      studentAccounts = studentAccounts.filter((sa: any) => sa.outstandingAmount === 0);
+      studentAccounts = studentAccounts.filter(s => s.totalPaid > 0);
     }
 
-    // Summary statistics for OS Ledger
-    const totalInstitutionalReceivable = studentAccounts.reduce((acc, curr) => acc + curr.totalAssessed, 0);
-    const totalInstitutionalCollected = studentAccounts.reduce((acc, curr) => acc + curr.totalPaid, 0);
-    const totalInstitutionalOS = studentAccounts.reduce((acc, curr) => acc + curr.outstandingAmount, 0);
-    const totalDefaulters = studentAccounts.filter((s: any) => s.outstandingAmount > 0).length;
+    // 2. Cache in Redis for 30 minutes
+    await setCache(cacheKey, studentAccounts, DEFAULT_CACHE_TTL);
 
-    const responsePayload = {
-      summary: {
-        totalStudents: studentAccounts.length,
-        totalInstitutionalReceivable,
-        totalInstitutionalCollected,
-        totalInstitutionalOS,
-        totalDefaulters,
-        recoveryRate: totalInstitutionalReceivable > 0 ? Math.round((totalInstitutionalCollected / totalInstitutionalReceivable) * 100) : 100
-      },
-      accounts: studentAccounts
-    };
-
-    // 2. Store in Redis cache for 30 minutes
-    await setCache(cacheKey, responsePayload, DEFAULT_CACHE_TTL);
-
-    return NextResponse.json(responsePayload);
+    return NextResponse.json(studentAccounts, {
+      headers: { "X-Cache-Source": "Neon-PostgreSQL" }
+    });
 
   } catch (error: any) {
     console.error('Error in GET /api/finance/student-account:', error);
-    return NextResponse.json({ error: error.message || 'Failed to fetch student fee accounts' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Failed to fetch student accounts' }, { status: 500 });
   }
 }

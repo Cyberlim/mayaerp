@@ -81,5 +81,5 @@ export function mapPgStudent(row: any) {
 
 export function mapPgStudents(rows: any[]) {
   if (!Array.isArray(rows)) return [];
-  return rows.map(mapPgStudent);
+  return rows.map(mapPgStudent).filter((s): s is NonNullable<ReturnType<typeof mapPgStudent>> => s !== null);
 }
