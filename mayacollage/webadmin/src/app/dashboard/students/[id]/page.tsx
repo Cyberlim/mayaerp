@@ -664,7 +664,7 @@ export default function StudentDetailScreen() {
   };
 
   // Helper to extract normalized components from any year object (supports both components array and categories dictionary)
-  const getYearComponents = (fy: any) => {
+  const getYearComponents = (fy: any): any[] => {
     if (!fy) return [];
     if (Array.isArray(fy.components) && fy.components.length > 0) {
       return fy.components.map((c: any) => {
@@ -741,7 +741,7 @@ export default function StudentDetailScreen() {
 
     years.forEach((yr: any) => {
       const comps = getYearComponents(yr);
-      comps.forEach(c => {
+      comps.forEach((c: any) => {
         totalComps++;
         if (c.isPaid) paidComps++;
         else if (c.due > 0) unpaidComps++;
@@ -2690,7 +2690,7 @@ export default function StudentDetailScreen() {
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
                             {(() => {
                               const allComps = getYearComponents(fy);
-                              const visibleComps = allComps.filter(c => {
+                              const visibleComps = allComps.filter((c: any) => {
                                 if (feeStatusFilter === "paid") return c.isPaid;
                                 if (feeStatusFilter === "unpaid") return c.due > 0;
                                 return true;
