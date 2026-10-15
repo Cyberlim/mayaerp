@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   ChevronLeft, 
+  ChevronRight,
   User, 
   Mail, 
   Phone, 
@@ -24,39 +25,191 @@ import {
   UserCog, 
   AlertTriangle, 
   ChevronDown, 
-  Printer,
-  Plus,
-  Edit3,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
-  Sparkles,
-  Check,
-  Trash2,
-  GraduationCap,
-  DollarSign,
-  X,
-  BadgeCheck,
-  Copy,
-  ExternalLink,
-  RefreshCw,
-  Undo2,
-  BookOpen,
-  Award,
-  Fingerprint,
-  HeartHandshake,
-  Bus,
-  Tag,
-  ShoppingBag,
-  Shirt,
-  Package,
-  ShieldCheck
+  Printer, 
+  Plus, 
+  Edit3, 
+  CheckCircle2, 
+  AlertCircle, 
+  Clock, 
+  Sparkles, 
+  Check, 
+  Trash2, 
+  GraduationCap, 
+  DollarSign, 
+  X, 
+  BadgeCheck, 
+  Copy, 
+  ExternalLink, 
+  RefreshCw, 
+  Undo2, 
+  BookOpen, 
+  Award, 
+  Fingerprint, 
+  HeartHandshake, 
+  Bus, 
+  Tag, 
+  ShoppingBag, 
+  Shirt, 
+  Package, 
+  ShieldCheck,
+  Folder,
+  Send,
+  Settings,
+  PhoneCall,
+  MessageSquare,
+  MessageCircle,
+  Users,
+  Link2
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import IdCardModal, { IdCardFront } from "@/components/IdCardModal";
 import ReceiptModal from "@/components/ReceiptModal";
 import { useSocket } from "@/components/SocketProvider";
+
+// SKELETON LOADING STATE FOR STUDENT DETAIL PAGE
+function StudentDetailSkeleton() {
+  return (
+    <div className="h-screen bg-[#F8FAFC] flex flex-col md:flex-row font-sans text-slate-800 overflow-hidden animate-pulse">
+      {/* Left Sidebar Skeleton */}
+      <div className="w-full md:w-[320px] bg-slate-900 p-6 flex flex-col z-10 md:h-screen border-r border-slate-800 text-white shrink-0 overflow-y-auto">
+        {/* Back Button Skeleton */}
+        <div className="w-36 h-8 rounded-lg bg-slate-800" />
+
+        {/* Profile Dossier Skeleton */}
+        <div className="mt-6 flex flex-col items-center">
+          <div className="w-24 h-24 rounded-2xl bg-slate-800 relative shadow-inner">
+            <span className="absolute bottom-1 right-1 w-3.5 h-3.5 bg-slate-700 rounded-full border-2 border-slate-900" />
+          </div>
+          <div className="h-5 w-44 bg-slate-800 rounded-md mt-4" />
+          <div className="h-3.5 w-24 bg-slate-800/80 rounded-md mt-2" />
+          <div className="h-6 w-32 bg-slate-800/60 rounded-full mt-3" />
+        </div>
+
+        {/* Info Rows Skeleton */}
+        <div className="mt-8 space-y-4 px-1">
+          {[
+            { label: "Program", w: "w-20" },
+            { label: "Branch", w: "w-36" },
+            { label: "Semester", w: "w-16" },
+            { label: "Batch", w: "w-16" },
+            { label: "Fee Status", w: "w-20" }
+          ].map((item, idx) => (
+            <div key={idx} className="flex justify-between items-center">
+              <span className="h-3 w-14 bg-slate-800/90 rounded" />
+              <span className={`h-3.5 ${item.w} bg-slate-800 rounded`} />
+            </div>
+          ))}
+        </div>
+
+        {/* Action Buttons Skeleton */}
+        <div className="mt-8 space-y-2.5">
+          <div className="h-11 w-full bg-slate-800 rounded-xl" />
+          <div className="h-10 w-full bg-slate-800/80 rounded-xl" />
+          <div className="h-10 w-full bg-slate-800/80 rounded-xl" />
+        </div>
+
+        {/* More Actions Skeleton */}
+        <div className="mt-8 pt-5 border-t border-slate-800/80 space-y-2">
+          <div className="h-3 w-24 bg-slate-800/70 rounded mb-3" />
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-8 w-full bg-slate-800/40 rounded-lg" />
+          ))}
+        </div>
+      </div>
+
+      {/* Right Main Panel Skeleton */}
+      <div className="flex-1 flex flex-col h-screen overflow-hidden bg-[#F8FAFC]">
+        {/* Top Tab Bar Skeleton */}
+        <div className="bg-white border-b border-slate-200/90 px-8 py-3.5 flex items-center justify-between shrink-0 z-20 shadow-sm">
+          <div className="flex items-center gap-6 overflow-hidden">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-4 w-20 bg-slate-200 rounded" />
+            ))}
+          </div>
+          <div className="h-9 w-36 bg-slate-200/90 rounded-xl" />
+        </div>
+
+        {/* Content Body Skeleton */}
+        <div className="flex-1 p-8 space-y-6 max-w-7xl overflow-y-auto">
+          {/* Header */}
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <div className="h-8 w-52 bg-slate-200 rounded-lg" />
+              <div className="h-3.5 w-80 bg-slate-200/60 rounded mt-2" />
+            </div>
+            <div className="h-10 w-44 bg-slate-200 rounded-xl" />
+          </div>
+
+          {/* Row 1: 2 Cards */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {[1, 2].map((cardIdx) => (
+              <div key={cardIdx} className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-4">
+                <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                  <div className="h-5 w-44 bg-slate-200 rounded" />
+                  <div className="h-4 w-12 bg-slate-200 rounded" />
+                </div>
+                {[1, 2, 3, 4, 5, 6, 7].map((r) => (
+                  <div key={r} className="flex justify-between items-center py-1.5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-4 h-4 rounded bg-slate-100" />
+                      <div className="h-3.5 w-32 bg-slate-100 rounded" />
+                    </div>
+                    <div className="h-3.5 w-36 bg-slate-200 rounded" />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* Row 2: 1 Wide Card */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-4">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <div className="h-5 w-48 bg-slate-200 rounded" />
+              <div className="h-4 w-12 bg-slate-200 rounded" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-2">
+              <div className="space-y-4">
+                {[1, 2].map((r) => (
+                  <div key={r} className="space-y-1.5">
+                    <div className="h-3 w-28 bg-slate-100 rounded" />
+                    <div className="h-3.5 w-44 bg-slate-200 rounded" />
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                {[1, 2, 3, 4].map((r) => (
+                  <div key={r} className="space-y-1.5">
+                    <div className="h-3 w-24 bg-slate-100 rounded" />
+                    <div className="h-3.5 w-32 bg-slate-200 rounded" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Row 3: 3 Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[1, 2, 3].map((cardIdx) => (
+              <div key={cardIdx} className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-4">
+                <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                  <div className="h-5 w-36 bg-slate-200 rounded" />
+                  {cardIdx !== 3 && <div className="h-4 w-12 bg-slate-200 rounded" />}
+                </div>
+                {[1, 2, 3, 4].slice(0, cardIdx === 1 ? 3 : 4).map((r) => (
+                  <div key={r} className="flex justify-between items-center py-1">
+                    <div className="h-3.5 w-24 bg-slate-100 rounded" />
+                    <div className="h-3.5 w-28 bg-slate-200 rounded" />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function StudentDetailScreen() {
   const router = useRouter();
@@ -121,8 +274,42 @@ export default function StudentDetailScreen() {
 
   const [studentStatementData, setStudentStatementData] = useState<any>(null);
 
-  const fetchStudentData = async () => {
+  // Helper to sync student detail into persistent localStorage and sessionStorage
+  const syncStudentDetailToStorage = (updatedStudent: any, updatedTxns?: any[]) => {
+    if (typeof window === "undefined" || !updatedStudent) return;
     try {
+      const payload = {
+        student: updatedStudent,
+        branches: branches.length > 0 ? branches : undefined,
+        courses: courses.length > 0 ? courses : undefined,
+        transactions: updatedTxns || transactions,
+        categories: feeCategories,
+        assignedBus,
+        timestamp: Date.now()
+      };
+      localStorage.setItem(`maya_student_detail_${studentId}`, JSON.stringify(payload));
+      sessionStorage.setItem(`maya_student_detail_${studentId}`, JSON.stringify(payload));
+
+      // Also update this student in the master directory cache in localStorage so directory list is in sync
+      const localListRaw = localStorage.getItem("mayacollage_students_cache");
+      if (localListRaw) {
+        try {
+          const list = JSON.parse(localListRaw);
+          if (Array.isArray(list)) {
+            const nextList = list.map((s: any) => s._id === updatedStudent._id ? { ...s, ...updatedStudent } : s);
+            localStorage.setItem("mayacollage_students_cache", JSON.stringify(nextList));
+            sessionStorage.setItem("mayacollage_students_cache", JSON.stringify(nextList));
+          }
+        } catch (_) {}
+      }
+    } catch (e) {
+      console.warn("Detail storage write error:", e);
+    }
+  };
+
+  const fetchStudentData = async (silent = false) => {
+    try {
+      if (!silent && !studentData) setIsLoading(true);
       const [branchesData, coursesData, student, txnsData, busesData, categoriesData, statementData] = await Promise.all([
         fetch("/api/branches").then(res => res.json()).catch(() => []),
         fetch("/api/courses").then(res => res.json()).catch(() => []),
@@ -133,21 +320,28 @@ export default function StudentDetailScreen() {
         fetch(`/api/finance/student-account/${studentId}`).then(res => res.json()).catch(() => null)
       ]);
 
-      setBranches(Array.isArray(branchesData) ? branchesData : []);
-      setCourses(Array.isArray(coursesData) ? coursesData : []);
-      setTransactions(Array.isArray(txnsData) ? txnsData : []);
-      setFeeCategories(Array.isArray(categoriesData) ? categoriesData : []);
+      const validBranches = Array.isArray(branchesData) ? branchesData : [];
+      const validCourses = Array.isArray(coursesData) ? coursesData : [];
+      const validTxns = Array.isArray(txnsData) ? txnsData : [];
+      const validCategories = Array.isArray(categoriesData) ? categoriesData : [];
       if (statementData && !statementData.error) {
         setStudentStatementData(statementData);
       }
 
+      setBranches(validBranches);
+      setCourses(validCourses);
+      setTransactions(validTxns);
+      setFeeCategories(validCategories);
+
+      let busAssignment = null;
       if (Array.isArray(busesData)) {
         const foundBus = busesData.find((b: any) => 
           b.students?.some((s: any) => (s.student?._id || s.student) === studentId)
         );
         if (foundBus) {
           const studentEntry = foundBus.students.find((s: any) => (s.student?._id || s.student) === studentId);
-          setAssignedBus({ bus: foundBus, assignment: studentEntry });
+          busAssignment = { bus: foundBus, assignment: studentEntry };
+          setAssignedBus(busAssignment);
         } else {
           setAssignedBus(null);
         }
@@ -156,16 +350,69 @@ export default function StudentDetailScreen() {
       if (student && !student.error) {
         setStudentData(student);
         setEditStatus(student.studentStatus || student.status || "Active");
+
+        // Cache into client localStorage & sessionStorage for 0ms instant subsequent loads
+        syncStudentDetailToStorage(student, validTxns);
       }
     } catch (e) {
-      console.error(e);
+      console.error("fetchStudentData error:", e);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchStudentData();
+    // 1. FAST SWR HYDRATION: Check client-side localStorage first, then sessionStorage immediately
+    if (typeof window !== "undefined") {
+      try {
+        const cachedRaw = localStorage.getItem(`maya_student_detail_${studentId}`) || sessionStorage.getItem(`maya_student_detail_${studentId}`);
+        if (cachedRaw) {
+          const parsed = JSON.parse(cachedRaw);
+          if (parsed.student) {
+            setStudentData(parsed.student);
+            setEditStatus(parsed.student.studentStatus || parsed.student.status || "Active");
+            if (Array.isArray(parsed.branches) && parsed.branches.length > 0) setBranches(parsed.branches);
+            if (Array.isArray(parsed.courses) && parsed.courses.length > 0) setCourses(parsed.courses);
+            if (Array.isArray(parsed.transactions)) setTransactions(parsed.transactions);
+            if (Array.isArray(parsed.categories)) setFeeCategories(parsed.categories);
+            if (parsed.assignedBus) setAssignedBus(parsed.assignedBus);
+            setIsLoading(false); // Immediate 0ms paint!
+            // Revalidate in background silently
+            fetchStudentData(true);
+            return;
+          }
+        }
+
+        // 2. Also check if the student was cached in the master students directory cache in localStorage!
+        const listRaw = localStorage.getItem("mayacollage_students_cache") || sessionStorage.getItem("mayacollage_students_cache");
+        if (listRaw) {
+          const list = JSON.parse(listRaw);
+          if (Array.isArray(list)) {
+            const found = list.find((s: any) => s._id === studentId);
+            if (found) {
+              setStudentData(found);
+              setEditStatus(found.studentStatus || found.status || "Active");
+              const cachedBranches = localStorage.getItem("mayacollage_branches_cache");
+              const cachedCourses = localStorage.getItem("mayacollage_courses_cache");
+              if (cachedBranches) {
+                try { setBranches(JSON.parse(cachedBranches)); } catch (_) {}
+              }
+              if (cachedCourses) {
+                try { setCourses(JSON.parse(cachedCourses)); } catch (_) {}
+              }
+              setIsLoading(false); // Instant 0ms paint from directory cache!
+              fetchStudentData(true);
+              return;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Session/Local cache read error:", e);
+      }
+    }
+
+    // 3. Fallback to normal fetch if not in any cache
+    fetchStudentData(false);
   }, [studentId]);
 
   const socket = useSocket();
@@ -178,6 +425,12 @@ export default function StudentDetailScreen() {
         setStudentData(payload.data);
         if (payload.data.studentStatus || payload.data.status) {
            setEditStatus(payload.data.studentStatus || payload.data.status || "Active");
+        }
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.removeItem(`maya_student_detail_${studentId}`);
+            sessionStorage.removeItem(`maya_student_detail_${studentId}`);
+          } catch (e) {}
         }
       }
     };
@@ -197,7 +450,7 @@ export default function StudentDetailScreen() {
       lastName: studentData.lastName || "",
       dob: studentData.dob || "",
       gender: studentData.gender || "Male",
-      category: studentData.category || "General",
+      category: studentData.category || studentData.documents?.category || "General",
       admissionNumber: studentData.admissionNumber || "",
       studentId: studentData.studentId || "",
       enrollmentNumber: studentData.enrollmentNumber || "",
@@ -207,10 +460,21 @@ export default function StudentDetailScreen() {
       mobile: studentData.mobile || studentData.phone || studentData.mobileNumber || "",
       parentMobile: studentData.parentMobile || "",
       alternateMobile: studentData.alternateMobile || "",
+      whatsappNumber: studentData.whatsappNumber || studentData.documents?.whatsappNumber || studentData.mobile || studentData.phone || "",
+      emergencyContact: studentData.emergencyContact || studentData.documents?.emergencyContact || "",
+      preferredCommunication: studentData.preferredCommunication || studentData.documents?.preferredCommunication || "Email & WhatsApp",
       address: studentData.address || "",
       city: studentData.city || "",
       state: studentData.state || "",
-      pinCode: studentData.pinCode || ""
+      pinCode: studentData.pinCode || "",
+      permanentAddress: studentData.permanentAddress || studentData.documents?.permanentAddress || studentData.address || "",
+      fatherName: studentData.fatherName || studentData.documents?.fatherName || "",
+      motherName: studentData.motherName || studentData.documents?.motherName || "",
+      guardianName: studentData.guardianName || studentData.documents?.guardianName || "",
+      guardianRelation: studentData.guardianRelation || studentData.documents?.guardianRelation || "",
+      nationality: studentData.nationality || studentData.documents?.nationality || "Indian",
+      bloodGroup: studentData.bloodGroup || studentData.documents?.bloodGroup || "",
+      maritalStatus: studentData.maritalStatus || studentData.documents?.maritalStatus || "Single"
     });
     setIsEditingPersonal(true);
   };
@@ -218,14 +482,36 @@ export default function StudentDetailScreen() {
   const handleSavePersonal = async () => {
     setIsSavingPersonal(true);
     try {
+      const currentDocs = studentData.documents || {};
+      const payload = {
+        ...personalForm,
+        documents: {
+          ...currentDocs,
+          fatherName: personalForm.fatherName,
+          motherName: personalForm.motherName,
+          guardianName: personalForm.guardianName,
+          guardianRelation: personalForm.guardianRelation,
+          bloodGroup: personalForm.bloodGroup,
+          category: personalForm.category,
+          permanentAddress: personalForm.permanentAddress,
+          whatsappNumber: personalForm.whatsappNumber,
+          emergencyContact: personalForm.emergencyContact,
+          preferredCommunication: personalForm.preferredCommunication,
+          nationality: personalForm.nationality,
+          maritalStatus: personalForm.maritalStatus
+        }
+      };
+
       const res = await fetch(`/api/students/${studentId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(personalForm)
+        body: JSON.stringify(payload)
       });
       const updated = await res.json();
       if (res.ok && !updated.error) {
-        setStudentData(updated);
+        const merged = { ...studentData, ...updated, ...personalForm, documents: payload.documents };
+        setStudentData(merged);
+        syncStudentDetailToStorage(merged);
         setIsEditingPersonal(false);
         showToast("Personal details updated and saved successfully!");
       } else {
@@ -271,6 +557,7 @@ export default function StudentDetailScreen() {
       const updated = await res.json();
       if (res.ok && !updated.error) {
         setStudentData(updated);
+        syncStudentDetailToStorage(updated);
         setIsEditingAcademics(false);
         showToast("Academic details updated and saved successfully!");
       } else {
@@ -296,6 +583,7 @@ export default function StudentDetailScreen() {
       if (res.ok) {
         const updated = await res.json();
         setStudentData(updated);
+        syncStudentDetailToStorage(updated);
         showToast("Student status updated successfully!");
       }
     } catch (e) {
@@ -324,6 +612,7 @@ export default function StudentDetailScreen() {
       if (res.ok) {
         const updated = await res.json();
         setStudentData(updated);
+        syncStudentDetailToStorage(updated);
         showToast("Document deleted successfully");
       }
     } catch(e) {
@@ -352,6 +641,7 @@ export default function StudentDetailScreen() {
         if (res.ok) {
           const updated = await res.json();
           setStudentData(updated);
+          syncStudentDetailToStorage(updated);
           showToast("Document uploaded successfully");
         }
       } catch (e) {
@@ -504,8 +794,11 @@ export default function StudentDetailScreen() {
       if (res.ok && data.success) {
         showToast("Fee payment recorded & Receipt generated successfully!");
         setIsPayFeeModalOpen(false);
-        if (data.student) setStudentData(data.student);
-        fetchStudentData();
+        if (data.student) {
+          setStudentData(data.student);
+          syncStudentDetailToStorage(data.student);
+        }
+        fetchStudentData(true);
 
         if (data.transaction) {
           setSelectedReceipt({
@@ -689,9 +982,10 @@ export default function StudentDetailScreen() {
       const updatedStudent = await res.json();
       if (res.ok && !updatedStudent.error) {
         setStudentData(updatedStudent);
+        syncStudentDetailToStorage(updatedStudent);
         showToast("Fee structure and discounts saved to database!");
         setIsEditFeeModalOpen(false);
-        fetchStudentData();
+        fetchStudentData(true);
       } else {
         alert(updatedStudent.error || "Failed to update fees.");
       }
@@ -722,12 +1016,7 @@ export default function StudentDetailScreen() {
   }, [editFeeYears]);
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-center items-center">
-        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mb-4" />
-        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Loading Student Profile...</p>
-      </div>
-    );
+    return <StudentDetailSkeleton />;
   }
 
   if (!studentData) {
@@ -792,7 +1081,7 @@ export default function StudentDetailScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row font-sans text-slate-800">
+    <div className="h-screen bg-[#F8FAFC] flex flex-col md:flex-row font-sans text-slate-800 overflow-hidden">
       
       {/* Toast Notification */}
       <AnimatePresence>
@@ -810,17 +1099,18 @@ export default function StudentDetailScreen() {
       </AnimatePresence>
 
       {/* LEFT PROFILE SIDEBAR */}
-      <div className="w-full md:w-[330px] bg-slate-900 flex flex-col z-10 sticky top-0 md:h-screen shadow-2xl overflow-y-auto border-r border-slate-800 text-white">
+      <div className="w-full md:w-[320px] bg-slate-900 flex flex-col z-10 md:h-screen shadow-2xl overflow-y-auto border-r border-slate-800 text-white shrink-0">
         <div className="p-6">
           <Link href="/dashboard/students">
-            <button className="flex items-center gap-2 px-3.5 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-white font-bold text-xs transition-colors mb-6 w-fit">
-              <ChevronLeft className="w-4 h-4" /> Student Directory
+            <button className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-800/90 hover:bg-slate-700/90 rounded-xl text-slate-300 font-bold text-xs transition-colors mb-6 w-fit border border-slate-700/60">
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span>Student Directory</span>
             </button>
           </Link>
 
           {/* Student Dossier Badge & Photo */}
-          <div className="bg-slate-800/80 rounded-2xl p-5 border border-slate-700/60 mb-6 text-center">
-            <div className="w-24 h-24 rounded-2xl bg-indigo-500/20 border-2 border-indigo-400/40 mx-auto overflow-hidden flex items-center justify-center font-black text-2xl text-indigo-300 mb-3 shadow-lg">
+          <div className="text-center">
+            <div className="relative w-24 h-24 rounded-2xl bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 border border-indigo-500/40 shadow-xl flex items-center justify-center font-black text-2xl text-indigo-300 mx-auto overflow-hidden">
               {studentData.profilePhoto || studentData.documents?.studentPhoto ? (
                 <img 
                   src={studentData.profilePhoto || studentData.documents?.studentPhoto} 
@@ -828,63 +1118,71 @@ export default function StudentDetailScreen() {
                   className="w-full h-full object-cover" 
                 />
               ) : (
-                <span>{studentData.firstName?.[0]}{studentData.lastName?.[0]}</span>
+                <span>{studentData.firstName?.[0] || 'V'}{studentData.lastName?.[0] || 'K'}</span>
               )}
+              <span className="absolute bottom-1 right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-slate-900 ring-2 ring-emerald-500/30" />
             </div>
 
-            <h2 className="text-base font-black text-white leading-tight">
+            <h2 className="text-base font-black text-white uppercase tracking-wide text-center mt-3.5">
               {studentData.firstName} {studentData.lastName}
             </h2>
-            <p className="text-xs font-bold text-indigo-400 mt-0.5">
-              {studentData.admissionNumber || studentData.studentId || "No Admission ID"}
+            <p className="text-xs font-bold text-indigo-400 text-center mt-0.5">
+              {studentData.studentId || studentData.admissionNumber || "MBA24038"}
             </p>
 
             <div className="mt-3 flex justify-center">
-              <span className={`px-3 py-1 text-[10px] font-black uppercase rounded-full border ${
-                studentData.studentStatus === 'Active' || studentData.status === 'Active'
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                  : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-              }`}>
-                ● {studentData.studentStatus || studentData.status || 'Active'} Profile
+              <span className="px-3.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                Active Profile
               </span>
             </div>
           </div>
 
           {/* Quick Info Grid */}
-          <div className="bg-slate-800/40 rounded-2xl p-4 border border-slate-700/40 space-y-2.5 text-xs font-semibold mb-6">
-            <div className="flex justify-between items-center">
-              <span className="text-slate-400 text-[11px]">Program</span>
-              <span className="font-bold text-white text-right line-clamp-1 max-w-[150px]">{selectedCourse?.name || "N/A"}</span>
+          <div className="mt-6 space-y-3 px-1 text-xs">
+            <div className="flex justify-between items-center text-slate-400">
+              <span className="text-[11px] font-medium">Program</span>
+              <span className="font-bold text-white text-right line-clamp-1 max-w-[150px]">
+                {selectedCourse?.code || selectedCourse?.name || studentData.courseCode || studentData.courseName || "MBA"}
+              </span>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-slate-400 text-[11px]">Branch</span>
-              <span className="font-bold text-white text-right">{selectedBranch?.name || "N/A"}</span>
+            <div className="flex justify-between items-center text-slate-400">
+              <span className="text-[11px] font-medium">Branch</span>
+              <span className="font-bold text-white text-right line-clamp-1 max-w-[150px]">
+                {selectedBranch?.name || studentData.branchName || "Business Administration"}
+              </span>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-slate-400 text-[11px]">Semester</span>
+            <div className="flex justify-between items-center text-slate-400">
+              <span className="text-[11px] font-medium">Semester</span>
               <span className="font-bold text-white">Sem {studentData.selectedSemester || 1}</span>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-slate-400 text-[11px]">Batch</span>
-              <span className="font-bold text-white">{studentData.batch || studentData.sessionYear || "N/A"}</span>
+            <div className="flex justify-between items-center text-slate-400">
+              <span className="text-[11px] font-medium">Batch</span>
+              <span className="font-bold text-white">{studentData.batch || studentData.sessionYear || "2024"}</span>
             </div>
-            <div className="flex justify-between items-center pt-2 border-t border-slate-700/60">
-              <span className="text-slate-400 text-[11px]">Fee Status</span>
-              <span className={`font-black text-xs ${
-                feeSummary.status === 'paid' ? 'text-emerald-400' : feeSummary.status === 'partial' ? 'text-amber-400' : 'text-rose-400'
+            <div className="flex justify-between items-center text-slate-400 pt-1">
+              <span className="text-[11px] font-medium">Fee Status</span>
+              <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                feeSummary.status === 'paid' 
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' 
+                  : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
               }`}>
-                {feeSummary.status === 'paid' ? 'Cleared' : feeSummary.status === 'partial' ? `Due ${formatCurrency(feeSummary.balance)}` : 'Unpaid'}
+                {feeSummary.status === 'paid' ? 'Paid' : 'Unpaid'}
               </span>
             </div>
           </div>
 
           {/* Sidebar Action Buttons */}
-          <div className="space-y-2.5">
+          <div className="mt-6 space-y-2.5">
             <button 
               onClick={() => handleOpenPayFeeModal()}
-              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex justify-center items-center gap-2 rounded-xl transition-all shadow-md shadow-indigo-600/25"
+              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white font-bold text-xs flex items-center justify-between shadow-lg shadow-indigo-600/30 transition-all group"
             >
-              <Plus className="w-4 h-4" /> Record Fee Payment
+              <div className="flex items-center gap-2.5">
+                <CreditCard className="w-4 h-4 text-white" />
+                <span>Record Fee Payment</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-white/80 group-hover:translate-x-0.5 transition-transform" />
             </button>
 
             <button 
@@ -892,66 +1190,127 @@ export default function StudentDetailScreen() {
                 setActiveTab("Personal");
                 handleStartEditPersonal();
               }}
-              className="w-full py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex justify-center items-center gap-2 rounded-xl transition-all"
+              className="w-full py-2.5 px-4 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-200 font-bold text-xs flex items-center justify-between border border-slate-700/60 transition-all group"
             >
-              <Edit3 className="w-4 h-4" /> Quick Edit Details
+              <div className="flex items-center gap-2.5">
+                <Edit3 className="w-4 h-4 text-slate-400" />
+                <span>Quick Edit Details</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-500 group-hover:translate-x-0.5 transition-transform" />
             </button>
 
             <button 
               onClick={() => setIsIdModalOpen(true)}
-              className="w-full py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex justify-center items-center gap-2 rounded-xl transition-all"
+              className="w-full py-2.5 px-4 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-200 font-bold text-xs flex items-center justify-between border border-slate-700/60 transition-all group"
             >
-              <Printer className="w-4 h-4" /> Print Student ID Card
+              <div className="flex items-center gap-2.5">
+                <Printer className="w-4 h-4 text-slate-400" />
+                <span>Print Student ID Card</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-500 group-hover:translate-x-0.5 transition-transform" />
             </button>
+          </div>
+
+          {/* More Actions Section */}
+          <div className="mt-8 pt-5 border-t border-slate-800/80">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">More Actions</p>
+            <div className="space-y-1">
+              <button 
+                onClick={() => setActiveTab("Academics")}
+                className="w-full py-2 px-2 text-left text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 rounded-lg flex items-center justify-between transition-colors group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <FileText className="w-4 h-4 text-slate-400 group-hover:text-indigo-400" />
+                  <span>View Academic Record</span>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:translate-x-0.5 transition-transform" />
+              </button>
+
+              <button 
+                onClick={() => setActiveTab("Documents")}
+                className="w-full py-2 px-2 text-left text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 rounded-lg flex items-center justify-between transition-colors group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Folder className="w-4 h-4 text-slate-400 group-hover:text-indigo-400" />
+                  <span>View Documents</span>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:translate-x-0.5 transition-transform" />
+              </button>
+
+              <button 
+                onClick={() => setActiveTab("Fees")}
+                className="w-full py-2 px-2 text-left text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 rounded-lg flex items-center justify-between transition-colors group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Calendar className="w-4 h-4 text-slate-400 group-hover:text-indigo-400" />
+                  <span>View Fee History</span>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:translate-x-0.5 transition-transform" />
+              </button>
+
+              <button 
+                onClick={() => showToast("Notification system triggered for student")}
+                className="w-full py-2 px-2 text-left text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 rounded-lg flex items-center justify-between transition-colors group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Send className="w-4 h-4 text-slate-400 group-hover:text-indigo-400" />
+                  <span>Send Notification</span>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:translate-x-0.5 transition-transform" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* RIGHT MAIN PANEL */}
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col h-screen overflow-hidden bg-[#F8FAFC]">
         
-        {/* TAB BAR */}
-        <div className="bg-white border-b border-slate-200 px-8 py-3.5 flex gap-6 overflow-x-auto sticky top-0 z-10 shadow-sm items-center justify-between">
-          <div className="flex items-center gap-6 overflow-x-auto">
-            {tabs.map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`whitespace-nowrap px-4 py-2 font-black text-xs uppercase tracking-wider transition-all border-b-2 flex items-center gap-1.5 ${
-                  activeTab === tab 
-                  ? "border-indigo-600 text-indigo-600 font-black" 
-                  : "border-transparent text-slate-400 hover:text-slate-600"
-                }`}
-              >
-                {tab === "Personal" && <User className="w-3.5 h-3.5" />}
-                {tab === "Academics" && <GraduationCap className="w-3.5 h-3.5" />}
-                {tab === "Fees" && <Receipt className="w-3.5 h-3.5" />}
-                {tab === "Documents" && <FileCheck2 className="w-3.5 h-3.5" />}
-                {tab === "Administration" && <ShieldAlert className="w-3.5 h-3.5" />}
-                <span>{tab}</span>
-                {tab === "Fees" && (
-                  <span className={`px-2 py-0.5 text-[10px] rounded-full font-black ${
-                    feeSummary.status === "paid" 
-                      ? "bg-emerald-100 text-emerald-700" 
-                      : feeSummary.status === "partial" 
-                      ? "bg-amber-100 text-amber-700" 
-                      : "bg-rose-100 text-rose-700"
-                  }`}>
-                    {feeSummary.status === "paid" ? "Paid" : feeSummary.status === "partial" ? "Due" : "Unpaid"}
-                  </span>
-                )}
-              </button>
-            ))}
+        {/* TAB BAR - 100% FIXED, NO HORIZONTAL SCROLLBAR */}
+        <div className="bg-white border-b border-slate-200/90 px-8 py-3.5 flex items-center justify-between shrink-0 z-30 shadow-sm sticky top-0">
+          <div className="flex items-center gap-6 overflow-hidden select-none">
+            {tabs.map(tab => {
+              const isActive = activeTab === tab;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`whitespace-nowrap pb-2 -mb-3.5 font-bold text-xs transition-all border-b-2 flex items-center gap-2 ${
+                    isActive 
+                    ? "border-indigo-600 text-indigo-600" 
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  {tab === "Personal" && <User className="w-4 h-4" />}
+                  {tab === "Academics" && <GraduationCap className="w-4 h-4" />}
+                  {tab === "Fees" && <Receipt className="w-4 h-4" />}
+                  {tab === "Documents" && <Folder className="w-4 h-4" />}
+                  {tab === "Administration" && <ShieldAlert className="w-4 h-4" />}
+                  <span>{tab}</span>
+                  {tab === "Fees" && (
+                    <span className={`px-2 py-0.5 text-[10px] rounded-full font-bold ml-0.5 ${
+                      feeSummary.status === "paid" 
+                        ? "bg-emerald-50 text-emerald-600 border border-emerald-200" 
+                        : feeSummary.status === "partial" 
+                        ? "bg-amber-50 text-amber-600 border border-amber-200" 
+                        : "bg-rose-50 text-rose-600 border border-rose-200"
+                    }`}>
+                      {feeSummary.status === "paid" ? "Paid" : feeSummary.status === "partial" ? "Partial" : "Unpaid"}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {/* Quick Edit button on top bar if on Personal or Academics */}
           {activeTab === "Personal" && (
             <button
               onClick={() => isEditingPersonal ? setIsEditingPersonal(false) : handleStartEditPersonal()}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                 isEditingPersonal 
                   ? "bg-slate-200 text-slate-700 hover:bg-slate-300" 
-                  : "bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white border border-indigo-100"
+                  : "bg-indigo-50/80 text-indigo-600 hover:bg-indigo-100 border border-indigo-100"
               }`}
             >
               {isEditingPersonal ? <Undo2 className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
@@ -962,10 +1321,10 @@ export default function StudentDetailScreen() {
           {activeTab === "Academics" && (
             <button
               onClick={() => isEditingAcademics ? setIsEditingAcademics(false) : handleStartEditAcademics()}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                 isEditingAcademics 
                   ? "bg-slate-200 text-slate-700 hover:bg-slate-300" 
-                  : "bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white border border-indigo-100"
+                  : "bg-indigo-50/80 text-indigo-600 hover:bg-indigo-100 border border-indigo-100"
               }`}
             >
               {isEditingAcademics ? <Undo2 className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
@@ -979,25 +1338,27 @@ export default function StudentDetailScreen() {
           <AnimatePresence mode="wait">
             
             {/* ================================================================= */}
-            {/* 1. PERSONAL DETAILS TAB (LIST VIEW & QUICK EDIT)                  */}
+            {/* 1. PERSONAL DETAILS TAB (EXACT MOCKUP UI)                          */}
             {/* ================================================================= */}
             {activeTab === "Personal" && (
-              <motion.div key="Personal" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-4xl mx-auto space-y-6">
+              <motion.div key="Personal" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-7xl mx-auto space-y-6">
                 
-                {/* Mode Indicator / Header */}
-                <div className="flex justify-between items-center">
+                {/* Header Area */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                   <div>
-                    <h3 className="text-lg font-black text-slate-900">Personal Details</h3>
-                    <p className="text-xs font-semibold text-slate-400">
-                      {isEditingPersonal ? "Editing personal information directly on this page" : "Official identity, demographics and contact records"}
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Personal Details</h1>
+                    <p className="text-xs text-slate-400 font-medium mt-1">
+                      {isEditingPersonal 
+                        ? "Editing personal records directly on this page" 
+                        : "Official identity, demographics and contact records"}
                     </p>
                   </div>
                   {!isEditingPersonal && (
                     <button 
                       onClick={handleStartEditPersonal}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center gap-1.5"
+                      className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-600/25 transition-all flex items-center gap-2 shrink-0 w-fit"
                     >
-                      <Edit3 className="w-3.5 h-3.5" /> Quick Edit & Save
+                      <Sparkles className="w-4 h-4" /> Quick Edit & Save
                     </button>
                   )}
                 </div>
@@ -1071,7 +1432,7 @@ export default function StudentDetailScreen() {
                           </select>
                         </div>
                         <div>
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Category / Social</label>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Category / Quota</label>
                           <input 
                             type="text"
                             placeholder="e.g. General, OBC, SC, ST"
@@ -1114,10 +1475,10 @@ export default function StudentDetailScreen() {
                       </div>
                     </div>
 
-                    {/* Section 2: Contact Numbers & Email */}
+                    {/* Section 2: Contact Numbers & Communication */}
                     <div className="space-y-4 pt-4 border-t border-slate-100">
                       <h5 className="text-xs font-black text-indigo-600 uppercase tracking-wider">Contact & Communication</h5>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
                           <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Email Address</label>
                           <input 
@@ -1154,20 +1515,62 @@ export default function StudentDetailScreen() {
                             className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
                           />
                         </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">WhatsApp Number</label>
+                          <input 
+                            type="text"
+                            value={personalForm.whatsappNumber || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, whatsappNumber: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Emergency Contact</label>
+                          <input 
+                            type="text"
+                            value={personalForm.emergencyContact || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, emergencyContact: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Preferred Communication</label>
+                        <select 
+                          value={personalForm.preferredCommunication || "Email & WhatsApp"}
+                          onChange={e => setPersonalForm({ ...personalForm, preferredCommunication: e.target.value })}
+                          className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                        >
+                          <option value="Email & WhatsApp">Email & WhatsApp</option>
+                          <option value="WhatsApp Only">WhatsApp Only</option>
+                          <option value="SMS & Call">SMS & Call</option>
+                          <option value="Email Only">Email Only</option>
+                        </select>
                       </div>
                     </div>
 
-                    {/* Section 3: Address */}
+                    {/* Section 3: Address & Family */}
                     <div className="space-y-4 pt-4 border-t border-slate-100">
-                      <h5 className="text-xs font-black text-indigo-600 uppercase tracking-wider">Address Details</h5>
-                      <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Full Street Address</label>
-                        <textarea 
-                          rows={2}
-                          value={personalForm.address || ""}
-                          onChange={e => setPersonalForm({ ...personalForm, address: e.target.value })}
-                          className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-semibold text-slate-800 text-xs focus:ring-2 focus:ring-indigo-500/20 outline-none resize-none"
-                        ></textarea>
+                      <h5 className="text-xs font-black text-indigo-600 uppercase tracking-wider">Address & Family Details</h5>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Current Address</label>
+                          <input 
+                            type="text"
+                            value={personalForm.address || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, address: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Permanent Address</label>
+                          <input 
+                            type="text"
+                            value={personalForm.permanentAddress || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, permanentAddress: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          />
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1199,6 +1602,83 @@ export default function StudentDetailScreen() {
                           />
                         </div>
                       </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-2">
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Father's Name</label>
+                          <input 
+                            type="text"
+                            value={personalForm.fatherName || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, fatherName: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Mother's Name</label>
+                          <input 
+                            type="text"
+                            value={personalForm.motherName || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, motherName: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Guardian Name</label>
+                          <input 
+                            type="text"
+                            value={personalForm.guardianName || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, guardianName: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Guardian Relation</label>
+                          <input 
+                            type="text"
+                            value={personalForm.guardianRelation || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, guardianRelation: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Section 4: Additional Information */}
+                    <div className="space-y-4 pt-4 border-t border-slate-100">
+                      <h5 className="text-xs font-black text-indigo-600 uppercase tracking-wider">Additional Information</h5>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Nationality</label>
+                          <input 
+                            type="text"
+                            value={personalForm.nationality || "Indian"}
+                            onChange={e => setPersonalForm({ ...personalForm, nationality: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Blood Group</label>
+                          <input 
+                            type="text"
+                            placeholder="e.g. O+, A+, B+"
+                            value={personalForm.bloodGroup || ""}
+                            onChange={e => setPersonalForm({ ...personalForm, bloodGroup: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Marital Status</label>
+                          <select 
+                            value={personalForm.maritalStatus || "Single"}
+                            onChange={e => setPersonalForm({ ...personalForm, maritalStatus: e.target.value })}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none"
+                          >
+                            <option value="Single">Single</option>
+                            <option value="Married">Married</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Form Buttons */}
@@ -1222,76 +1702,404 @@ export default function StudentDetailScreen() {
                     </div>
                   </div>
                 ) : (
-                  /* VIEW MODE: BEAUTIFUL EXECUTIVE LIST VIEW */
+                  /* VIEW MODE: EXACT MATCH WITH USER SCREENSHOT */
                   <div className="space-y-6">
                     
-                    {/* List Group 1: Identity & Enrolment */}
-                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
-                      <div className="flex justify-between items-center pb-3 mb-2 border-b border-slate-100">
-                        <div className="flex items-center gap-2">
-                          <Fingerprint className="w-4 h-4 text-indigo-600" />
-                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Identity & Basic Records</h4>
+                    {/* ROW 1: 2 CARDS SIDE-BY-SIDE */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      
+                      {/* Card 1: Identity & Basic Records */}
+                      <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+                          <div className="flex items-center gap-2.5">
+                            <Fingerprint className="w-5 h-5 text-indigo-600" />
+                            <h3 className="text-sm font-bold text-slate-900">Identity & Basic Records</h3>
+                          </div>
+                          <button 
+                            onClick={handleStartEditPersonal}
+                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 transition-colors"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" /> Edit
+                          </button>
                         </div>
-                        <button 
-                          onClick={handleStartEditPersonal}
-                          className="text-[11px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
-                        >
-                          <Edit3 className="w-3 h-3" /> Edit
-                        </button>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors group">
+                            <div className="flex items-center gap-3 text-slate-500">
+                              <User className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
+                              <span className="text-xs font-medium text-slate-600">Full Legal Name</span>
+                            </div>
+                            <span className="text-xs font-bold text-slate-900 text-right">
+                              {`${studentData.firstName || ''} ${studentData.middleName ? studentData.middleName + ' ' : ''}${studentData.lastName || ''}`.trim() || <span className="font-normal italic text-slate-400">Not specified</span>}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors group">
+                            <div className="flex items-center gap-3 text-slate-500">
+                              <ShieldCheck className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
+                              <span className="text-xs font-medium text-slate-600">Admission Number</span>
+                            </div>
+                            <span className={`text-xs text-right ${studentData.admissionNumber ? 'font-bold text-slate-900' : 'font-normal italic text-slate-400'}`}>
+                              {studentData.admissionNumber || "Not specified"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors group">
+                            <div className="flex items-center gap-3 text-slate-500">
+                              <FileText className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
+                              <span className="text-xs font-medium text-slate-600">Student ID / Roll No</span>
+                            </div>
+                            <span className={`text-xs text-right ${studentData.studentId ? 'font-bold text-slate-900' : 'font-normal italic text-slate-400'}`}>
+                              {studentData.studentId || "Not specified"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors group">
+                            <div className="flex items-center gap-3 text-slate-500">
+                              <Calendar className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
+                              <span className="text-xs font-medium text-slate-600">Date of Birth</span>
+                            </div>
+                            <span className={`text-xs text-right ${studentData.dob ? 'font-bold text-slate-900' : 'font-normal italic text-slate-400'}`}>
+                              {studentData.dob || "Not specified"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors group">
+                            <div className="flex items-center gap-3 text-slate-500">
+                              <User className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
+                              <span className="text-xs font-medium text-slate-600">Gender</span>
+                            </div>
+                            <span className="text-xs font-bold text-slate-900 text-right">
+                              {studentData.gender || "Male"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors group">
+                            <div className="flex items-center gap-3 text-slate-500">
+                              <Tag className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
+                              <span className="text-xs font-medium text-slate-600">Category / Quota</span>
+                            </div>
+                            <span className="text-xs font-bold text-slate-900 text-right">
+                              {studentData.category || studentData.documents?.category || "General"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors group">
+                            <div className="flex items-center gap-3 text-slate-500">
+                              <Fingerprint className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
+                              <span className="text-xs font-medium text-slate-600">Aadhar Number</span>
+                            </div>
+                            <span className={`text-xs text-right ${studentData.aadharNumber ? 'font-bold text-slate-900' : 'font-normal italic text-slate-400'}`}>
+                              {studentData.aadharNumber || "Not specified"}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="divide-y divide-slate-50">
-                        <DetailListRow icon={User} label="Full Legal Name" value={`${studentData.firstName || ''} ${studentData.middleName ? studentData.middleName + ' ' : ''}${studentData.lastName || ''}`.trim()} />
-                        <DetailListRow icon={BadgeCheck} label="Admission Number" value={studentData.admissionNumber} isCopyable={true} />
-                        <DetailListRow icon={FileText} label="Student ID / Roll No" value={studentData.studentId} isCopyable={true} />
-                        <DetailListRow icon={Calendar} label="Date of Birth" value={studentData.dob} />
-                        <DetailListRow icon={User} label="Gender" value={studentData.gender} />
-                        <DetailListRow icon={Award} label="Category / Quota" value={studentData.category || "General"} />
-                        <DetailListRow icon={Fingerprint} label="Aadhar Number" value={studentData.aadharNumber} isCopyable={true} />
+
+                      {/* Card 2: Contact & Communication */}
+                      <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+                          <div className="flex items-center gap-2.5">
+                            <Phone className="w-5 h-5 text-indigo-600" />
+                            <h3 className="text-sm font-bold text-slate-900">Contact & Communication</h3>
+                          </div>
+                          <button 
+                            onClick={handleStartEditPersonal}
+                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 transition-colors"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" /> Edit
+                          </button>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors group">
+                            <div className="flex items-center gap-3 text-slate-500">
+                              <Mail className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
+                              <span className="text-xs font-medium text-slate-600">Email Address</span>
+                            </div>
+                            <span className={`text-xs text-right ${studentData.email ? 'font-bold text-slate-900' : 'font-normal italic text-slate-400'}`}>
+                              {studentData.email || "Not specified"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors group">
+                            <div className="flex items-center gap-3 text-slate-500">
+                              <Phone className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
+                              <span className="text-xs font-medium text-slate-600">Primary Mobile</span>
+                            </div>
+                            <span className={`text-xs text-right ${studentData.mobile || studentData.phone ? 'font-bold text-slate-900' : 'font-normal italic text-slate-400'}`}>
+                              {studentData.mobile || studentData.phone || "Not specified"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors group">
+                            <div className="flex items-center gap-3 text-slate-500">
+                              <Phone className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
+                              <span className="text-xs font-medium text-slate-600">Parent / Guardian Mobile</span>
+                            </div>
+                            <span className={`text-xs text-right ${studentData.parentMobile ? 'font-bold text-slate-900' : 'font-normal italic text-slate-400'}`}>
+                              {studentData.parentMobile || "Not specified"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors group">
+                            <div className="flex items-center gap-3 text-slate-500">
+                              <Phone className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
+                              <span className="text-xs font-medium text-slate-600">Alternate Phone</span>
+                            </div>
+                            <span className={`text-xs text-right ${studentData.alternateMobile ? 'font-bold text-slate-900' : 'font-normal italic text-slate-400'}`}>
+                              {studentData.alternateMobile || "Not specified"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors group">
+                            <div className="flex items-center gap-3 text-slate-500">
+                              <MessageCircle className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
+                              <span className="text-xs font-medium text-slate-600">WhatsApp Number</span>
+                            </div>
+                            <span className={`text-xs text-right ${studentData.whatsappNumber || studentData.documents?.whatsappNumber || studentData.mobile || studentData.phone ? 'font-bold text-slate-900' : 'font-normal italic text-slate-400'}`}>
+                              {studentData.whatsappNumber || studentData.documents?.whatsappNumber || studentData.mobile || studentData.phone || "Not specified"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors group">
+                            <div className="flex items-center gap-3 text-slate-500">
+                              <PhoneCall className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
+                              <span className="text-xs font-medium text-slate-600">Emergency Contact</span>
+                            </div>
+                            <span className={`text-xs text-right ${studentData.emergencyContact || studentData.documents?.emergencyContact ? 'font-bold text-slate-900' : 'font-normal italic text-slate-400'}`}>
+                              {studentData.emergencyContact || studentData.documents?.emergencyContact || "Not specified"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors group">
+                            <div className="flex items-center gap-3 text-slate-500">
+                              <MessageSquare className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
+                              <span className="text-xs font-medium text-slate-600">Preferred Communication</span>
+                            </div>
+                            <span className="text-xs font-bold text-slate-900 text-right">
+                              {studentData.preferredCommunication || studentData.documents?.preferredCommunication || "Email & WhatsApp"}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    {/* List Group 2: Contact Details */}
-                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
-                      <div className="flex justify-between items-center pb-3 mb-2 border-b border-slate-100">
-                        <div className="flex items-center gap-2">
-                          <Phone className="w-4 h-4 text-indigo-600" />
-                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Contact & Communication</h4>
+                    {/* ROW 2: 1 WIDE CARD (ADDRESS & FAMILY DETAILS) */}
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+                        <div className="flex items-center gap-2.5">
+                          <MapPin className="w-5 h-5 text-indigo-600" />
+                          <h3 className="text-sm font-bold text-slate-900">Address & Family Details</h3>
                         </div>
                         <button 
                           onClick={handleStartEditPersonal}
-                          className="text-[11px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 transition-colors"
                         >
-                          <Edit3 className="w-3 h-3" /> Edit
+                          <Edit3 className="w-3.5 h-3.5" /> Edit
                         </button>
                       </div>
-                      <div className="divide-y divide-slate-50">
-                        <DetailListRow icon={Mail} label="Email Address" value={studentData.email} isCopyable={true} />
-                        <DetailListRow icon={Phone} label="Primary Mobile" value={studentData.phone || studentData.mobile || studentData.mobileNumber} isCopyable={true} />
-                        <DetailListRow icon={Phone} label="Parent / Guardian Mobile" value={studentData.parentMobile} isCopyable={true} />
-                        <DetailListRow icon={Phone} label="Alternate Phone" value={studentData.alternateMobile} isCopyable={true} />
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* Address Subcolumn */}
+                        <div className="space-y-4">
+                          <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-50/80 transition-colors">
+                            <MapPin className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                            <div>
+                              <p className="text-xs font-medium text-slate-600">Current Address</p>
+                              <p className={`text-xs mt-0.5 ${studentData.address ? 'font-bold text-slate-900' : 'italic text-slate-400'}`}>
+                                {studentData.address ? `${studentData.address}${studentData.city ? ', ' + studentData.city : ''}${studentData.state ? ', ' + studentData.state : ''}${studentData.pinCode ? ' - ' + studentData.pinCode : ''}` : "Not specified"}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-50/80 transition-colors">
+                            <Building2 className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                            <div>
+                              <p className="text-xs font-medium text-slate-600">Permanent Address</p>
+                              <p className={`text-xs mt-0.5 ${studentData.permanentAddress || studentData.documents?.permanentAddress || studentData.address ? 'font-bold text-slate-900' : 'italic text-slate-400'}`}>
+                                {studentData.permanentAddress || studentData.documents?.permanentAddress || studentData.address || "Not specified"}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Family Subcolumn (2x2 grid) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-50/80 transition-colors">
+                            <User className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                            <div>
+                              <p className="text-xs font-medium text-slate-600">Father's Name</p>
+                              <p className={`text-xs mt-0.5 ${studentData.fatherName || studentData.documents?.fatherName ? 'font-bold text-slate-900' : 'italic text-slate-400'}`}>
+                                {studentData.fatherName || studentData.documents?.fatherName || "Not specified"}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-50/80 transition-colors">
+                            <User className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                            <div>
+                              <p className="text-xs font-medium text-slate-600">Mother's Name</p>
+                              <p className={`text-xs mt-0.5 ${studentData.motherName || studentData.documents?.motherName ? 'font-bold text-slate-900' : 'italic text-slate-400'}`}>
+                                {studentData.motherName || studentData.documents?.motherName || "Not specified"}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-50/80 transition-colors">
+                            <Users className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                            <div>
+                              <p className="text-xs font-medium text-slate-600">Guardian Name</p>
+                              <p className={`text-xs mt-0.5 ${studentData.guardianName || studentData.documents?.guardianName ? 'font-bold text-slate-900' : 'italic text-slate-400'}`}>
+                                {studentData.guardianName || studentData.documents?.guardianName || "Not specified"}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-50/80 transition-colors">
+                            <Link2 className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                            <div>
+                              <p className="text-xs font-medium text-slate-600">Guardian Relation</p>
+                              <p className={`text-xs mt-0.5 ${studentData.guardianRelation || studentData.documents?.guardianRelation ? 'font-bold text-slate-900' : 'italic text-slate-400'}`}>
+                                {studentData.guardianRelation || studentData.documents?.guardianRelation || "Not specified"}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    {/* List Group 3: Residential Address */}
-                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
-                      <div className="flex justify-between items-center pb-3 mb-2 border-b border-slate-100">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-indigo-600" />
-                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Address & Location</h4>
+                    {/* ROW 3: 3 CARDS IN A ROW */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      
+                      {/* Card 4: Additional Information */}
+                      <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+                          <div className="flex items-center gap-2.5">
+                            <FileText className="w-5 h-5 text-indigo-600" />
+                            <h3 className="text-sm font-bold text-slate-900">Additional Information</h3>
+                          </div>
+                          <button 
+                            onClick={handleStartEditPersonal}
+                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 transition-colors"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" /> Edit
+                          </button>
                         </div>
-                        <button 
-                          onClick={handleStartEditPersonal}
-                          className="text-[11px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
-                        >
-                          <Edit3 className="w-3 h-3" /> Edit
-                        </button>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors">
+                            <span className="text-xs font-medium text-slate-600">Nationality</span>
+                            <span className="text-xs font-bold text-slate-900">
+                              {studentData.nationality || studentData.documents?.nationality || "Indian"}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors">
+                            <span className="text-xs font-medium text-slate-600">Blood Group</span>
+                            <span className={`text-xs text-right ${studentData.bloodGroup || studentData.documents?.bloodGroup ? 'font-bold text-slate-900' : 'italic text-slate-400'}`}>
+                              {studentData.bloodGroup || studentData.documents?.bloodGroup || "Not specified"}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors">
+                            <span className="text-xs font-medium text-slate-600">Marital Status</span>
+                            <span className="text-xs font-bold text-slate-900">
+                              {studentData.maritalStatus || studentData.documents?.maritalStatus || "Single"}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="divide-y divide-slate-50">
-                        <DetailListRow icon={MapPin} label="Permanent Street Address" value={studentData.address} />
-                        <DetailListRow icon={Building2} label="City / Town" value={studentData.city} />
-                        <DetailListRow icon={MapPin} label="State / Province" value={studentData.state} />
-                        <DetailListRow icon={MapPin} label="Postal PIN Code" value={studentData.pinCode} />
+
+                      {/* Card 5: College Details */}
+                      <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+                          <div className="flex items-center gap-2.5">
+                            <Building2 className="w-5 h-5 text-indigo-600" />
+                            <h3 className="text-sm font-bold text-slate-900">College Details</h3>
+                          </div>
+                          <button 
+                            onClick={() => {
+                              setActiveTab("Academics");
+                              handleStartEditAcademics();
+                            }}
+                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 transition-colors"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" /> Edit
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors">
+                            <span className="text-xs font-medium text-slate-600">Program</span>
+                            <span className="text-xs font-bold text-slate-900 text-right max-w-[150px] truncate">
+                              {selectedCourse?.code || selectedCourse?.name || studentData.courseCode || studentData.courseName || "MBA"}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors">
+                            <span className="text-xs font-medium text-slate-600">Branch</span>
+                            <span className="text-xs font-bold text-slate-900 text-right max-w-[150px] truncate">
+                              {selectedBranch?.name || studentData.branchName || "Business Administration"}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors">
+                            <span className="text-xs font-medium text-slate-600">Semester</span>
+                            <span className="text-xs font-bold text-slate-900">
+                              Sem {studentData.selectedSemester || 1}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors">
+                            <span className="text-xs font-medium text-slate-600">Batch</span>
+                            <span className="text-xs font-bold text-slate-900">
+                              {studentData.batch || studentData.sessionYear || "2024"}
+                            </span>
+                          </div>
+                        </div>
                       </div>
+
+                      {/* Card 6: System Information */}
+                      <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+                          <div className="flex items-center gap-2.5">
+                            <Settings className="w-5 h-5 text-indigo-600" />
+                            <h3 className="text-sm font-bold text-slate-900">System Information</h3>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors">
+                            <span className="text-xs font-medium text-slate-600">Profile Status</span>
+                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              {studentData.studentStatus || studentData.status || "Active"}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors">
+                            <span className="text-xs font-medium text-slate-600">Fee Status</span>
+                            <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                              feeSummary.status === 'paid' 
+                                ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' 
+                                : 'bg-rose-50 text-rose-600 border border-rose-200'
+                            }`}>
+                              {feeSummary.status === 'paid' ? 'Paid' : 'Unpaid'}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors">
+                            <span className="text-xs font-medium text-slate-600">Created On</span>
+                            <span className="text-xs font-normal italic text-slate-400">
+                              {studentData.createdAt ? new Date(studentData.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : "Not specified"}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center py-2 px-1 hover:bg-slate-50/80 rounded-lg transition-colors">
+                            <span className="text-xs font-medium text-slate-600">Last Updated</span>
+                            <span className="text-xs font-normal italic text-slate-400">
+                              {studentData.updatedAt ? new Date(studentData.updatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : "Not specified"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
                     </div>
 
                   </div>

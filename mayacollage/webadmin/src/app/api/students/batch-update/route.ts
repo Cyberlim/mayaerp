@@ -1,50 +1,75 @@
 import { NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import { Student } from "@/models/Student";
+import { query as pgQuery } from "@/lib/postgres";
 import { delCachePattern } from "@/lib/redis";
 
 export const dynamic = 'force-dynamic';
 
 export async function PUT(request: Request) {
   try {
-    await connectDB();
     const body = await request.json();
     const { sessionYear, selectedProgram, selectedBranch, newSemester, selectedSemester } = body;
 
-    let query: any = {};
+    const whereClauses: string[] = [];
+    const values: any[] = [];
+    let pIdx = 1;
+
     if (sessionYear) {
-      query.$or = [
-        { sessionYear: { $regex: sessionYear, $options: "i" } },
-        { batch: sessionYear }
-      ];
+      whereClauses.push(`(session_year ILIKE $${pIdx} OR batch = $${pIdx})`);
+      pIdx++;
+      values.push(`%${sessionYear}%`);
     }
-    if (selectedProgram) query.selectedProgram = selectedProgram;
-    if (selectedBranch) query.selectedBranch = selectedBranch;
-    if (selectedSemester) query.selectedSemester = Number(selectedSemester);
+    if (selectedProgram) {
+      whereClauses.push(`selected_program = $${pIdx++}`);
+      values.push(selectedProgram);
+    }
+    if (selectedBranch) {
+      whereClauses.push(`selected_branch = $${pIdx++}`);
+      values.push(selectedBranch);
+    }
+    if (selectedSemester) {
+      whereClauses.push(`selected_semester = $${pIdx++}`);
+      values.push(Number(selectedSemester));
+    }
 
     // We only update students who match the query
-    if (Object.keys(query).length === 0) {
+    if (whereClauses.length === 0) {
       return NextResponse.json({ error: "No filters applied for batch update to prevent mass accidental override." }, { status: 400 });
     }
 
-    const result = await Student.updateMany(query, {
-      $set: { selectedSemester: newSemester }
+    const nextSem = Number(newSemester) || 1;
+    const courseYear = Math.ceil(nextSem / 2);
+
+    values.unshift(courseYear);
+    values.unshift(nextSem);
+
+    // After unshift, $1 is nextSem, $2 is courseYear, rest are shifted by 2
+    const shiftedWhere = whereClauses.map(clause => {
+      return clause.replace(/\$(\d+)/g, (_, num) => `$${Number(num) + 2}`);
     });
 
-    try {
-      await delCachePattern("students:*");
-    } catch (cacheErr) {
-      console.error("Cache invalidation failed:", cacheErr);
-    }
+    const updateSQL = `
+      UPDATE students
+      SET selected_semester = $1, course_year = $2, updated_at = NOW()
+      WHERE ${shiftedWhere.join(' AND ')}
+      RETURNING id
+    `;
+
+    const res = await pgQuery(updateSQL, values);
+
+    // Invalidate Redis Caches
+    await Promise.all([
+      delCachePattern("students:*"),
+      delCachePattern("student:*")
+    ]);
 
     return NextResponse.json({
-      message: "Batch update successful",
-      modifiedCount: result.modifiedCount,
-      matchedCount: result.matchedCount
+      message: "Batch update successful in PostgreSQL",
+      modifiedCount: res.rows.length,
+      matchedCount: res.rows.length
     });
 
   } catch (error: any) {
-    console.error("Batch update error:", error);
-    return NextResponse.json({ error: error.message || "Failed to perform batch update" }, { status: 500 });
+    console.error("Batch update error (PostgreSQL):", error);
+    return NextResponse.json({ error: error.message || "Failed to perform batch update in PostgreSQL" }, { status: 500 });
   }
 }

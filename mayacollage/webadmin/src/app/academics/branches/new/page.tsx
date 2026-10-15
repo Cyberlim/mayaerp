@@ -47,7 +47,20 @@ export default function CreateBranch() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create branch");
+      if (!res.ok) throw new Error(data.error || "Failed to create branch in PostgreSQL");
+
+      // Update local storage cache
+      try {
+        const cachedRaw = localStorage.getItem("maya_academics_branches_cache");
+        if (cachedRaw) {
+          const list = JSON.parse(cachedRaw);
+          if (Array.isArray(list)) {
+            list.unshift(data);
+            localStorage.setItem("maya_academics_branches_cache", JSON.stringify(list));
+            sessionStorage.setItem("maya_academics_branches_cache", JSON.stringify(list));
+          }
+        }
+      } catch (_) {}
 
       router.push("/dashboard/academics");
     } catch (err: any) {

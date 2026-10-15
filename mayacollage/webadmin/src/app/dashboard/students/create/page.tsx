@@ -48,6 +48,16 @@ export default function CreateStudentPage() {
   }, [formData.selectedProgram, courses]);
 
   useEffect(() => {
+    // 1. Instant hydration from localStorage
+    if (typeof window !== "undefined") {
+      try {
+        const cachedBranches = localStorage.getItem("mayacollage_branches_cache");
+        const cachedCourses = localStorage.getItem("mayacollage_courses_cache");
+        if (cachedBranches) setBranches(JSON.parse(cachedBranches));
+        if (cachedCourses) setCourses(JSON.parse(cachedCourses));
+      } catch (_) {}
+    }
+
     Promise.all([
       fetch("/api/branches").then(res => res.json()),
       fetch("/api/courses").then(res => res.json())
@@ -88,8 +98,14 @@ export default function CreateStudentPage() {
   const handleSubmit = async () => {
     setIsSaving(true);
     try {
+      const selectedCourse = courses.find(c => c._id === formData.selectedProgram);
+      const selectedBranchFull = branches.find(b => b._id === formData.selectedBranch);
+
       const payload = {
         ...formData,
+        branchName: selectedBranchFull?.name || selectedBranchFull?.branchName || "",
+        courseName: selectedCourse?.name || selectedCourse?.courseName || "",
+        courseDuration: selectedCourse?.duration || 4,
         fees: {
           isConfigured: feesYears.some(f => f.tuitionTotal || f.examTotal || f.otherTotal),
           years: feesYears.map(f => ({
@@ -109,9 +125,21 @@ export default function CreateStudentPage() {
       const data = await res.json();
       if (res.ok) {
         setToastMsg("Student enrolled successfully!");
+        try {
+          const localCached = localStorage.getItem("mayacollage_students_cache");
+          if (localCached) {
+            const list = JSON.parse(localCached);
+            if (Array.isArray(list)) {
+              list.unshift(data);
+              localStorage.setItem("mayacollage_students_cache", JSON.stringify(list));
+              sessionStorage.setItem("mayacollage_students_cache", JSON.stringify(list));
+            }
+          }
+        } catch (_) {}
+
         setTimeout(() => {
           router.push("/dashboard/students");
-        }, 1500);
+        }, 1200);
       } else {
         alert(data.error || "Failed to enroll student.");
       }

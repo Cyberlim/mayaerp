@@ -42,7 +42,22 @@ function CreateCourseContent() {
   const [feeStructureTemplate, setFeeStructureTemplate] = useState<any[]>([]);
 
   useEffect(() => {
-    if (branchId) {
+    if (branchId && typeof window !== "undefined") {
+      try {
+        const cachedRaw = localStorage.getItem(`maya_branch_detail_${branchId}`);
+        if (cachedRaw) {
+          const parsed = JSON.parse(cachedRaw);
+          if (parsed.branch) setBranch(parsed.branch);
+        } else {
+          const allRaw = localStorage.getItem("maya_academics_branches_cache");
+          if (allRaw) {
+            const list = JSON.parse(allRaw);
+            const found = list.find((b: any) => b._id === branchId || b.id === branchId);
+            if (found) setBranch(found);
+          }
+        }
+      } catch (_) {}
+
       fetch(`/api/branches/${branchId}`)
         .then(res => res.json())
         .then(data => setBranch(data))
@@ -129,7 +144,21 @@ function CreateCourseContent() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create course");
+      if (!res.ok) throw new Error(data.error || "Failed to create course in PostgreSQL");
+
+      // Update local storage cache
+      try {
+        const cachedCoursesRaw = localStorage.getItem("maya_academics_courses_cache");
+        if (cachedCoursesRaw) {
+          const list = JSON.parse(cachedCoursesRaw);
+          if (Array.isArray(list)) {
+            list.unshift(data);
+            localStorage.setItem("maya_academics_courses_cache", JSON.stringify(list));
+            sessionStorage.setItem("maya_academics_courses_cache", JSON.stringify(list));
+          }
+        }
+        localStorage.removeItem(`maya_branch_detail_${branchId}`);
+      } catch (_) {}
 
       router.push(`/dashboard/academics/branches/${branchId}`);
     } catch (err: any) {

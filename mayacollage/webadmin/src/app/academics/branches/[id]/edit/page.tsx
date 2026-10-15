@@ -37,21 +37,72 @@ export default function EditBranch() {
     colorHex: "#4F46E5",
   });
 
+  // 0ms Cache Hydration
   useEffect(() => {
+    let hasCached = false;
+    try {
+      const detailCache = localStorage.getItem(`maya_branch_detail_${branchId}`);
+      if (detailCache) {
+        const parsed = JSON.parse(detailCache);
+        if (parsed?.branch) {
+          const b = parsed.branch;
+          setFormData({
+            code: b.code || "",
+            name: b.name || "",
+            deanName: b.deanName || "",
+            contactEmail: b.contactEmail || "",
+            contactExt: b.contactExt || "",
+            location: b.location || "",
+            establishedYear: b.establishedYear || "",
+            iconName: b.iconName || "business_center_rounded",
+            colorHex: b.colorHex || "#4F46E5",
+          });
+          setIsLoading(false);
+          hasCached = true;
+        }
+      }
+
+      if (!hasCached) {
+        const branchesRaw = localStorage.getItem("maya_academics_branches_cache");
+        if (branchesRaw) {
+          const branchesList = JSON.parse(branchesRaw);
+          const found = branchesList.find((b: any) => (b.id === branchId || b._id === branchId));
+          if (found) {
+            setFormData({
+              code: found.code || "",
+              name: found.name || "",
+              deanName: found.deanName || "",
+              contactEmail: found.contactEmail || "",
+              contactExt: found.contactExt || "",
+              location: found.location || "",
+              establishedYear: found.establishedYear || "",
+              iconName: found.iconName || "business_center_rounded",
+              colorHex: found.colorHex || "#4F46E5",
+            });
+            setIsLoading(false);
+            hasCached = true;
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Background revalidation from PostgreSQL
     fetch(`/api/branches/${branchId}`)
       .then(res => res.json())
       .then(data => {
-        setFormData({
-          code: data.code || "",
-          name: data.name || "",
-          deanName: data.deanName || "",
-          contactEmail: data.contactEmail || "",
-          contactExt: data.contactExt || "",
-          location: data.location || "",
-          establishedYear: data.establishedYear || "",
-          iconName: data.iconName || "business_center_rounded",
-          colorHex: data.colorHex || "#4F46E5",
-        });
+        if (data && !data.error) {
+          setFormData({
+            code: data.code || "",
+            name: data.name || "",
+            deanName: data.deanName || "",
+            contactEmail: data.contactEmail || "",
+            contactExt: data.contactExt || "",
+            location: data.location || "",
+            establishedYear: data.establishedYear || "",
+            iconName: data.iconName || "business_center_rounded",
+            colorHex: data.colorHex || "#4F46E5",
+          });
+        }
         setIsLoading(false);
       })
       .catch(err => {
@@ -75,7 +126,32 @@ export default function EditBranch() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update branch");
+      if (!res.ok) throw new Error(data.error || "Failed to update branch in PostgreSQL");
+
+      // Synchronize caches in localStorage & sessionStorage
+      try {
+        // Update general branches list
+        const branchesRaw = localStorage.getItem("maya_academics_branches_cache");
+        if (branchesRaw) {
+          const list = JSON.parse(branchesRaw);
+          const idx = list.findIndex((b: any) => (b.id === branchId || b._id === branchId));
+          if (idx >= 0) {
+            list[idx] = { ...list[idx], ...formData };
+            localStorage.setItem("maya_academics_branches_cache", JSON.stringify(list));
+            sessionStorage.setItem("maya_academics_branches_cache", JSON.stringify(list));
+          }
+        }
+
+        // Update branch detail cache
+        const detailCache = localStorage.getItem(`maya_branch_detail_${branchId}`);
+        if (detailCache) {
+          const parsed = JSON.parse(detailCache);
+          if (parsed?.branch) {
+            parsed.branch = { ...parsed.branch, ...formData };
+            localStorage.setItem(`maya_branch_detail_${branchId}`, JSON.stringify(parsed));
+          }
+        }
+      } catch (_) {}
 
       router.push(`/dashboard/academics/branches/${branchId}`);
     } catch (err: any) {
@@ -86,8 +162,31 @@ export default function EditBranch() {
 
   if (isLoading) {
     return (
-      <div className="h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+      <div className="min-h-screen bg-white flex relative font-sans text-slate-900 animate-pulse">
+        <div className="hidden lg:flex w-[450px] bg-slate-50 border-r border-slate-100 p-16 flex-col">
+          <div className="w-10 h-10 bg-slate-200 rounded-full mb-16" />
+          <div className="w-20 h-20 bg-slate-200 rounded-full mb-10" />
+          <div className="h-10 bg-slate-200 rounded-xl w-3/4 mb-6" />
+          <div className="h-4 bg-slate-200 rounded w-full mb-3" />
+          <div className="h-4 bg-slate-200 rounded w-5/6 mb-16" />
+          <div className="space-y-6">
+            <div className="h-12 bg-slate-200 rounded-xl" />
+            <div className="h-12 bg-slate-200 rounded-xl" />
+            <div className="h-12 bg-slate-200 rounded-xl" />
+          </div>
+        </div>
+        <div className="flex-1 p-8 lg:p-20 space-y-8">
+          <div className="h-6 bg-slate-100 rounded w-1/4 mb-8" />
+          <div className="grid grid-cols-2 gap-8">
+            <div className="h-16 bg-slate-100 rounded-2xl" />
+            <div className="h-16 bg-slate-100 rounded-2xl" />
+          </div>
+          <div className="h-16 bg-slate-100 rounded-2xl" />
+          <div className="grid grid-cols-2 gap-8">
+            <div className="h-16 bg-slate-100 rounded-2xl" />
+            <div className="h-16 bg-slate-100 rounded-2xl" />
+          </div>
+        </div>
       </div>
     );
   }

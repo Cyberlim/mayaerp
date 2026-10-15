@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   GraduationCap, 
@@ -35,7 +35,10 @@ import {
   Undo2,
   ChevronDown,
   ChevronUp,
-  BookOpen
+  BookOpen,
+  Zap,
+  RefreshCw,
+  Database
 } from "lucide-react";
 import Link from "next/link";
 
@@ -45,6 +48,8 @@ export default function StudentManagementDashboard() {
   const [branches, setBranches] = useState<any[]>([]);
   
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [cacheSource, setCacheSource] = useState<string>("Upstash Redis (sub-10ms)");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFilter, setSelectedFilter] = useState("All");
   const [filterBranch, setFilterBranch] = useState("All");
@@ -55,8 +60,12 @@ export default function StudentManagementDashboard() {
   const [filterFeeStatus, setFilterFeeStatus] = useState("All");
   const [toastMsg, setToastMsg] = useState("");
 
-  // View Mode: Default to List View on Desktop & Responsive Cards on Mobile
-  const [viewMode, setViewMode] = useState<"list" | "cards" | "branch_course">("list");
+  // Progressive Lazy Loading State
+  const [visibleCount, setVisibleCount] = useState<number>(24);
+  const observerTarget = useRef<HTMLDivElement>(null);
+
+  // View Mode: Default to Cards View
+  const [viewMode, setViewMode] = useState<"list" | "cards" | "branch_course">("cards");
   const [expandedCourses, setExpandedCourses] = useState<Record<string, boolean>>({});
 
   // Password Modal
@@ -75,46 +84,140 @@ export default function StudentManagementDashboard() {
 
   const filters = ["All", "Active", "Inactive", "Suspended"];
 
-  const fetchData = async () => {
-    setIsLoading(true);
+  // Helper to sync students to both localStorage and sessionStorage
+  const updateLocalStudentCache = (updatedList: any[]) => {
+    if (typeof window === "undefined") return;
     try {
+      localStorage.setItem("mayacollage_students_cache", JSON.stringify(updatedList));
+      sessionStorage.setItem("mayacollage_students_cache", JSON.stringify(updatedList));
+      localStorage.setItem("mayacollage_students_cache_time", Date.now().toString());
+    } catch (err) {
+      console.warn("Storage write error", err);
+    }
+  };
+
+  const fetchData = async (forceRefresh = false) => {
+    if (forceRefresh) {
+      setIsRefreshing(true);
+    } else if (students.length === 0) {
+      setIsLoading(true);
+    }
+
+    try {
+      const url = forceRefresh ? "/api/students?bust=true" : "/api/students";
       const [studentsRes, branchesRes, coursesRes] = await Promise.all([
-        fetch("/api/students"),
+        fetch(url),
         fetch("/api/branches"),
         fetch("/api/courses")
       ]);
+
+      const source = studentsRes.headers.get("X-Cache-Source") || "Upstash-Redis";
+      if (source.includes("RAM") || source.includes("Memory")) {
+        setCacheSource("⚡ L1 RAM Cache (0ms)");
+      } else if (source.includes("Redis")) {
+        setCacheSource("⚡ Redis In-Memory (sub-10ms)");
+      } else {
+        setCacheSource("Neon PostgreSQL (Warmed)");
+      }
+
       const [studentsData, branchesData, coursesData] = await Promise.all([
         studentsRes.json(),
         branchesRes.json(),
         coursesRes.json()
       ]);
-      setStudents(Array.isArray(studentsData) ? studentsData : []);
-      setBranches(Array.isArray(branchesData) ? branchesData : []);
-      setCourses(Array.isArray(coursesData) ? coursesData : []);
+
+      const studentsList = Array.isArray(studentsData) ? studentsData : [];
+      const branchesList = Array.isArray(branchesData) ? branchesData : [];
+      const coursesList = Array.isArray(coursesData) ? coursesData : [];
+
+      setStudents(studentsList);
+      setBranches(branchesList);
+      setCourses(coursesList);
+
+      // Persist in persistent browser localStorage and sessionStorage for instant 0ms loads
+      try {
+        localStorage.setItem("mayacollage_students_cache", JSON.stringify(studentsList));
+        localStorage.setItem("mayacollage_branches_cache", JSON.stringify(branchesList));
+        localStorage.setItem("mayacollage_courses_cache", JSON.stringify(coursesList));
+        localStorage.setItem("mayacollage_students_cache_time", Date.now().toString());
+
+        sessionStorage.setItem("mayacollage_students_cache", JSON.stringify(studentsList));
+        sessionStorage.setItem("mayacollage_branches_cache", JSON.stringify(branchesList));
+        sessionStorage.setItem("mayacollage_courses_cache", JSON.stringify(coursesList));
+      } catch (_) {}
+
+      if (forceRefresh) {
+        setToastMsg("Redis & Local cache refreshed fresh from PostgreSQL!");
+        setTimeout(() => setToastMsg(""), 3000);
+      }
     } catch (error) {
       console.error("Failed to fetch data", error);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
+    // 1. Instant 0ms load from localStorage (or sessionStorage)
+    try {
+      const savedMode = localStorage.getItem("maya_students_view_mode") as any;
+      if (savedMode === "cards" || savedMode === "list" || savedMode === "branch_course") {
+        setViewMode(savedMode);
+      }
+
+      const cached = localStorage.getItem("mayacollage_students_cache") || sessionStorage.getItem("mayacollage_students_cache");
+      const cachedBranches = localStorage.getItem("mayacollage_branches_cache") || sessionStorage.getItem("mayacollage_branches_cache");
+      const cachedCourses = localStorage.getItem("mayacollage_courses_cache") || sessionStorage.getItem("mayacollage_courses_cache");
+      
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setStudents(parsed);
+          setIsLoading(false);
+          setCacheSource("⚡ Local Cache (0ms Instant)");
+        }
+      }
+      if (cachedBranches) setBranches(JSON.parse(cachedBranches));
+      if (cachedCourses) setCourses(JSON.parse(cachedCourses));
+    } catch (_) {}
+
+    // 2. Background revalidation from server silently
     fetchData();
   }, []);
 
+  // Reset lazy load pagination on filter or view mode change
+  useEffect(() => {
+    setVisibleCount(24);
+  }, [searchQuery, selectedFilter, filterBranch, filterCourse, filterBatch, filterSemester, filterSection, filterFeeStatus, viewMode]);
+
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Are you sure you want to delete student: ${name}?`)) return;
+    
+    // Optimistic UI update and sync to local cache
+    setStudents(prev => {
+      const next = prev.filter(s => s._id !== id);
+      updateLocalStudentCache(next);
+      return next;
+    });
+
+    try {
+      localStorage.removeItem(`maya_student_detail_${id}`);
+      sessionStorage.removeItem(`maya_student_detail_${id}`);
+    } catch (_) {}
+    
     try {
       const res = await fetch(`/api/students/${id}`, { method: "DELETE" });
       if (res.ok) {
-        setToastMsg("Student deleted successfully!");
-        fetchData();
+        setToastMsg("Student deleted successfully from PostgreSQL & cache invalidated!");
         setTimeout(() => setToastMsg(""), 3000);
       } else {
+        fetchData();
         alert("Failed to delete student.");
       }
     } catch (err) {
       console.error(err);
+      fetchData();
     }
   };
 
@@ -264,6 +367,27 @@ export default function StudentManagementDashboard() {
       }
     });
 
+    // Optimistic UI update immediately and sync to local cache
+    setStudents(prev => {
+      const next = prev.map(s => {
+        if (s._id === student._id) {
+          return {
+            ...s,
+            fees: {
+              isConfigured: true,
+              years: updatedYears
+            },
+            feeStatus: markPaid ? 'paid' : 'unpaid',
+            paidFee: markPaid ? targetTotal : 0,
+            feeBalance: markPaid ? 0 : targetTotal
+          };
+        }
+        return s;
+      });
+      updateLocalStudentCache(next);
+      return next;
+    });
+
     try {
       const res = await fetch(`/api/students/${student._id}`, {
         method: "PUT",
@@ -278,14 +402,32 @@ export default function StudentManagementDashboard() {
 
       const updated = await res.json();
       if (res.ok && !updated.error) {
-        setStudents(prev => prev.map(s => s._id === student._id ? { ...s, ...updated } : s));
-        setToastMsg(markPaid ? `Marked ${student.firstName}'s fees as Fully Paid!` : `Marked ${student.firstName}'s fees as Unpaid.`);
+        setStudents(prev => {
+          const next = prev.map(s => s._id === student._id ? { ...s, ...updated } : s);
+          updateLocalStudentCache(next);
+          return next;
+        });
+
+        // Also update individual student detail cache if present in localStorage
+        try {
+          const detailRaw = localStorage.getItem(`maya_student_detail_${student._id}`);
+          if (detailRaw) {
+            const detailParsed = JSON.parse(detailRaw);
+            detailParsed.student = { ...detailParsed.student, ...updated };
+            localStorage.setItem(`maya_student_detail_${student._id}`, JSON.stringify(detailParsed));
+            sessionStorage.setItem(`maya_student_detail_${student._id}`, JSON.stringify(detailParsed));
+          }
+        } catch (_) {}
+
+        setToastMsg(markPaid ? `Marked ${student.firstName}'s fees as Fully Paid (Redis & Postgres Synced)!` : `Marked ${student.firstName}'s fees as Unpaid.`);
         setTimeout(() => setToastMsg(""), 3000);
       } else {
+        fetchData();
         alert(updated.error || "Failed to update fee status.");
       }
     } catch (e) {
       console.error(e);
+      fetchData();
       alert("Error updating student fee status.");
     }
   };
@@ -339,6 +481,30 @@ export default function StudentManagementDashboard() {
     }
     return result;
   }, [students, selectedFilter, filterBranch, filterCourse, filterBatch, filterSemester, filterSection, filterFeeStatus, searchQuery, courses]);
+
+  // Lazy loading slice of students for smooth performance
+  const displayedStudents = useMemo(() => {
+    return filteredStudents.slice(0, visibleCount);
+  }, [filteredStudents, visibleCount]);
+
+  // Infinite scroll intersection observer for progressive rendering
+  useEffect(() => {
+    if (viewMode === "branch_course") return;
+    const target = observerTarget.current;
+    if (!target) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && visibleCount < filteredStudents.length) {
+          setVisibleCount(prev => Math.min(prev + 24, filteredStudents.length));
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [visibleCount, filteredStudents.length, viewMode]);
 
   // Grouped Branches and Courses for Branch-Course View
   const branchCourseHierarchy = useMemo(() => {
@@ -443,11 +609,28 @@ export default function StudentManagementDashboard() {
               <GraduationCap className="w-6 h-6 text-indigo-600" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-black text-slate-900 tracking-tight">Student Directory</h1>
                 <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 text-xs font-black rounded-full border border-indigo-100">
                   {students.length} Enrolled
                 </span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 text-[11px] font-black rounded-full border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Neon PostgreSQL</span>
+                </span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-50 text-amber-800 text-[11px] font-black rounded-full border border-amber-200">
+                  <Zap className="w-3 h-3 text-amber-600 fill-amber-500" />
+                  <span>{cacheSource}</span>
+                </span>
+                <button
+                  onClick={() => fetchData(true)}
+                  disabled={isRefreshing}
+                  title="Flush Redis cache and reload directly from Neon PostgreSQL"
+                  className="p-1.5 bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 rounded-lg text-xs transition-colors border border-slate-200 flex items-center gap-1"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-indigo-600' : ''}`} />
+                  <span className="text-[10px] font-bold">Sync</span>
+                </button>
               </div>
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-0.5">
                 Branch-Course Fee Matrices • Enrollments & Fee Status
@@ -457,21 +640,14 @@ export default function StudentManagementDashboard() {
           
           <div className="flex flex-wrap items-center gap-3">
             
-            {/* View Mode Toggle: Branch-Course, Cards, List */}
+            {/* View Mode Toggle: Cards View (Default), List View, Branch-Course */}
             <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
               <button
-                onClick={() => setViewMode("branch_course")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
-                  viewMode === "branch_course" 
-                    ? "bg-white text-indigo-600 shadow-sm" 
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5" /> Branch - Course View
-              </button>
-              <button
-                onClick={() => setViewMode("cards")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                onClick={() => {
+                  setViewMode("cards");
+                  try { localStorage.setItem("maya_students_view_mode", "cards"); } catch (_) {}
+                }}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-black transition-all ${
                   viewMode === "cards" 
                     ? "bg-white text-indigo-600 shadow-sm" 
                     : "text-slate-500 hover:text-slate-800"
@@ -480,7 +656,10 @@ export default function StudentManagementDashboard() {
                 <LayoutGrid className="w-3.5 h-3.5" /> Cards View
               </button>
               <button
-                onClick={() => setViewMode("list")}
+                onClick={() => {
+                  setViewMode("list");
+                  try { localStorage.setItem("maya_students_view_mode", "list"); } catch (_) {}
+                }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
                   viewMode === "list" 
                     ? "bg-white text-indigo-600 shadow-sm" 
@@ -488,6 +667,19 @@ export default function StudentManagementDashboard() {
                 }`}
               >
                 <List className="w-3.5 h-3.5" /> List View
+              </button>
+              <button
+                onClick={() => {
+                  setViewMode("branch_course");
+                  try { localStorage.setItem("maya_students_view_mode", "branch_course"); } catch (_) {}
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                  viewMode === "branch_course" 
+                    ? "bg-white text-indigo-600 shadow-sm" 
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" /> Branch - Course View
               </button>
             </div>
 
@@ -641,11 +833,125 @@ export default function StudentManagementDashboard() {
           </div>
         </div>
 
-        {/* LOADING STATE */}
+        {/* SKELETON LAYOUT LOADING STATE */}
         {isLoading ? (
-          <div className="p-20 flex flex-col justify-center items-center bg-white rounded-2xl border border-slate-100">
-            <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-3" />
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading student directory...</span>
+          <div className="space-y-6">
+            {/* Shimmer banner */}
+            <div className="bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-emerald-500/10 border border-indigo-200/60 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-pulse">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-600/15 flex items-center justify-center shrink-0">
+                  <Zap className="w-4 h-4 text-indigo-600 animate-spin" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-slate-800 flex items-center gap-2">
+                    <span>Loading Students from Neon PostgreSQL & Upstash Redis</span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                  </h4>
+                  <p className="text-[11px] font-semibold text-slate-500">
+                    High-speed cached dataset query • Precomputing branch fee aggregates
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 bg-white rounded-lg border border-slate-200 text-indigo-700 shadow-sm">
+                  ⚡ Redis In-Memory
+                </span>
+                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 bg-white rounded-lg border border-slate-200 text-emerald-700 shadow-sm">
+                  🐘 Neon Postgres
+                </span>
+              </div>
+            </div>
+
+            {/* View Mode specific skeletons */}
+            {viewMode === "list" ? (
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="p-4 bg-slate-50/80 border-b border-slate-100 flex justify-between items-center">
+                  <div className="h-4 w-36 bg-slate-200 rounded-lg animate-pulse" />
+                  <div className="h-4 w-28 bg-slate-200 rounded-lg animate-pulse" />
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="p-4 flex items-center justify-between gap-4 animate-pulse">
+                      <div className="flex items-center gap-3 flex-1 min-w-[200px]">
+                        <div className="w-10 h-10 rounded-xl bg-slate-200 shrink-0" />
+                        <div className="space-y-1.5 flex-1">
+                          <div className="h-3.5 bg-slate-200 rounded-md w-3/4" />
+                          <div className="h-2.5 bg-slate-100 rounded-md w-1/2" />
+                        </div>
+                      </div>
+                      <div className="hidden md:block w-40 space-y-1.5">
+                        <div className="h-3 bg-slate-200 rounded-md w-5/6" />
+                        <div className="h-2.5 bg-slate-100 rounded-md w-3/5" />
+                      </div>
+                      <div className="hidden lg:block w-24 text-right space-y-1.5">
+                        <div className="h-3 bg-slate-200 rounded-md w-16 ml-auto" />
+                        <div className="h-2 bg-slate-100 rounded-md w-12 ml-auto" />
+                      </div>
+                      <div className="hidden lg:block w-24 text-right space-y-1.5">
+                        <div className="h-3 bg-slate-200 rounded-md w-16 ml-auto" />
+                        <div className="h-2 bg-slate-100 rounded-md w-12 ml-auto" />
+                      </div>
+                      <div className="w-24 text-center">
+                        <div className="h-5 bg-slate-200 rounded-full w-20 mx-auto" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-7 w-20 bg-slate-200 rounded-lg" />
+                        <div className="h-7 w-7 bg-slate-100 rounded-lg" />
+                        <div className="h-7 w-7 bg-slate-100 rounded-lg" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : viewMode === "cards" ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="bg-white rounded-2xl border border-slate-100 p-5 space-y-4 animate-pulse shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-200 shrink-0" />
+                        <div className="space-y-1.5">
+                          <div className="h-3.5 w-28 bg-slate-200 rounded-md" />
+                          <div className="h-2.5 w-16 bg-slate-100 rounded-md" />
+                        </div>
+                      </div>
+                      <div className="h-5 w-14 bg-slate-200 rounded-full" />
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-xl space-y-2">
+                      <div className="h-3 bg-slate-200 rounded-md w-4/5" />
+                      <div className="h-2 bg-slate-100 rounded-md w-1/2" />
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-xl space-y-2">
+                      <div className="h-3 bg-slate-200 rounded-md w-full" />
+                      <div className="h-3 bg-slate-200 rounded-md w-2/3" />
+                    </div>
+                    <div className="pt-3 border-t border-slate-100 flex gap-2">
+                      <div className="h-8 flex-1 bg-slate-200 rounded-xl" />
+                      <div className="h-8 w-8 bg-slate-100 rounded-xl" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {[1, 2].map((i) => (
+                  <div key={i} className="bg-white rounded-3xl border border-slate-200 p-6 space-y-4 animate-pulse">
+                    <div className="flex justify-between items-center pb-4 border-b border-slate-100">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-slate-200" />
+                        <div className="space-y-1.5">
+                          <div className="h-4 w-36 bg-slate-200 rounded" />
+                          <div className="h-2.5 w-24 bg-slate-100 rounded" />
+                        </div>
+                      </div>
+                      <div className="h-6 w-20 bg-slate-100 rounded-xl" />
+                    </div>
+                    <div className="h-16 bg-slate-50 rounded-2xl" />
+                    <div className="h-16 bg-slate-50 rounded-2xl" />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : filteredStudents.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-100 p-16 text-center shadow-sm">
@@ -747,15 +1053,26 @@ export default function StudentManagementDashboard() {
                                         </tr>
                                       </thead>
                                       <tbody className="text-xs divide-y divide-slate-100">
-                                        {course.enrolledStudents.map((student: any) => {
+                                        {course.enrolledStudents.map((student: any, idx: number) => {
                                           const feeInfo = getFeeInfo(student);
                                           const isPaid = feeInfo.status === "paid";
 
                                           return (
-                                            <tr key={student._id} className="hover:bg-slate-50 transition-colors">
+                                            <motion.tr 
+                                              key={student._id} 
+                                              initial={{ opacity: 0, x: -10 }}
+                                              animate={{ opacity: 1, x: 0 }}
+                                              transition={{ delay: Math.min(idx * 0.03, 0.6), duration: 0.25 }}
+                                              className="hover:bg-indigo-50/40 transition-colors"
+                                            >
                                               <td className="py-3 px-4">
-                                                <div className="font-bold text-slate-900">{student.firstName} {student.lastName}</div>
-                                                <div className="text-[11px] text-slate-400">{student.admissionNumber || student.studentId}</div>
+                                                <div className="flex items-center gap-2">
+                                                  <span className="text-[10px] font-black text-slate-300 w-5">#{idx + 1}</span>
+                                                  <div>
+                                                    <div className="font-bold text-slate-900">{student.firstName} {student.lastName}</div>
+                                                    <div className="text-[11px] text-slate-400">{student.admissionNumber || student.studentId}</div>
+                                                  </div>
+                                                </div>
                                               </td>
 
                                               <td className="py-3 px-4 font-semibold text-slate-600">
@@ -819,7 +1136,7 @@ export default function StudentManagementDashboard() {
                                                   </Link>
                                                 </div>
                                               </td>
-                                            </tr>
+                                            </motion.tr>
                                           );
                                         })}
                                       </tbody>
@@ -840,11 +1157,26 @@ export default function StudentManagementDashboard() {
             )}
 
             {/* ================================================================= */}
-            {/* OPTION 2: CARDS VIEW (GRID)                                       */}
+            {/* OPTION 2: CARDS VIEW (GRID WITH SEQUENTIAL ENTRANCE ANIMATION)    */}
             {/* ================================================================= */}
             {viewMode === "cards" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                {filteredStudents.map(student => {
+              <motion.div 
+                key={`cards-${selectedFilter}-${filterBranch}-${filterCourse}-${filterSemester}-${searchQuery}`}
+                initial="hidden"
+                animate="show"
+                variants={{
+                  hidden: { opacity: 0 },
+                  show: {
+                    opacity: 1,
+                    transition: {
+                      staggerChildren: 0.035,
+                      delayChildren: 0.02
+                    }
+                  }
+                }}
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"
+              >
+                {displayedStudents.map((student, index) => {
                   const feeInfo = getFeeInfo(student);
                   const isPaid = feeInfo.status === "paid";
                   const courseName = courses.find(c => c._id === (typeof student.selectedProgram === 'object' ? student.selectedProgram?._id : student.selectedProgram))?.name || "Unassigned Course";
@@ -853,23 +1185,39 @@ export default function StudentManagementDashboard() {
                   return (
                     <motion.div
                       key={student._id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all p-5 flex flex-col justify-between group hover:border-indigo-100"
+                      variants={{
+                        hidden: { opacity: 0, y: 22, scale: 0.94 },
+                        show: { 
+                          opacity: 1, 
+                          y: 0, 
+                          scale: 1,
+                          transition: { 
+                            type: "spring", 
+                            stiffness: 380, 
+                            damping: 26 
+                          } 
+                        }
+                      }}
+                      className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all p-5 flex flex-col justify-between group hover:border-indigo-200 relative overflow-hidden"
                     >
                       <div>
                         <div className="flex items-start justify-between gap-3 mb-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-indigo-700 text-sm shrink-0 overflow-hidden">
-                              {student.profilePhoto || student.documents?.studentPhoto ? (
-                                <img 
-                                  src={student.profilePhoto || student.documents?.studentPhoto} 
-                                  alt="" 
-                                  className="w-full h-full object-cover" 
-                                />
-                              ) : (
-                                <span>{student.firstName?.[0]}{student.lastName?.[0]}</span>
-                              )}
+                            <div className="relative">
+                              <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-indigo-700 text-sm shrink-0 overflow-hidden shadow-xs">
+                                {student.profilePhoto || student.documents?.studentPhoto ? (
+                                  <img 
+                                    src={student.profilePhoto || student.documents?.studentPhoto} 
+                                    alt="" 
+                                    className="w-full h-full object-cover" 
+                                  />
+                                ) : (
+                                  <span>{student.firstName?.[0]}{student.lastName?.[0]}</span>
+                                )}
+                              </div>
+                              <span className="absolute -bottom-1 -right-1 px-1.5 py-0.2 bg-slate-900 text-white font-black text-[9px] rounded-md shadow-xs border border-white">
+                                #{index + 1}
+                              </span>
                             </div>
                             <div>
                               <h3 className="font-black text-slate-900 text-sm leading-tight line-clamp-1 group-hover:text-indigo-600 transition-colors">
@@ -959,7 +1307,7 @@ export default function StudentManagementDashboard() {
                     </motion.div>
                   );
                 })}
-              </div>
+              </motion.div>
             )}
 
             {/* ================================================================= */}
@@ -984,17 +1332,31 @@ export default function StudentManagementDashboard() {
                         </tr>
                       </thead>
                       <tbody className="text-sm divide-y divide-slate-50">
-                        {filteredStudents.map(student => {
+                        {displayedStudents.map((student, index) => {
                           const feeInfo = getFeeInfo(student);
                           const isPaid = feeInfo.status === "paid";
                           const courseName = courses.find(c => c._id === (typeof student.selectedProgram === 'object' ? student.selectedProgram?._id : student.selectedProgram))?.name || "Unassigned";
                           const branchName = branches.find(b => b._id === (typeof student.selectedBranch === 'object' ? student.selectedBranch?._id : student.selectedBranch))?.name || "-";
 
                           return (
-                            <tr key={student._id} className="hover:bg-slate-50/80 transition-colors group">
+                            <motion.tr 
+                              key={student._id} 
+                              initial={{ opacity: 0, x: -16, y: 8 }}
+                              animate={{ opacity: 1, x: 0, y: 0 }}
+                              transition={{ 
+                                delay: Math.min((index % 24) * 0.035, 0.75),
+                                duration: 0.28,
+                                ease: [0.22, 1, 0.36, 1]
+                              }}
+                              className="hover:bg-indigo-50/50 transition-colors group"
+                            >
                               <td className="py-4 px-5">
                                 <div className="flex items-center gap-3">
-                                  <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-indigo-700 text-xs shrink-0 overflow-hidden">
+                                  {/* Cascading Index Sequence: #1, #2, #3 */}
+                                  <span className="w-6 text-[10px] font-black text-slate-300 group-hover:text-indigo-600 transition-colors text-right shrink-0">
+                                    #{index + 1}
+                                  </span>
+                                  <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-indigo-700 text-xs shrink-0 overflow-hidden shadow-xs">
                                     {student.profilePhoto || student.documents?.studentPhoto ? (
                                       <img 
                                         src={student.profilePhoto || student.documents?.studentPhoto} 
@@ -1084,7 +1446,7 @@ export default function StudentManagementDashboard() {
                                   </button>
                                 </div>
                               </td>
-                            </tr>
+                            </motion.tr>
                           );
                         })}
                       </tbody>
@@ -1094,29 +1456,40 @@ export default function StudentManagementDashboard() {
 
                 {/* MOBILE VIEW: RESPONSIVE CARDS */}
                 <div className="block md:hidden space-y-4">
-                  {filteredStudents.map(student => {
+                  {displayedStudents.map((student, index) => {
                     const feeInfo = getFeeInfo(student);
                     const isPaid = feeInfo.status === "paid";
                     const courseName = courses.find(c => c._id === (typeof student.selectedProgram === 'object' ? student.selectedProgram?._id : student.selectedProgram))?.name || "Unassigned";
                     const branchName = branches.find(b => b._id === (typeof student.selectedBranch === 'object' ? student.selectedBranch?._id : student.selectedBranch))?.name || "";
 
                     return (
-                      <div
+                      <motion.div
                         key={student._id}
-                        className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3"
+                        initial={{ opacity: 0, y: 18 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ 
+                          delay: Math.min((index % 24) * 0.035, 0.75),
+                          duration: 0.26 
+                        }}
+                        className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3 relative overflow-hidden"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-indigo-700 text-xs shrink-0 overflow-hidden">
-                              {student.profilePhoto || student.documents?.studentPhoto ? (
-                                <img 
-                                  src={student.profilePhoto || student.documents?.studentPhoto} 
-                                  alt="" 
-                                  className="w-full h-full object-cover" 
-                                />
-                              ) : (
-                                <span>{student.firstName?.[0]}{student.lastName?.[0]}</span>
-                              )}
+                            <div className="relative">
+                              <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-indigo-700 text-xs shrink-0 overflow-hidden shadow-xs">
+                                {student.profilePhoto || student.documents?.studentPhoto ? (
+                                  <img 
+                                    src={student.profilePhoto || student.documents?.studentPhoto} 
+                                    alt="" 
+                                    className="w-full h-full object-cover" 
+                                  />
+                                ) : (
+                                  <span>{student.firstName?.[0]}{student.lastName?.[0]}</span>
+                                )}
+                              </div>
+                              <span className="absolute -bottom-1 -right-1 px-1.5 py-0.2 bg-slate-900 text-white font-black text-[9px] rounded-md border border-white">
+                                #{index + 1}
+                              </span>
                             </div>
                             <div>
                               <h3 className="font-black text-slate-900 text-sm leading-tight">
@@ -1181,11 +1554,66 @@ export default function StudentManagementDashboard() {
                             </button>
                           )}
                         </div>
-                      </div>
+                      </motion.div>
                     );
                   })}
                 </div>
 
+              </div>
+            )}
+
+            {/* LAZY LOADING PROGRESS & CONTROLS */}
+            {viewMode !== "branch_course" && filteredStudents.length > 0 && (
+              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
+                <div className="flex items-center gap-3">
+                  <div className="text-xs font-bold text-slate-500">
+                    Showing <span className="font-black text-slate-900">{displayedStudents.length}</span> of{" "}
+                    <span className="font-black text-slate-900">{filteredStudents.length}</span> students
+                  </div>
+                  <div className="w-32 bg-slate-100 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.min(100, Math.round((displayedStudents.length / (filteredStudents.length || 1)) * 100))}%` }}
+                    />
+                  </div>
+                  <span className="text-[11px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                    {Math.min(100, Math.round((displayedStudents.length / (filteredStudents.length || 1)) * 100))}%
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {visibleCount < filteredStudents.length ? (
+                    <>
+                      <button
+                        onClick={() => setVisibleCount(prev => Math.min(prev + 24, filteredStudents.length))}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center gap-1.5"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        Load Next 24 Students
+                      </button>
+                      <button
+                        onClick={() => setVisibleCount(filteredStudents.length)}
+                        className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all"
+                      >
+                        Show All ({filteredStudents.length})
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-xs font-bold text-emerald-600 flex items-center gap-1.5 bg-emerald-50 px-3.5 py-2 rounded-xl border border-emerald-100">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" /> All {filteredStudents.length} Students Loaded
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Infinite Scroll Sentinel for Lazy Loading */}
+            {viewMode !== "branch_course" && visibleCount < filteredStudents.length && (
+              <div ref={observerTarget} className="h-12 flex items-center justify-center py-4">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                  <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+                  <span>Loading more students on scroll...</span>
+                </div>
               </div>
             )}
           </>

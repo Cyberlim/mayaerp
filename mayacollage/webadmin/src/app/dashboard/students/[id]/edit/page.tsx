@@ -34,6 +34,75 @@ export default function EditStudentFullPage() {
   });
 
   useEffect(() => {
+    // 1. Instant hydration from localStorage if available
+    if (typeof window !== "undefined") {
+      try {
+        const cachedBranches = localStorage.getItem("mayacollage_branches_cache");
+        const cachedCourses = localStorage.getItem("mayacollage_courses_cache");
+        if (cachedBranches) setBranches(JSON.parse(cachedBranches));
+        if (cachedCourses) setCourses(JSON.parse(cachedCourses));
+
+        const detailRaw = localStorage.getItem(`maya_student_detail_${studentId}`);
+        let st = detailRaw ? JSON.parse(detailRaw)?.student : null;
+        if (!st) {
+          const listRaw = localStorage.getItem("mayacollage_students_cache");
+          if (listRaw) {
+            const list = JSON.parse(listRaw);
+            if (Array.isArray(list)) st = list.find((s: any) => s._id === studentId);
+          }
+        }
+        if (st) {
+          setFormData({
+            firstName: st.firstName || "",
+            lastName: st.lastName || "",
+            dob: st.dob || "",
+            gender: st.gender || "",
+            category: st.category || "General",
+            admissionNumber: st.admissionNumber || "",
+            studentId: st.studentId || "",
+            email: st.email || "",
+            phone: st.phone || st.mobile || "",
+            alternateMobile: st.alternateMobile || "",
+            city: st.city || "",
+            state: st.state || "",
+            pinCode: st.pinCode || "",
+            address: st.address || "",
+            profilePhoto: st.profilePhoto || "",
+
+            selectedBranch: typeof st.selectedBranch === 'object' ? st.selectedBranch?._id : st.selectedBranch || "",
+            selectedProgram: typeof st.selectedProgram === 'object' ? st.selectedProgram?._id : st.selectedProgram || "",
+            sessionYear: st.sessionYear || "",
+            selectedSemester: st.selectedSemester || 1,
+            selectedSection: st.selectedSection || "Section A",
+
+            highestQualification: st.highestQualification || "",
+            boardUniversity: st.boardUniversity || "",
+            institutionName: st.institutionName || "",
+            percentageCGPA: st.percentageCGPA || "",
+            yearOfPassing: st.yearOfPassing || "",
+
+            subjectMarks: {
+              subject1: st.subjectMarks?.subject1 || "",
+              subject2: st.subjectMarks?.subject2 || "",
+              subject3: st.subjectMarks?.subject3 || ""
+            },
+            entranceScore: st.entranceScore || "",
+            statementOfPurpose: st.statementOfPurpose || "",
+
+            fees: {
+              semester: st.fees?.semester || 0,
+              transport: st.fees?.transport || 0,
+              exam: st.fees?.exam || 0,
+              other: st.fees?.other || 0
+            }
+          });
+          setIsLoading(false);
+        }
+      } catch (e) {
+        console.warn("Edit page cache read error:", e);
+      }
+    }
+
     Promise.all([
       fetch("/api/branches").then(res => res.json()),
       fetch("/api/courses").then(res => res.json()),
@@ -95,17 +164,42 @@ export default function EditStudentFullPage() {
     e.preventDefault();
     setIsSaving(true);
     try {
+      const selectedCourse = courses.find(c => c._id === formData.selectedProgram);
+      const selectedBranchFull = branches.find(b => b._id === formData.selectedBranch);
+
+      const payload = {
+        ...formData,
+        ...(selectedBranchFull ? { branchName: selectedBranchFull.name || selectedBranchFull.branchName } : {}),
+        ...(selectedCourse ? { courseName: selectedCourse.name || selectedCourse.courseName } : {})
+      };
+
       const res = await fetch(`/api/students/${studentId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (res.ok) {
         setToastMsg("Student updated successfully!");
+        try {
+          // Update both detail cache and list cache in localStorage
+          localStorage.removeItem(`maya_student_detail_${studentId}`);
+          sessionStorage.removeItem(`maya_student_detail_${studentId}`);
+          
+          const localCached = localStorage.getItem("mayacollage_students_cache");
+          if (localCached) {
+            const list = JSON.parse(localCached);
+            if (Array.isArray(list)) {
+              const updatedList = list.map((s: any) => s._id === studentId ? { ...s, ...data } : s);
+              localStorage.setItem("mayacollage_students_cache", JSON.stringify(updatedList));
+              sessionStorage.setItem("mayacollage_students_cache", JSON.stringify(updatedList));
+            }
+          }
+        } catch (_) {}
+
         setTimeout(() => {
           router.push(`/dashboard/students/${studentId}`);
-        }, 1500);
+        }, 1200);
       } else {
         alert(data.error || "Failed to update student.");
       }

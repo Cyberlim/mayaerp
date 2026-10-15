@@ -10,296 +10,166 @@ import {
   Search,
   Download,
   AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
+  ChevronDown,
   Activity,
-  FileText,
   CalendarDays,
   XCircle,
-  Sun,
-  Trash2,
-  Plus,
   Save,
-  CheckCircle
+  Zap,
+  RefreshCw,
+  UserCheck,
+  UserX,
+  FileSpreadsheet
 } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-export default function AttendanceAnalyticsDashboard() {
-  const [activeTab, setActiveTab] = useState("Mark Attendance");
-  
+export default function AttendancePage() {
   const today = new Date().toISOString().split('T')[0];
 
-  // Filtering
+  // Filters
   const [branches, setBranches] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
-  const [subjects, setSubjects] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [selectedBranch, setSelectedBranch] = useState("");
   const [selectedCourse, setSelectedCourse] = useState("");
-  const [selectedStudentId, setSelectedStudentId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  
-  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0]);
-
-  // Reset Specific
-  const [resetBranch, setResetBranch] = useState("");
-  const [resetCourse, setResetCourse] = useState("");
-  const [resetCourses, setResetCourses] = useState<any[]>([]);
-  const [canUndo, setCanUndo] = useState(false);
-  const [isRestoring, setIsRestoring] = useState(false);
-
-  // Analytics Data
-  const [analytics, setAnalytics] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  // Holidays
-  const [holidays, setHolidays] = useState<any[]>([]);
-  const [holidayForm, setHolidayForm] = useState({ name: "", date: "", type: "National" });
-  
-  // Reset
-  const [resetReason, setResetReason] = useState("");
-
-  // Mark Attendance State
   const [markDate, setMarkDate] = useState(today);
-  const [markSubject, setMarkSubject] = useState("");
+  const [markSubject, setMarkSubject] = useState("General Attendance");
+  
+  // State
   const [attendanceRecords, setAttendanceRecords] = useState<Record<string, string>>({});
-  const [isSavingMark, setIsSavingMark] = useState(false);
+  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [fromCache, setFromCache] = useState(false);
+  const [toastMsg, setToastMsg] = useState("");
 
+  // 0ms Cache Hydration on mount
   useEffect(() => {
+    try {
+      const cachedBranches = localStorage.getItem("maya_academics_branches_cache");
+      const cachedCourses = localStorage.getItem("maya_academics_courses_cache");
+      
+      let hasCache = false;
+      if (cachedBranches) {
+        setBranches(JSON.parse(cachedBranches));
+        hasCache = true;
+      }
+      if (cachedCourses) {
+        setCourses(JSON.parse(cachedCourses));
+        hasCache = true;
+      }
+      if (hasCache) setFromCache(true);
+    } catch (_) {}
+
     fetchBranches();
   }, []);
 
-  useEffect(() => {
-    if (selectedBranch) {
-      fetchCourses(selectedBranch);
-      fetchHolidays();
-    } else {
-      setCourses([]);
-      setSelectedCourse("");
-      setHolidays([]);
-      setSubjects([]);
-    }
-  }, [selectedBranch]);
-
-  useEffect(() => {
-    if ((selectedBranch && selectedCourse) || searchQuery.length >= 2) {
-      const timer = setTimeout(() => {
-        fetchStudents();
-        if (selectedBranch && selectedCourse) {
-          fetchSubjects(selectedBranch, selectedCourse);
-        }
-      }, 300);
-      return () => clearTimeout(timer);
-    } else if (!selectedBranch && !selectedCourse) {
-      setStudents([]);
-      setSubjects([]);
-    }
-  }, [selectedBranch, selectedCourse, searchQuery]);
-
-  useEffect(() => {
-    if (resetBranch) {
-      const fetchResetCourses = async () => {
-        try {
-          const res = await fetch(`/api/courses?branchId=${resetBranch}`);
-          setResetCourses(await res.json());
-        } catch (e) {}
-      };
-      fetchResetCourses();
-    } else {
-      setResetCourses([]);
-      setResetCourse("");
-    }
-  }, [resetBranch]);
-
-  // Fetch existing attendance when date, subject, or class changes
-  useEffect(() => {
-    const fetchExistingAttendance = async () => {
-      if (students.length === 0) {
-        setAttendanceRecords({});
-        return;
-      }
-      
-      try {
-        const studentIds = students.map(s => s._id).join(',');
-        const subject = markSubject || 'General Attendance';
-        const url = `/api/attendance?date=${markDate}&studentIds=${studentIds}&subject=${encodeURIComponent(subject)}`;
-        
-        const res = await fetch(url);
-        if (res.ok) {
-          const data = await res.json();
-          const newRecords: Record<string, string> = {};
-          data.forEach((d: any) => {
-            newRecords[d._id] = d.status || 'Present';
-          });
-          setAttendanceRecords(newRecords);
-        } else {
-          throw new Error("Failed to fetch");
-        }
-      } catch (e) {
-        // Fallback: Default everyone to Present
-        const defaultRecords: Record<string, string> = {};
-        students.forEach(s => defaultRecords[s._id] = 'Present');
-        setAttendanceRecords(defaultRecords);
-      }
-    };
-    
-    fetchExistingAttendance();
-  }, [students, markDate, markSubject]);
-
-  useEffect(() => {
-    if (selectedStudentId && startDate && endDate) {
-      fetchAnalytics();
-    }
-  }, [selectedStudentId, startDate, endDate]);
-
   const fetchBranches = async () => {
     try {
-      const res = await fetch("/api/branches");
-      setBranches(await res.json());
-    } catch (e) {}
-  };
+      const [bRes, cRes] = await Promise.all([
+        fetch("/api/branches"),
+        fetch("/api/courses")
+      ]);
+      const bData = await bRes.json();
+      const cData = await cRes.json();
+      
+      const bList = Array.isArray(bData) ? bData : [];
+      const cList = Array.isArray(cData) ? cData : [];
+      setBranches(bList);
+      setCourses(cList);
 
-  const fetchCourses = async (branchId: string) => {
-    try {
-      const res = await fetch(`/api/courses?branchId=${branchId}`);
-      setCourses(await res.json());
-    } catch (e) {}
-  };
-
-  const fetchSubjects = async (branchId: string, courseId: string) => {
-    try {
-      const res = await fetch(`/api/subjects?branchId=${branchId}&courseId=${courseId}`);
-      setSubjects(await res.json());
-    } catch (e) {}
-  };
-
-  const fetchStudents = async () => {
-    try {
-      let url = "/api/students?";
-      if (selectedBranch) url += `selectedBranch=${selectedBranch}&`;
-      if (selectedCourse) url += `selectedProgram=${selectedCourse}&`;
-      if (searchQuery) url += `search=${searchQuery}&`;
-
-      const res = await fetch(url);
-      const data = await res.json();
-      setStudents(Array.isArray(data) ? data : []);
-    } catch (e) {}
-  };
-
-  const fetchHolidays = async () => {
-    try {
-      let url = "/api/holidays?";
-      if (selectedBranch) url += `branchId=${selectedBranch}`;
-      const res = await fetch(url);
-      setHolidays(await res.json());
-    } catch (e) {}
-  };
-
-  const fetchAnalytics = async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/attendance/analytics?studentId=${selectedStudentId}&startDate=${startDate}&endDate=${endDate}`);
-      if (res.ok) {
-        setAnalytics(await res.json());
-      } else {
-        setAnalytics(null);
-      }
+      try {
+        localStorage.setItem("maya_academics_branches_cache", JSON.stringify(bList));
+        localStorage.setItem("maya_academics_courses_cache", JSON.stringify(cList));
+      } catch (_) {}
     } catch (e) {
-      setAnalytics(null);
-    } finally {
-      setIsLoading(false);
+      console.error(e);
     }
   };
 
-  const handleAddHoliday = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedBranch) return alert("Please select a branch first to add a holiday.");
-    if (!holidayForm.name || !holidayForm.date) return;
+  // Load students based on course, branch, or search
+  useEffect(() => {
+    const fetchStudents = async () => {
+      setIsLoadingStudents(true);
+      try {
+        let url = `/api/students?limit=100`;
+        if (selectedBranch) url += `&selectedBranch=${selectedBranch}`;
+        if (selectedCourse) url += `&selectedProgram=${selectedCourse}`;
+        if (searchQuery.trim()) url += `&search=${encodeURIComponent(searchQuery)}`;
+
+        const res = await fetch(url);
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : (data.students || []);
+        setStudents(list);
+
+        // Fetch existing attendance for these students on this date from PostgreSQL
+        if (list.length > 0) {
+          const studentIds = list.map((s: any) => s.id || s._id).join(',');
+          const attRes = await fetch(`/api/attendance?date=${markDate}&studentIds=${studentIds}&subject=${encodeURIComponent(markSubject)}`);
+          if (attRes.ok) {
+            const attData = await attRes.json();
+            const recs: Record<string, string> = {};
+            attData.forEach((item: any) => {
+              const sid = item.student || item.id || item._id;
+              recs[sid] = item.status || 'Present';
+            });
+            setAttendanceRecords(recs);
+          }
+        } else {
+          setAttendanceRecords({});
+        }
+      } catch (err) {
+        console.error("Error fetching students/attendance:", err);
+      } finally {
+        setIsLoadingStudents(false);
+      }
+    };
+
+    const timer = setTimeout(fetchStudents, 200);
+    return () => clearTimeout(timer);
+  }, [selectedBranch, selectedCourse, searchQuery, markDate, markSubject]);
+
+  const toggleStudentStatus = (studentId: string, currentStatus: string) => {
+    const nextStatus = currentStatus === 'Present' ? 'Absent' : currentStatus === 'Absent' ? 'Late' : 'Present';
+    setAttendanceRecords(prev => ({
+      ...prev,
+      [studentId]: nextStatus
+    }));
+  };
+
+  const setStatusForStudent = (studentId: string, status: string) => {
+    setAttendanceRecords(prev => ({
+      ...prev,
+      [studentId]: status
+    }));
+  };
+
+  const markAll = (status: string) => {
+    const updated: Record<string, string> = {};
+    students.forEach(s => {
+      const sid = s.id || s._id;
+      updated[sid] = status;
+    });
+    setAttendanceRecords(updated);
+  };
+
+  const saveAttendance = async () => {
+    if (students.length === 0) return;
+
+    setIsSaving(true);
     try {
-      const res = await fetch("/api/holidays", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...holidayForm, branchId: selectedBranch })
+      const recordsToSave = students.map(s => {
+        const sid = s.id || s._id;
+        return {
+          student: sid,
+          studentId: s.studentId || s.student_id || sid,
+          studentName: `${s.firstName || ''} ${s.lastName || ''}`.trim() || 'Student',
+          status: attendanceRecords[sid] || 'Present'
+        };
       });
-      if (res.ok) {
-        setHolidayForm({ name: "", date: "", type: "National" });
-        fetchHolidays();
-        if (selectedStudentId) fetchAnalytics();
-      }
-    } catch (e) {}
-  };
 
-  const handleDeleteHoliday = async (id: string) => {
-    try {
-      const res = await fetch(`/api/holidays?id=${id}`, { method: "DELETE" });
-      if (res.ok) {
-        fetchHolidays();
-        if (selectedStudentId) fetchAnalytics();
-      }
-    } catch (e) {}
-  };
-
-  const handleResetAttendance = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!resetBranch || !resetCourse) {
-      return alert("Please select a Branch and Course first.");
-    }
-    if (!confirm("Are you sure you want to reset attendance for ALL students in this Branch & Course for this date range? This cannot be undone (except via 1-time restore).")) return;
-    
-    try {
-      const res = await fetch(`/api/attendance/reset?branchId=${resetBranch}&courseId=${resetCourse}&startDate=${startDate}&endDate=${endDate}&reason=${encodeURIComponent(resetReason)}`, {
-        method: "DELETE"
-      });
-      const data = await res.json();
-      if (res.ok) {
-        alert(`Reset successful. Deleted ${data.count} attendance records.`);
-        setCanUndo(true); // Enable the undo button
-        if (selectedStudentId) fetchAnalytics();
-      } else {
-        alert("Reset failed: " + data.error);
-      }
-    } catch (e) {
-      alert("Error resetting attendance.");
-    }
-  };
-
-  const handleUndoReset = async () => {
-    if (!confirm("Are you sure you want to restore the last reset records?")) return;
-    setIsRestoring(true);
-    try {
-      const res = await fetch(`/api/attendance/restore`, { method: "POST", body: JSON.stringify({}) });
-      const data = await res.json();
-      if (res.ok) {
-        alert(`Restore successful. Restored ${data.count} attendance records.`);
-        setCanUndo(false);
-        if (selectedStudentId) fetchAnalytics();
-      } else {
-        alert("Restore failed: " + data.message);
-      }
-    } catch (e) {
-      alert("Error restoring attendance.");
-    } finally {
-      setIsRestoring(false);
-    }
-  };
-
-  const handleSaveAttendance = async () => {
-    if (!selectedBranch || !selectedCourse) return alert("Please select a branch and course first.");
-    if (!markSubject.trim()) return alert("Please enter a subject name.");
-    
-    setIsSavingMark(true);
-    try {
-      const recordsToSave = students.map(student => ({
-        student: student._id,
-        studentId: student.studentId,
-        studentName: `${student.firstName} ${student.lastName}`,
-        status: attendanceRecords[student._id] || 'Present'
-      }));
-
-      const res = await fetch("/api/attendance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date: markDate,
           subject: markSubject,
@@ -308,457 +178,306 @@ export default function AttendanceAnalyticsDashboard() {
       });
 
       if (res.ok) {
-        alert("Attendance saved successfully!");
-        if (selectedStudentId) fetchAnalytics(); // Refresh analytics if a student is selected
+        setToastMsg(`Saved ${recordsToSave.length} attendance records to PostgreSQL!`);
+        setTimeout(() => setToastMsg(""), 3500);
       } else {
-        alert("Failed to save attendance.");
+        throw new Error("Failed to save");
       }
-    } catch (e) {
-      alert("Error saving attendance.");
+    } catch (err: any) {
+      alert("Error saving attendance: " + err.message);
     } finally {
-      setIsSavingMark(false);
+      setIsSaving(false);
     }
   };
 
-  const renderCalendar = () => {
-    if (!analytics) return null;
-    
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
-    const firstDay = new Date(start.getFullYear(), start.getMonth(), 1).getDay();
-    
-    const days = [];
-    for (let i = 0; i < firstDay; i++) days.push(null);
-    for (let i = 1; i <= daysInMonth; i++) {
-      const d = new Date(start.getFullYear(), start.getMonth(), i);
-      days.push(d);
-    }
+  // Metrics
+  const presentCount = Object.values(attendanceRecords).filter(s => s === 'Present').length;
+  const absentCount = Object.values(attendanceRecords).filter(s => s === 'Absent').length;
+  const lateCount = Object.values(attendanceRecords).filter(s => s === 'Late').length;
+  const totalCount = students.length || 1;
+  const attendanceRate = Math.round(((presentCount + (lateCount * 0.5)) / totalCount) * 100);
 
-    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-    return (
-      <div className="w-full">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="font-black text-slate-800">Attendance Calendar - {start.toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
-          <div className="flex gap-2">
-            <button className="p-1 border border-slate-200 rounded hover:bg-slate-50"><ChevronLeft className="w-4 h-4" /></button>
-            <button className="p-1 border border-slate-200 rounded hover:bg-slate-50"><ChevronRight className="w-4 h-4" /></button>
-            <button className="px-3 py-1 text-xs border border-slate-200 rounded font-bold hover:bg-slate-50">Today</button>
-          </div>
-        </div>
-        <div className="grid grid-cols-7 gap-1 mb-2">
-          {dayLabels.map(l => <div key={l} className="text-center text-[10px] font-black uppercase tracking-widest text-slate-400">{l}</div>)}
-        </div>
-        <div className="grid grid-cols-7 gap-2">
-          {days.map((d, i) => {
-            if (!d) return <div key={i} className="aspect-square"></div>;
-            
-            const dateStr = d.toISOString().split('T')[0];
-            const calData = analytics.calendarData?.[dateStr];
-            let dot = null;
-
-            if (calData) {
-              if (calData.status === 'Present') dot = <span className="w-4 h-4 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-[8px] font-black">P</span>;
-              else if (calData.status === 'Absent') dot = <span className="w-4 h-4 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center text-[8px] font-black">A</span>;
-              else if (calData.status === 'Holiday') dot = <span className="w-4 h-4 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center text-[8px] font-black">H</span>;
-            }
-
-            return (
-              <div key={i} className="aspect-square border border-slate-100 rounded-xl p-1 flex flex-col items-center justify-between hover:border-indigo-200 transition-colors cursor-pointer bg-white">
-                <span className={`text-xs font-bold ${calData ? 'text-slate-800' : 'text-slate-300'}`}>{d.getDate()}</span>
-                {dot}
-              </div>
-            );
-          })}
-        </div>
-        <div className="flex gap-4 mt-6 text-xs font-bold text-slate-500 justify-center">
-          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-[7px] font-black">P</span> Present</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center text-[7px] font-black">A</span> Absent</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center text-[7px] font-black">H</span> Holiday</span>
-        </div>
-      </div>
-    );
-  };
+  const filteredCourses = courses.filter(c => selectedBranch ? (c.branchId === selectedBranch || c.branch_id === selectedBranch || c.branchId?._id === selectedBranch) : true);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-20 relative font-sans text-slate-800">
-      {/* Header & Filters */}
-      <div className="bg-white border-b border-slate-100 shadow-sm sticky top-0 z-30">
-        <div className="max-w-[1600px] mx-auto px-6 lg:px-8 py-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-black text-slate-900 tracking-tight">Student Attendance</h1>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="Search Admission No..." 
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm font-bold outline-none w-48"
-                />
-              </div>
+    <div className="min-h-screen pb-24 font-sans text-slate-800">
+      
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toastMsg && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            exit={{ opacity: 0, y: -20 }} 
+            className="fixed top-8 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-6 py-3 rounded-full font-bold shadow-xl shadow-emerald-500/25 flex items-center gap-3 text-sm"
+          >
+            <CheckCircle2 className="w-5 h-5" /> {toastMsg}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-              <select value={selectedBranch} onChange={e => setSelectedBranch(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold outline-none">
-                <option value="">Select Branch</option>
-                {branches.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
-              </select>
-              
-              <select value={selectedCourse} onChange={e => setSelectedCourse(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold outline-none">
-                <option value="">Select Course</option>
-                {courses.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-              </select>
-
-              <select disabled={!students.length} value={selectedStudentId} onChange={e => setSelectedStudentId(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold outline-none w-48">
-                <option value="">Select Student...</option>
-                {students.map(s => <option key={s._id} value={s._id}>{s.firstName} {s.lastName} ({s.studentId})</option>)}
-              </select>
-
-              <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent text-sm font-bold outline-none" />
-                <span className="mx-2 text-slate-400">-</span>
-                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent text-sm font-bold outline-none" />
-              </div>
-
-              <button className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm">
-                <Download className="w-4 h-4" /> Export
-              </button>
-            </div>
+      {/* Top Banner */}
+      <div className="bg-white border-b border-slate-100 p-6 lg:p-8 flex flex-col md:flex-row justify-between md:items-center gap-6 rounded-[2rem] border shadow-sm mb-6">
+        <div>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-bold">
+              <Zap className="w-3.5 h-3.5 fill-emerald-500" />
+              <span>{fromCache ? "0ms Instant Cache" : "PostgreSQL • Neon"}</span>
+            </span>
+            <span className="text-xs text-slate-400 font-semibold">• Simple Fast Register</span>
           </div>
+          <h1 className="text-2xl lg:text-3xl font-black text-slate-900 tracking-tight">Attendance Center</h1>
+          <p className="text-xs lg:text-sm text-slate-500 mt-1">Mark daily student attendance and save records directly to PostgreSQL</p>
+        </div>
 
-          <div className="flex gap-8 mt-4">
-            {['Mark Attendance', 'Manage', 'Overview', 'Lecture Wise', 'Monthly', 'Weekly', 'Daily'].map(tab => (
-              <button 
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`pb-3 text-sm font-bold border-b-2 transition-all ${activeTab === tab ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}
-              >
-                {tab}
-              </button>
-            ))}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => markAll('Present')}
+            className="px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-xl text-xs transition-colors flex items-center gap-1.5"
+          >
+            <UserCheck className="w-4 h-4" /> All Present
+          </button>
+          <button
+            onClick={() => markAll('Absent')}
+            className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs transition-colors flex items-center gap-1.5"
+          >
+            <UserX className="w-4 h-4" /> All Absent
+          </button>
+          <button 
+            onClick={saveAttendance}
+            disabled={isSaving || students.length === 0}
+            className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition-all disabled:opacity-50 text-sm"
+          >
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} 
+            Save Attendance
+          </button>
+        </div>
+      </div>
+
+      {/* Filter Bar */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        <div>
+          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 pl-1">Date</label>
+          <input
+            type="date"
+            value={markDate}
+            onChange={e => setMarkDate(e.target.value)}
+            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20"
+          />
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 pl-1">Branch</label>
+          <select 
+            value={selectedBranch} 
+            onChange={e => { setSelectedBranch(e.target.value); setSelectedCourse(""); }}
+            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer"
+          >
+            <option value="">All Branches</option>
+            {branches.map(b => <option key={b.id || b._id} value={b.id || b._id}>{b.name}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 pl-1">Course / Program</label>
+          <select 
+            value={selectedCourse} 
+            onChange={e => setSelectedCourse(e.target.value)}
+            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer"
+          >
+            <option value="">All Courses</option>
+            {filteredCourses.map(c => <option key={c.id || c._id} value={c.id || c._id}>{c.name}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 pl-1">Subject</label>
+          <input
+            type="text"
+            placeholder="e.g. Data Structures"
+            value={markSubject}
+            onChange={e => setMarkSubject(e.target.value)}
+            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 pl-1">Search Student</label>
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Name or roll no..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none"
+            />
           </div>
         </div>
       </div>
 
-      <div className="max-w-[1600px] mx-auto px-6 lg:px-8 mt-6">
-        {activeTab === 'Mark Attendance' ? (
-          <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-8">
-            <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-              <div>
-                <h2 className="text-xl font-black text-slate-800">Mark Attendance</h2>
-                <p className="text-sm text-slate-500 font-medium mt-1">Record attendance for {students.length} students</p>
-              </div>
-              <div className="flex items-center gap-4">
-                <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Date</label>
-                  <input type="date" value={markDate} onChange={e=>setMarkDate(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold outline-none" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Subject</label>
-                  <select value={markSubject} onChange={e=>setMarkSubject(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold outline-none w-48">
-                    <option value="">Select Subject</option>
-                    {subjects.map(sub => (
-                      <option key={sub._id} value={sub.subjectName}>{sub.subjectName}</option>
-                    ))}
-                    {subjects.length === 0 && <option value="General">General (Default)</option>}
-                  </select>
-                </div>
-                <div className="self-end pb-0.5">
-                  <button onClick={handleSaveAttendance} disabled={isSavingMark || students.length === 0} className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50">
-                    {isSavingMark ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Save Attendance
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {students.length === 0 ? (
-              <div className="py-20 text-center flex flex-col items-center">
-                <Users className="w-12 h-12 text-slate-200 mb-4" />
-                <p className="text-slate-500 font-bold">Please select a Branch and Course above to load students.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto border border-slate-100 rounded-2xl">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50">
-                    <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                      <th className="p-4 rounded-tl-2xl">Roll No</th>
-                      <th className="p-4">Student Name</th>
-                      <th className="p-4 text-center rounded-tr-2xl">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {(selectedStudentId ? students.filter(s => s._id === selectedStudentId) : students).map((student) => (
-                      <tr key={student._id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="p-4 font-bold text-slate-700">{student.studentId}</td>
-                        <td className="p-4 font-semibold text-slate-800">{student.firstName} {student.lastName}</td>
-                        <td className="p-4">
-                          <div className="flex items-center justify-center gap-2">
-                            <button onClick={() => setAttendanceRecords({...attendanceRecords, [student._id]: 'Present'})} className={`px-4 py-1.5 rounded-full text-xs font-black tracking-wider uppercase transition-all ${attendanceRecords[student._id] === 'Present' ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
-                              Present
-                            </button>
-                            <button onClick={() => setAttendanceRecords({...attendanceRecords, [student._id]: 'Absent'})} className={`px-4 py-1.5 rounded-full text-xs font-black tracking-wider uppercase transition-all ${attendanceRecords[student._id] === 'Absent' ? 'bg-rose-500 text-white shadow-md shadow-rose-500/30' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
-                              Absent
-                            </button>
-                            <button onClick={() => setAttendanceRecords({...attendanceRecords, [student._id]: 'Late'})} className={`px-4 py-1.5 rounded-full text-xs font-black tracking-wider uppercase transition-all ${attendanceRecords[student._id] === 'Late' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/30' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
-                              Late
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+      {/* KPI Stats Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Enrolled</span>
+            <h3 className="text-xl font-black text-slate-900 mt-0.5">{students.length}</h3>
           </div>
-        ) : activeTab === 'Manage' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Holiday Management */}
-            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col h-[400px]">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-black text-slate-800">Holiday Management</h3>
-              </div>
-              
-              <form onSubmit={handleAddHoliday} className="flex gap-2 mb-4 bg-slate-50 p-3 rounded-xl">
-                <input required type="date" value={holidayForm.date} onChange={e=>setHolidayForm({...holidayForm, date: e.target.value})} className="flex-1 bg-white border border-slate-200 rounded p-2 text-xs font-bold outline-none" />
-                <input required type="text" placeholder="Holiday Name" value={holidayForm.name} onChange={e=>setHolidayForm({...holidayForm, name: e.target.value})} className="flex-2 bg-white border border-slate-200 rounded p-2 text-xs font-bold outline-none" />
-                <button type="submit" className="bg-blue-600 text-white px-3 rounded flex items-center justify-center hover:bg-blue-700"><Plus className="w-4 h-4" /></button>
-              </form>
-
-              <div className="overflow-y-auto flex-1">
-                <table className="w-full text-left text-xs">
-                  <thead className="sticky top-0 bg-white">
-                    <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
-                      <th className="pb-2">Date</th>
-                      <th className="pb-2">Day</th>
-                      <th className="pb-2">Name</th>
-                      <th className="pb-2 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {holidays.map(h => (
-                      <tr key={h._id} className="border-b border-slate-50">
-                        <td className="py-2 font-semibold text-slate-700">{new Date(h.date).toISOString().split('T')[0]}</td>
-                        <td className="py-2 text-slate-500">{h.day}</td>
-                        <td className="py-2 font-semibold text-slate-700">{h.name}</td>
-                        <td className="py-2 text-center">
-                          <button onClick={() => handleDeleteHoliday(h._id)} className="text-rose-400 hover:text-rose-600 p-1"><Trash2 className="w-3 h-3" /></button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="mt-4 p-3 bg-emerald-50 rounded-xl flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5" />
-                <p className="text-xs text-emerald-700 font-medium">Holidays are not counted in attendance percentage calculation.</p>
-              </div>
-            </div>
-
-            {/* Reset Attendance */}
-            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col h-[500px]">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-black text-slate-800">Reset Attendance</h3>
-                {canUndo && (
-                  <button onClick={handleUndoReset} disabled={isRestoring} className="px-3 py-1 bg-amber-100 text-amber-700 font-bold text-xs rounded hover:bg-amber-200 flex items-center gap-1">
-                    {isRestoring ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                    Undo Last Reset
-                  </button>
-                )}
-              </div>
-              <div className="p-4 bg-rose-50 text-rose-700 rounded-xl text-xs font-bold mb-4">
-                Resetting will clear all attendance records for the selected Branch & Course in this period and cannot be undone (except via Undo).
-              </div>
-              
-              <form onSubmit={handleResetAttendance} className="space-y-4 flex-1 flex flex-col">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Branch</label>
-                    <select required value={resetBranch} onChange={e => setResetBranch(e.target.value)} className="w-full mt-1 bg-slate-50 border border-slate-200 p-2 rounded-xl text-sm font-bold outline-none">
-                      <option value="">Select Branch</option>
-                      {branches.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Course</label>
-                    <select required value={resetCourse} onChange={e => setResetCourse(e.target.value)} className="w-full mt-1 bg-slate-50 border border-slate-200 p-2 rounded-xl text-sm font-bold outline-none">
-                      <option value="">Select Course</option>
-                      {resetCourses.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">From Date</label>
-                    <input type="date" required className="w-full mt-1 bg-slate-50 border border-slate-200 p-2 rounded-xl text-sm font-bold outline-none" value={startDate} onChange={e=>setStartDate(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">To Date</label>
-                    <input type="date" required className="w-full mt-1 bg-slate-50 border border-slate-200 p-2 rounded-xl text-sm font-bold outline-none" value={endDate} onChange={e=>setEndDate(e.target.value)} />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Reason (Optional)</label>
-                  <input type="text" placeholder="End of Semester Reset" className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold outline-none" value={resetReason} onChange={e=>setResetReason(e.target.value)} />
-                </div>
-                <div className="pt-4 mt-auto">
-                  <button type="submit" disabled={!resetBranch || !resetCourse} className="w-full py-3 bg-rose-600 text-white font-bold rounded-xl shadow-lg shadow-rose-600/20 hover:bg-rose-700 transition-colors disabled:opacity-50">
-                    Reset Attendance
-                  </button>
-                </div>
-              </form>
-            </div>
+          <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 font-bold">
+            <Users className="w-5 h-5" />
           </div>
-        ) : isLoading ? (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-            <Loader2 className="w-8 h-8 animate-spin mb-4" />
-            <p className="font-bold">Analyzing attendance data...</p>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Present</span>
+            <h3 className="text-xl font-black text-emerald-600 mt-0.5">{presentCount}</h3>
           </div>
-        ) : !analytics ? (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-400 bg-white rounded-3xl border border-slate-100">
-            <CalendarDays className="w-16 h-16 mb-4 text-slate-200" />
-            <p className="font-bold text-lg text-slate-600">Select a student and date range to view analytics.</p>
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 font-bold">
+            <UserCheck className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-rose-600">Absent</span>
+            <h3 className="text-xl font-black text-rose-600 mt-0.5">{absentCount}</h3>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-600 font-bold">
+            <UserX className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600">Attendance Rate</span>
+            <h3 className="text-xl font-black text-indigo-600 mt-0.5">{students.length > 0 ? `${attendanceRate}%` : '—'}</h3>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold">
+            <Activity className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* Attendance Sheet Table */}
+      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
+          <div>
+            <h3 className="text-lg font-black text-slate-800">Student Attendance Sheet</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Click any status pill to toggle Present / Absent / Late</p>
+          </div>
+          <span className="text-xs font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+            {students.length} Students Listed
+          </span>
+        </div>
+
+        {isLoadingStudents ? (
+          <div className="p-8 space-y-3 animate-pulse">
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <div key={i} className="h-14 bg-slate-50 rounded-2xl" />
+            ))}
+          </div>
+        ) : students.length === 0 ? (
+          <div className="text-center py-16 text-slate-400 font-medium">
+            <Users className="w-9 h-9 text-slate-300 mx-auto mb-2" />
+            No students found matching your filters.
           </div>
         ) : (
-          <div className="space-y-6">
-            
-            {/* KPIs */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center"><FileText className="w-6 h-6" /></div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Lectures</p>
-                  <p className="text-2xl font-black text-slate-900 mt-1">{analytics.metrics.totalLectures}</p>
-                </div>
-              </div>
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center"><CheckCircle2 className="w-6 h-6" /></div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Lectures Attended</p>
-                  <p className="text-2xl font-black text-slate-900 mt-1">{analytics.metrics.attended}</p>
-                </div>
-              </div>
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-                <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center"><XCircle className="w-6 h-6" /></div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Lectures Absent</p>
-                  <p className="text-2xl font-black text-slate-900 mt-1">{analytics.metrics.absent}</p>
-                </div>
-              </div>
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-                <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center"><Activity className="w-6 h-6" /></div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Attendance %</p>
-                  <p className="text-2xl font-black text-slate-900 mt-1">{analytics.metrics.attendancePercentage}%</p>
-                  <p className="text-[9px] text-slate-400">(Excluding Holidays)</p>
-                </div>
-              </div>
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-                <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center"><CalendarDays className="w-6 h-6" /></div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Working Days</p>
-                  <p className="text-2xl font-black text-slate-900 mt-1">{analytics.metrics.workingDays}</p>
-                  <p className="text-[9px] text-slate-400">(Holidays: {analytics.metrics.holidaysCount})</p>
-                </div>
-              </div>
-            </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50/60">
+                  <th className="p-4 border-b border-slate-100 text-[11px] font-black uppercase tracking-widest text-slate-400">Roll No</th>
+                  <th className="p-4 border-b border-slate-100 text-[11px] font-black uppercase tracking-widest text-slate-400">Student Name</th>
+                  <th className="p-4 border-b border-slate-100 text-[11px] font-black uppercase tracking-widest text-slate-400">Course / Branch</th>
+                  <th className="p-4 border-b border-slate-100 text-[11px] font-black uppercase tracking-widest text-slate-400 text-center">Quick Toggle</th>
+                  <th className="p-4 border-b border-slate-100 text-[11px] font-black uppercase tracking-widest text-slate-400 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {students.map((student, idx) => {
+                  const sid = student.id || student._id;
+                  const currentStatus = attendanceRecords[sid] || 'Present';
+                  const courseObj = courses.find(c => (c.id || c._id) === (student.selectedProgram || student.course_id));
+                  const courseName = courseObj?.name || student.selectedProgram || 'Enrolled';
 
-            {/* Main Grid: Table & Calendar */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              
-              {/* Lecture Wise Table */}
-              <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col h-[500px]">
-                <h3 className="font-black text-slate-800 mb-4">Lecture Wise Attendance</h3>
-                <div className="overflow-y-auto flex-1 pr-2">
-                  <table className="w-full text-left text-sm">
-                    <thead className="sticky top-0 bg-white z-10">
-                      <tr className="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">
-                        <th className="pb-3">Date</th>
-                        <th className="pb-3">Day</th>
-                        <th className="pb-3">Lecture</th>
-                        <th className="pb-3">Subject</th>
-                        <th className="pb-3">Status</th>
-                        <th className="pb-3">Type</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {analytics.lectureWiseData?.map((row: any, i: number) => (
-                        <tr key={i} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors">
-                          <td className="py-3 font-semibold text-slate-700">{row.date}</td>
-                          <td className="py-3 text-slate-500">{row.day}</td>
-                          <td className="py-3 text-slate-500 text-center">{row.lecture}</td>
-                          <td className="py-3 font-semibold text-slate-700">{row.subject}</td>
-                          <td className="py-3">
-                            <span className={`px-2 py-1 rounded-full text-[10px] font-black tracking-wider uppercase ${
-                              row.status === 'Present' ? 'bg-emerald-50 text-emerald-600' :
-                              row.status === 'Absent' ? 'bg-rose-50 text-rose-600' :
-                              'bg-purple-50 text-purple-600'
-                            }`}>{row.status}</span>
-                          </td>
-                          <td className="py-3">
-                            <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-600 text-[10px] font-black tracking-wider uppercase">{row.type}</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Calendar */}
-              <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm flex items-center justify-center">
-                {renderCalendar()}
-              </div>
-            </div>
-
-            {/* Bottom Panels */}
-            <div className="grid grid-cols-1 gap-6">
-              
-              {/* Attendance Reports */}
-              <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col h-[400px]">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="font-black text-slate-800">Attendance Reports</h3>
-                  <button className="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg shadow-sm">Generate Report</button>
-                </div>
-                
-                <div className="grid grid-cols-3 gap-2 mb-6">
-                  <div className="text-center p-2">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Lectures</p>
-                    <p className="text-lg font-black text-slate-800 mt-1">{analytics.metrics.totalLectures}</p>
-                  </div>
-                  <div className="text-center p-2">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Attended</p>
-                    <p className="text-lg font-black text-emerald-600 mt-1">{analytics.metrics.attended}</p>
-                  </div>
-                  <div className="text-center p-2">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">%</p>
-                    <p className="text-lg font-black text-slate-800 mt-1">{analytics.metrics.attendancePercentage}%</p>
-                  </div>
-                </div>
-
-                <div className="flex-1 min-h-0 w-full relative -ml-4">
-                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={analytics.chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 9, fill: '#94a3b8'}} tickFormatter={(v) => { const d = new Date(v); return `${d.getDate()} ${d.toLocaleString('default',{month:'short'})}` }} />
-                      <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{fontSize: 9, fill: '#94a3b8'}} tickFormatter={(v) => `${v}%`} />
-                      <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                      <Line type="monotone" dataKey="percentage" stroke="#2563eb" strokeWidth={3} dot={{r: 4, strokeWidth: 2, fill: '#fff'}} activeDot={{r: 6}} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-2 text-center">Attendance Trend</p>
-              </div>
-
-            </div>
+                  return (
+                    <tr key={sid || idx} className="hover:bg-slate-50/70 transition-colors group">
+                      <td className="p-4 font-mono font-bold text-xs text-slate-500">
+                        {student.studentId || student.student_id || `STU-${idx+1}`}
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs">
+                            {student.firstName?.substring(0, 1) || 'S'}
+                          </div>
+                          <div>
+                            <span className="font-bold text-sm text-slate-900 group-hover:text-indigo-600 transition-colors block">
+                              {student.firstName} {student.lastName}
+                            </span>
+                            <span className="text-[11px] text-slate-400 font-medium">
+                              {student.email || student.mobile}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-4 text-xs font-semibold text-slate-600">
+                        {courseName}
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="inline-flex rounded-xl p-1 bg-slate-100 border border-slate-200/60 gap-1 text-xs font-bold">
+                          <button
+                            onClick={() => setStatusForStudent(sid, 'Present')}
+                            className={`px-3 py-1 rounded-lg transition-all ${
+                              currentStatus === 'Present' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            P
+                          </button>
+                          <button
+                            onClick={() => setStatusForStudent(sid, 'Absent')}
+                            className={`px-3 py-1 rounded-lg transition-all ${
+                              currentStatus === 'Absent' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            A
+                          </button>
+                          <button
+                            onClick={() => setStatusForStudent(sid, 'Late')}
+                            className={`px-3 py-1 rounded-lg transition-all ${
+                              currentStatus === 'Late' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            L
+                          </button>
+                        </div>
+                      </td>
+                      <td className="p-4 text-center">
+                        <button
+                          onClick={() => toggleStudentStatus(sid, currentStatus)}
+                          className={`inline-flex px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider transition-transform active:scale-95 ${
+                            currentStatus === 'Present' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' :
+                            currentStatus === 'Absent' ? 'bg-rose-100 text-rose-700 hover:bg-rose-200' :
+                            'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                          }`}
+                        >
+                          {currentStatus}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
+
+        <div className="p-4 border-t border-slate-100 flex justify-between items-center text-xs text-slate-400 bg-white">
+          <span>Showing {students.length} students</span>
+          <span className="font-semibold text-slate-500">PostgreSQL Live Sync Enabled</span>
+        </div>
       </div>
+
     </div>
   );
 }

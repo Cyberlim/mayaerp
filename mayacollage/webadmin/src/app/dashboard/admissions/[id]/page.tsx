@@ -11,7 +11,13 @@ import {
   GraduationCap,
   FileText,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Zap,
+  Phone,
+  Mail,
+  MapPin,
+  Calendar,
+  BookOpen
 } from "lucide-react";
 
 export default function ApplicationDetailScreen() {
@@ -22,6 +28,7 @@ export default function ApplicationDetailScreen() {
   const [courses, setCourses] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [fromCache, setFromCache] = useState(false);
   const [error, setError] = useState("");
   
   // Approval Modal State
@@ -32,7 +39,17 @@ export default function ApplicationDetailScreen() {
     feesYears: [] as any[]
   });
 
+  // 0ms Cache Hydration
   useEffect(() => {
+    try {
+      const cached = localStorage.getItem(`maya_app_detail_${id}`);
+      if (cached) {
+        setApp(JSON.parse(cached));
+        setFromCache(true);
+        setIsLoading(false);
+      }
+    } catch (_) {}
+
     fetchApplication();
   }, [id]);
 
@@ -49,6 +66,11 @@ export default function ApplicationDetailScreen() {
       
       setApp(appData);
       setCourses(Array.isArray(coursesData) ? coursesData : []);
+
+      // Persist in localStorage for 0ms loads
+      try {
+        localStorage.setItem(`maya_app_detail_${id}`, JSON.stringify(appData));
+      } catch (_) {}
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -57,11 +79,9 @@ export default function ApplicationDetailScreen() {
   };
 
   const handleOpenApprovalModal = async () => {
-    // Determine course duration and code
-    const course = courses.find(c => c._id === app.selectedProgram);
+    const course = courses.find(c => (c.id || c._id) === app.selectedProgram || c.name === app.selectedProgram);
     const courseCode = course?.name ? course.name.replace(/[^A-Za-z]/g, '').substring(0, 3).toUpperCase() : "CRS";
     
-    // Fetch previous student count for this program to generate sequential roll no
     let rollCount = 0;
     try {
       const countRes = await fetch(`/api/students?selectedProgram=${app.selectedProgram}&countOnly=true`);
@@ -78,15 +98,14 @@ export default function ApplicationDetailScreen() {
     
     const defaultStudentId = `${year}${courseCode}${sequentialRoll}`;
     const defaultAdmissionNo = `${year}${courseCode}${sequentialRoll}`;
-
-    const duration = course?.duration || 4; // Default to 4 years if unknown
+    const duration = course?.duration || 4;
 
     const initialFees = Array.from({ length: duration }).map((_, idx) => ({
       year: idx + 1,
-      tuition: course?.baseFee || 0,
-      exam: 0,
+      tuition: course?.baseFee || course?.base_fee || 45000,
+      exam: 2500,
       transport: 0,
-      other: 0
+      other: 1000
     }));
 
     setApprovalData({
@@ -113,15 +132,19 @@ export default function ApplicationDetailScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error("Failed to update status");
+      if (!res.ok) throw new Error("Failed to update status in PostgreSQL");
       
       const updatedApp = await res.json();
       setApp(updatedApp);
+      
+      try {
+        localStorage.setItem(`maya_app_detail_${id}`, JSON.stringify(updatedApp));
+      } catch (_) {}
+
       setIsApprovalModalOpen(false);
     } catch (err: any) {
       alert(err.message);
     } finally {
-      setIsLoading(false);
       setIsUpdating(false);
     }
   };
@@ -133,120 +156,161 @@ export default function ApplicationDetailScreen() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <Loader2 className="w-10 h-10 text-rose-500 animate-spin" />
-      </div>
-    );
+    return <ApplicationDetailSkeleton />;
   }
 
   if (error || !app) {
     return (
-      <div className="p-6 bg-rose-50 rounded-2xl flex items-center gap-3 text-rose-600 font-bold">
-        <AlertCircle className="w-6 h-6" />
-        {error || "Application not found"}
+      <div className="max-w-4xl mx-auto p-8">
+        <div className="p-6 bg-rose-50 border border-rose-200 rounded-3xl flex items-center gap-3 text-rose-700 font-bold">
+          <AlertCircle className="w-6 h-6 shrink-0" />
+          <span>{error || "Application not found in database."}</span>
+        </div>
+        <button 
+          onClick={() => router.back()}
+          className="mt-4 px-4 py-2 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-sm"
+        >
+          ← Go Back
+        </button>
       </div>
     );
   }
 
-  const getStatusBannerColor = () => {
-    if (app.status === "Approved" || app.status === "Accepted") return "from-emerald-500 to-teal-400 shadow-emerald-500/20";
-    if (app.status === "Rejected") return "from-rose-600 to-pink-500 shadow-rose-500/20";
-    return "from-amber-500 to-orange-400 shadow-amber-500/20";
+  const getStatusBadge = () => {
+    if (app.status === "Approved" || app.status === "Accepted") return "bg-emerald-500/20 text-emerald-100 border border-emerald-400/30";
+    if (app.status === "Rejected") return "bg-rose-500/20 text-rose-100 border border-rose-400/30";
+    return "bg-amber-500/20 text-amber-100 border border-amber-400/30";
   };
 
+  const courseObj = courses.find(c => (c.id || c._id) === app.selectedProgram || c.name === app.selectedProgram);
+  const courseName = courseObj?.name || app.selectedProgram;
+
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-8 pb-20 font-sans text-slate-800">
+      
       {/* Action Header */}
       <div className="flex items-center justify-between">
         <button 
           onClick={() => router.back()}
-          className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors shadow-sm"
+          className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:bg-slate-50 transition-colors shadow-sm flex items-center gap-2 text-sm font-bold"
         >
-          <ChevronLeft className="w-5 h-5" />
+          <ChevronLeft className="w-5 h-5" /> Back to Admissions
         </button>
         
-        {app.status === "Pending" && (
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => handleUpdateStatus("Rejected")}
-              disabled={isUpdating}
-              className="flex items-center gap-2 px-6 py-2.5 bg-white border-2 border-rose-100 text-rose-600 font-bold rounded-xl hover:bg-rose-50 transition-colors disabled:opacity-50"
-            >
-              <XCircle className="w-5 h-5" />
-              Reject
-            </button>
-            <button
-              onClick={handleOpenApprovalModal}
-              disabled={isUpdating}
-              className="flex items-center gap-2 px-6 py-2.5 bg-emerald-500 text-white font-bold rounded-xl shadow-[0_10px_20px_rgba(16,185,129,0.3)] hover:-translate-y-0.5 hover:shadow-[0_12px_25px_rgba(16,185,129,0.4)] transition-all disabled:opacity-50"
-            >
-              {isUpdating ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
-              Approve...
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-bold">
+            <Zap className="w-3.5 h-3.5 fill-emerald-500" />
+            <span>{fromCache ? "0ms Instant Cache" : "PostgreSQL • Neon"}</span>
+          </span>
+
+          {(app.status === "Pending" || app.status === "Reviewed") && (
+            <>
+              <button
+                onClick={() => handleUpdateStatus("Rejected")}
+                disabled={isUpdating}
+                className="flex items-center gap-2 px-5 py-2.5 bg-white border-2 border-rose-100 text-rose-600 font-bold rounded-xl hover:bg-rose-50 transition-colors disabled:opacity-50 text-sm shadow-sm"
+              >
+                <XCircle className="w-4 h-4" /> Reject
+              </button>
+              <button
+                onClick={handleOpenApprovalModal}
+                disabled={isUpdating}
+                className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/30 hover:bg-emerald-700 hover:-translate-y-0.5 transition-all disabled:opacity-50 text-sm"
+              >
+                {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                Approve & Enroll
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Banner */}
       <motion.div 
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`bg-gradient-to-r ${getStatusBannerColor()} p-8 rounded-3xl text-white shadow-xl relative overflow-hidden`}
+        className="bg-gradient-to-r from-purple-700 via-indigo-700 to-blue-700 p-8 rounded-[2rem] text-white shadow-xl relative overflow-hidden"
       >
-        <div className="absolute right-0 top-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
+        <div className="absolute right-0 top-0 w-96 h-96 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+        
         <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="flex items-center gap-6">
-            <div className="w-24 h-24 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border-2 border-white/30 text-3xl font-black shadow-lg">
-              {app.firstName.substring(0,1)}{app.lastName.substring(0,1)}
+            <div className="w-20 h-20 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/30 text-2xl font-black shadow-lg">
+              {app.firstName?.substring(0,1)}{app.lastName?.substring(0,1)}
             </div>
             <div>
-              <div className="inline-block px-3 py-1 bg-white/20 backdrop-blur-md rounded-lg text-xs font-bold uppercase tracking-wider mb-2">
-                {app.status}
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`inline-block px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider backdrop-blur-md ${getStatusBadge()}`}>
+                  {app.status}
+                </span>
+                <span className="text-xs text-purple-200 font-medium">Session: {app.sessionYear || '2024-2025'}</span>
               </div>
               <h1 className="text-3xl font-black tracking-tight">{app.firstName} {app.lastName}</h1>
-              <p className="text-white/80 font-medium text-lg mt-1">
-                {courses.find(c => c._id === app.selectedProgram)?.name || app.selectedProgram}
+              <p className="text-white/80 font-medium text-base mt-1 flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-purple-200" />
+                {courseName}
               </p>
             </div>
           </div>
+
           <div className="text-right">
-            <p className="text-white/70 text-sm font-bold uppercase tracking-wider">Application ID</p>
-            <p className="font-mono text-lg font-bold">{app._id}</p>
+            <p className="text-purple-200 text-xs font-black uppercase tracking-wider">Application ID</p>
+            <p className="font-mono text-base font-bold text-white mt-0.5">{app.id || app._id}</p>
+            {app.admissionNumber && (
+              <p className="text-xs text-emerald-200 font-bold mt-1">Roll / Adm: {app.admissionNumber}</p>
+            )}
           </div>
         </div>
       </motion.div>
 
+      {/* Two Column Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
         {/* Personal Details */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white rounded-3xl border border-slate-100 shadow-[0_8px_30px_rgba(0,0,0,0.03)] overflow-hidden">
+        <motion.div 
+          initial={{ opacity: 0, y: 15 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          transition={{ delay: 0.1 }} 
+          className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden"
+        >
           <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
             <User className="w-5 h-5 text-indigo-500" />
-            <h2 className="font-bold text-slate-800">Personal Details</h2>
+            <h2 className="font-bold text-slate-800 text-base">Candidate Profile</h2>
           </div>
           <div className="p-6 space-y-4">
             <DetailRow label="Date of Birth" value={app.dob} />
             <DetailRow label="Gender" value={app.gender} />
-            <DetailRow label="Email" value={app.email} />
-            <DetailRow label="Mobile" value={app.mobile} />
-            <DetailRow label="Category" value={app.category} />
-            <DetailRow label="Address" value={`${app.address}, ${app.city}, ${app.state} - ${app.pinCode}`} />
+            <DetailRow label="Email Address" value={app.email} icon={<Mail className="w-3.5 h-3.5 text-slate-400" />} />
+            <DetailRow label="Mobile Number" value={app.mobile} icon={<Phone className="w-3.5 h-3.5 text-slate-400" />} />
+            {app.alternateMobile && <DetailRow label="Alternate Mobile" value={app.alternateMobile} />}
+            <DetailRow label="Social Category" value={app.category} />
+            <DetailRow 
+              label="Permanent Address" 
+              value={`${app.address || ''}, ${app.city || ''}, ${app.state || ''} - ${app.pinCode || ''}`} 
+              icon={<MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
+            />
           </div>
         </motion.div>
 
         {/* Academic Background */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white rounded-3xl border border-slate-100 shadow-[0_8px_30px_rgba(0,0,0,0.03)] overflow-hidden">
+        <motion.div 
+          initial={{ opacity: 0, y: 15 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          transition={{ delay: 0.2 }} 
+          className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden"
+        >
           <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3">
             <GraduationCap className="w-5 h-5 text-emerald-500" />
-            <h2 className="font-bold text-slate-800">Academic Background</h2>
+            <h2 className="font-bold text-slate-800 text-base">Academic Qualifications</h2>
           </div>
           <div className="p-6 space-y-4">
             <DetailRow label="Highest Qualification" value={app.highestQualification} />
-            <DetailRow label="Institution" value={app.institutionName} />
-            <DetailRow label="Board/University" value={app.boardUniversity} />
-            <DetailRow label="Percentage / CGPA" value={app.percentageCGPA} />
+            <DetailRow label="Institution / School" value={app.institutionName} />
+            <DetailRow label="Board / University" value={app.boardUniversity} />
+            <DetailRow label="Score / Percentage" value={app.percentageCGPA} />
             <DetailRow label="Year of Passing" value={app.yearOfPassing} />
-            {app.entranceScore && <DetailRow label="Entrance Score" value={app.entranceScore} />}
+            {app.entranceScore && <DetailRow label="Entrance Exam Score" value={app.entranceScore} />}
+            {app.selectedBranch && <DetailRow label="Specialization Branch" value={app.selectedBranch} />}
           </div>
         </motion.div>
       </div>
@@ -262,7 +326,7 @@ export default function ApplicationDetailScreen() {
             <div className="p-6 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white/95 backdrop-blur-sm z-10">
               <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                 <CheckCircle className="w-6 h-6 text-emerald-500" /> 
-                Approval Configuration
+                Enrollment & Fee Configuration (PostgreSQL)
               </h2>
               <button onClick={() => setIsApprovalModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl text-slate-400">
                 <XCircle className="w-6 h-6" />
@@ -272,7 +336,7 @@ export default function ApplicationDetailScreen() {
             <div className="p-6 space-y-8">
               {/* IDs Section */}
               <div className="space-y-4">
-                <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">Student Identity</h3>
+                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Student Identity</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Student ID (Auto-generated)</label>
@@ -297,10 +361,10 @@ export default function ApplicationDetailScreen() {
 
               {/* Year-wise Fees Section */}
               <div className="space-y-4">
-                <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 flex items-center justify-between">
+                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center justify-between">
                   Year-wise Fees Structure
                   <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md lowercase tracking-normal">
-                    {approvalData.feesYears.length} years detected
+                    {approvalData.feesYears.length} academic years
                   </span>
                 </h3>
                 
@@ -308,7 +372,7 @@ export default function ApplicationDetailScreen() {
                   {approvalData.feesYears.map((fee, idx) => (
                     <div key={idx} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
                       <h4 className="text-xs font-bold text-slate-800 mb-3 bg-white inline-block px-3 py-1 rounded-lg border border-slate-200 shadow-sm">
-                        Year {fee.year}
+                        Academic Year {fee.year}
                       </h4>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
@@ -341,7 +405,7 @@ export default function ApplicationDetailScreen() {
               <button 
                 onClick={() => handleUpdateStatus("Approved")}
                 disabled={isUpdating}
-                className="flex items-center gap-2 px-6 py-2.5 bg-emerald-500 text-white font-bold rounded-xl shadow-md hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white font-bold rounded-xl shadow-md hover:bg-emerald-700 transition-colors disabled:opacity-50 text-sm"
               >
                 {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                 Confirm & Enroll Student
@@ -354,11 +418,37 @@ export default function ApplicationDetailScreen() {
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({ label, value, icon }: { label: string; value: string; icon?: any }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-slate-50 last:border-0">
-      <span className="text-sm font-semibold text-slate-400">{label}</span>
-      <span className="text-sm font-bold text-slate-800">{value || "N/A"}</span>
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-slate-50 last:border-0 gap-1">
+      <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+        {icon}
+        {label}
+      </span>
+      <span className="text-xs font-bold text-slate-800 text-right">{value || "N/A"}</span>
+    </div>
+  );
+}
+
+function ApplicationDetailSkeleton() {
+  return (
+    <div className="max-w-5xl mx-auto space-y-8 animate-pulse">
+      <div className="h-10 bg-slate-200 rounded-xl w-40" />
+      <div className="h-48 bg-slate-200 rounded-[2rem]" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="h-72 bg-white rounded-3xl border border-slate-100 p-6 space-y-4">
+          <div className="h-5 bg-slate-200 rounded w-32 mb-4" />
+          {[1, 2, 3, 4, 5].map(i => (
+            <div key={i} className="h-4 bg-slate-100 rounded w-full" />
+          ))}
+        </div>
+        <div className="h-72 bg-white rounded-3xl border border-slate-100 p-6 space-y-4">
+          <div className="h-5 bg-slate-200 rounded w-32 mb-4" />
+          {[1, 2, 3, 4, 5].map(i => (
+            <div key={i} className="h-4 bg-slate-100 rounded w-full" />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

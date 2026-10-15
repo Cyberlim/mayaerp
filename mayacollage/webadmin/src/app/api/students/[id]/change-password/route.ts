@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import { Student } from "@/models/Student";
+import { query as pgQuery } from "@/lib/postgres";
+import { delCache, delCachePattern } from "@/lib/redis";
 import bcrypt from "bcryptjs";
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await connectDB();
     const resolvedParams = await params;
+    const { id } = resolvedParams;
     const body = await req.json();
     
     if (!body.newPassword) {
@@ -14,19 +16,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     const hashedPassword = await bcrypt.hash(body.newPassword, 10);
-    const updatedStudent = await Student.findByIdAndUpdate(
-      resolvedParams.id, 
-      { password: hashedPassword },
-      { new: true }
+
+    // 1. Update in PostgreSQL
+    const pgRes = await pgQuery(
+      `UPDATE students SET password = $1, updated_at = NOW() WHERE id = $2 OR student_id = $2 RETURNING id`,
+      [hashedPassword, id]
     );
 
-    if (!updatedStudent) {
-      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    if (pgRes.rows.length === 0) {
+      return NextResponse.json({ error: "Student not found in PostgreSQL" }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, message: "Password updated successfully" });
+    // 2. Invalidate Redis Cache
+    await Promise.all([
+      delCache(`student:${id}`),
+      delCachePattern("students:*")
+    ]);
+
+    return NextResponse.json({ success: true, message: "Password updated successfully in PostgreSQL & cache invalidated" });
   } catch (error) {
-    console.error("Change Password Error:", error);
+    console.error("Change Password Error (PostgreSQL):", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

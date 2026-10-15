@@ -22,6 +22,15 @@ export default function BatchPromotePage() {
 
   // Fetch Branches, Courses, and Session Years
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cachedBranches = localStorage.getItem("mayacollage_branches_cache");
+        const cachedCourses = localStorage.getItem("mayacollage_courses_cache");
+        if (cachedBranches) setBranches(JSON.parse(cachedBranches));
+        if (cachedCourses) setCourses(JSON.parse(cachedCourses));
+      } catch (_) { }
+    }
+
     Promise.all([
       fetch("/api/branches").then(res => res.json()),
       fetch("/api/courses").then(res => res.json()),
@@ -36,8 +45,8 @@ export default function BatchPromotePage() {
     }).catch(console.error);
   }, []);
 
-  const availableCourses = courses.filter(c => 
-    !formData.selectedBranch || 
+  const availableCourses = courses.filter(c =>
+    !formData.selectedBranch ||
     (c.branchId && (c.branchId._id === formData.selectedBranch || c.branchId === formData.selectedBranch))
   );
 
@@ -99,11 +108,9 @@ export default function BatchPromotePage() {
       });
 
       const data = await res.json();
-      
+
       if (res.ok) {
-        setMessage({ type: 'success', text: `Matched ${data.matchedCount} students. Successfully promoted ${data.modifiedCount} students to Semester ${formData.newSemester}.` });
-        // Automatically fetch preview again to refresh the list with the updated semesters
-        handlePreview();
+        setMessage({ type: 'success', text: `Successfully promoted ${data.modifiedCount} students to Semester ${formData.newSemester}.` });
       } else {
         setMessage({ type: 'error', text: data.error || data.message || 'Failed to update students.' });
       }
@@ -128,17 +135,17 @@ export default function BatchPromotePage() {
 
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm max-w-3xl">
         <form onSubmit={handlePromote} className="space-y-6">
-          
+
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">Filter Students</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              
+
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Branch <span className="text-rose-500">*</span></label>
-                <select 
+                <select
                   className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm font-semibold rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   value={formData.selectedBranch}
-                  onChange={(e) => setFormData({...formData, selectedBranch: e.target.value, selectedProgram: ""})}
+                  onChange={(e) => setFormData({ ...formData, selectedBranch: e.target.value, selectedProgram: "" })}
                 >
                   <option value="">-- All Branches --</option>
                   {branches.map(b => (
@@ -149,10 +156,10 @@ export default function BatchPromotePage() {
 
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Course / Program</label>
-                <select 
+                <select
                   className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm font-semibold rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   value={formData.selectedProgram}
-                  onChange={(e) => setFormData({...formData, selectedProgram: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, selectedProgram: e.target.value })}
                   disabled={!formData.selectedBranch}
                 >
                   <option value="">-- All Courses --</option>
@@ -164,10 +171,10 @@ export default function BatchPromotePage() {
 
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Session Year (Batch)</label>
-                <select 
+                <select
                   className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm font-semibold rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   value={formData.sessionYear}
-                  onChange={(e) => setFormData({...formData, sessionYear: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, sessionYear: e.target.value })}
                 >
                   <option value="">-- All Batches --</option>
                   {sessionYears.map(year => (
@@ -178,13 +185,13 @@ export default function BatchPromotePage() {
 
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Current Semester</label>
-                <select 
+                <select
                   className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm font-semibold rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   value={formData.selectedSemester}
-                  onChange={(e) => setFormData({...formData, selectedSemester: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, selectedSemester: e.target.value })}
                 >
                   <option value="">-- All Semesters --</option>
-                  {[1,2,3,4,5,6,7,8,9,10].map(sem => (
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(sem => (
                     <option key={sem} value={sem}>Semester {sem}</option>
                   ))}
                 </select>
@@ -195,16 +202,16 @@ export default function BatchPromotePage() {
 
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">Promotion Details</h3>
-            
+
             <div className="space-y-2 max-w-xs">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Promote To Semester <span className="text-rose-500">*</span></label>
-              <select 
+              <select
                 className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm font-semibold rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                 value={formData.newSemester}
-                onChange={(e) => setFormData({...formData, newSemester: Number(e.target.value)})}
+                onChange={(e) => setFormData({ ...formData, newSemester: Number(e.target.value) })}
                 required
               >
-                {[1,2,3,4,5,6,7,8,9,10].map(sem => (
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(sem => (
                   <option key={sem} value={sem}>Semester {sem}</option>
                 ))}
               </select>

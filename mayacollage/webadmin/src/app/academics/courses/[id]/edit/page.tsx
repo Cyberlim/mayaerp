@@ -43,6 +43,39 @@ export default function EditCourse() {
   const [feeStructureTemplate, setFeeStructureTemplate] = useState<any[]>([]);
 
   useEffect(() => {
+    // 1. Instant hydration from local storage if available
+    if (typeof window !== "undefined") {
+      try {
+        const cachedRaw = localStorage.getItem(`maya_course_detail_${courseId}`);
+        let cData = cachedRaw ? JSON.parse(cachedRaw)?.course : null;
+        if (!cData) {
+          const allRaw = localStorage.getItem("maya_academics_courses_cache");
+          if (allRaw) {
+            const list = JSON.parse(allRaw);
+            if (Array.isArray(list)) cData = list.find((c: any) => c._id === courseId || c.id === courseId);
+          }
+        }
+        if (cData) {
+          setFormData({
+            code: cData.code || "",
+            name: cData.name || "",
+            duration: cData.duration?.toString() || "",
+            intakeCapacity: cData.intakeCapacity?.toString() || "",
+            totalSemesters: cData.totalSemesters?.toString() || "",
+            tuitionFee: cData.tuitionFee?.toString() || "",
+            coordinator: cData.coordinator || "",
+            labIndex: cData.labIndex || "",
+          });
+          if (cData.branchId) {
+            const b = typeof cData.branchId === 'object' ? cData.branchId : null;
+            if (b) setBranch(b);
+          }
+          setIsLoading(false);
+        }
+      } catch (_) {}
+    }
+
+    // 2. Fetch fresh from Neon PostgreSQL
     fetch(`/api/courses/${courseId}`)
       .then(res => res.json())
       .then(data => {
@@ -154,7 +187,23 @@ export default function EditCourse() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update course");
+      if (!res.ok) throw new Error(data.error || "Failed to update course in PostgreSQL");
+
+      // Update local storage cache
+      try {
+        localStorage.removeItem(`maya_course_detail_${courseId}`);
+        sessionStorage.removeItem(`maya_course_detail_${courseId}`);
+
+        const cachedCoursesRaw = localStorage.getItem("maya_academics_courses_cache");
+        if (cachedCoursesRaw) {
+          const list = JSON.parse(cachedCoursesRaw);
+          if (Array.isArray(list)) {
+            const nextList = list.map((c: any) => (c._id === courseId || c.id === courseId) ? { ...c, ...data } : c);
+            localStorage.setItem("maya_academics_courses_cache", JSON.stringify(nextList));
+            sessionStorage.setItem("maya_academics_courses_cache", JSON.stringify(nextList));
+          }
+        }
+      } catch (_) {}
 
       router.push(`/dashboard/academics/courses/${courseId}`);
     } catch (err: any) {
