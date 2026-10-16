@@ -130,6 +130,7 @@ export async function GET(request: Request) {
       duration: c.duration,
       tuitionFee: Number(c.tuition_fee) || 0,
       semesterFees: typeof c.semester_fees === 'string' ? JSON.parse(c.semester_fees) : (c.semester_fees || []),
+      feeStructureTemplate: typeof c.fee_structure_template === 'string' ? JSON.parse(c.fee_structure_template) : (c.fee_structure_template || []),
       status: c.status,
       createdAt: c.created_at,
       updatedAt: c.updated_at

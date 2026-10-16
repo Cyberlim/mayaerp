@@ -78,6 +78,7 @@ export async function GET(request: Request) {
         labIndex: c.lab_index,
         totalSemesters: Number(c.total_semesters) || 8,
         semesterFees: typeof c.semester_fees === 'string' ? JSON.parse(c.semester_fees) : (c.semester_fees || []),
+        feeStructureTemplate: typeof c.fee_structure_template === 'string' ? JSON.parse(c.fee_structure_template) : (c.fee_structure_template || []),
         curriculum: typeof c.curriculum === 'string' ? JSON.parse(c.curriculum) : (c.curriculum || []),
         createdAt: c.created_at,
         updatedAt: c.updated_at
@@ -105,8 +106,8 @@ export async function POST(request: Request) {
     // 1. Insert into Neon PostgreSQL directly (No MongoDB)
     const insertSQL = `
       INSERT INTO courses (
-        id, branch_id, code, name, duration, intake_capacity, coordinator, tuition_fee, lab_index, total_semesters, semester_fees, curriculum, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+        id, branch_id, code, name, duration, intake_capacity, coordinator, tuition_fee, lab_index, total_semesters, semester_fees, fee_structure_template, curriculum, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
       RETURNING *
     `;
 
@@ -122,6 +123,7 @@ export async function POST(request: Request) {
       body.labIndex || null,
       Number(body.totalSemesters) || 8,
       JSON.stringify(body.semesterFees || []),
+      JSON.stringify(body.feeStructureTemplate || []),
       JSON.stringify(body.curriculum || [])
     ]);
 
@@ -139,6 +141,7 @@ export async function POST(request: Request) {
       labIndex: created.lab_index,
       totalSemesters: Number(created.total_semesters) || 8,
       semesterFees: typeof created.semester_fees === 'string' ? JSON.parse(created.semester_fees) : (created.semester_fees || []),
+      feeStructureTemplate: typeof created.fee_structure_template === 'string' ? JSON.parse(created.fee_structure_template) : (created.fee_structure_template || []),
       curriculum: typeof created.curriculum === 'string' ? JSON.parse(created.curriculum) : (created.curriculum || []),
       createdAt: created.created_at,
       updatedAt: created.updated_at

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { query as pgQuery } from "@/lib/postgres";
 import { getCache, setCache, delCache, delCachePattern, DEFAULT_CACHE_TTL } from "@/lib/redis";
+import connectDB from "@/lib/mongodb";
+import { Course } from "@/models/Course";
 
 export const dynamic = 'force-dynamic';
 
@@ -63,6 +65,7 @@ export async function GET(
       labIndex: c.lab_index,
       totalSemesters: Number(c.total_semesters) || 8,
       semesterFees: typeof c.semester_fees === 'string' ? JSON.parse(c.semester_fees) : (c.semester_fees || []),
+      feeStructureTemplate: typeof c.fee_structure_template === 'string' ? JSON.parse(c.fee_structure_template) : (c.fee_structure_template || []),
       curriculum: typeof c.curriculum === 'string' ? JSON.parse(c.curriculum) : (c.curriculum || []),
       createdAt: c.created_at,
       updatedAt: c.updated_at
@@ -112,6 +115,9 @@ export async function PATCH(
     const semesterFees = courseData.semesterFees !== undefined 
       ? JSON.stringify(courseData.semesterFees) 
       : (typeof existing.semester_fees === 'string' ? existing.semester_fees : JSON.stringify(existing.semester_fees || []));
+    const feeStructureTemplate = courseData.feeStructureTemplate !== undefined 
+      ? JSON.stringify(courseData.feeStructureTemplate) 
+      : (typeof existing.fee_structure_template === 'string' ? existing.fee_structure_template : JSON.stringify(existing.fee_structure_template || []));
     const curriculum = courseData.curriculum !== undefined 
       ? JSON.stringify(courseData.curriculum) 
       : (typeof existing.curriculum === 'string' ? existing.curriculum : JSON.stringify(existing.curriculum || []));
@@ -128,9 +134,10 @@ export async function PATCH(
         lab_index = $8,
         total_semesters = $9,
         semester_fees = $10,
-        curriculum = $11,
+        fee_structure_template = $11,
+        curriculum = $12,
         updated_at = NOW()
-      WHERE id = $12
+      WHERE id = $13
       RETURNING *
     `;
 
@@ -145,11 +152,31 @@ export async function PATCH(
       labIndex,
       totalSemesters,
       semesterFees,
+      feeStructureTemplate,
       curriculum,
       id
     ]);
 
     const updated = updateRes.rows[0];
+
+    // Also sync to MongoDB Course model for consistency
+    try {
+      await connectDB();
+      const mgUpdate: any = {
+        name,
+        code,
+        duration,
+        intakeCapacity,
+        coordinator,
+        tuitionFee: Number(tuitionFee) || 0
+      };
+      if (courseData.feeStructureTemplate) {
+        mgUpdate.feeStructureTemplate = courseData.feeStructureTemplate;
+      }
+      await Course.findByIdAndUpdate(id, { $set: mgUpdate });
+    } catch (mgErr) {
+      console.warn("MongoDB course sync warning:", mgErr);
+    }
 
     // If applyToStudents is requested, sync fees to students in PostgreSQL
     if (shouldSync && (Number(tuitionFee) > 0 || (courseData.semesterFees && courseData.semesterFees.length > 0))) {
@@ -220,6 +247,7 @@ export async function PATCH(
       labIndex: updated.lab_index,
       totalSemesters: Number(updated.total_semesters) || 8,
       semesterFees: typeof updated.semester_fees === 'string' ? JSON.parse(updated.semester_fees) : (updated.semester_fees || []),
+      feeStructureTemplate: typeof updated.fee_structure_template === 'string' ? JSON.parse(updated.fee_structure_template) : (updated.fee_structure_template || []),
       curriculum: typeof updated.curriculum === 'string' ? JSON.parse(updated.curriculum) : (updated.curriculum || []),
       createdAt: updated.created_at,
       updatedAt: updated.updated_at
