@@ -299,7 +299,49 @@ export async function GET() {
  */
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    let body: any = {};
+    let uploadedFileBuffer: Buffer | null = null;
+    let uploadedFileName: string = '';
+
+    const contentType = request.headers.get("content-type") || "";
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await request.formData();
+      const file = formData.get("file") as File | null;
+      const act = (formData.get("action") as string) || "preview";
+      body = {
+        action: act,
+        courseId: (formData.get("courseId") as string) || "",
+        branchId: (formData.get("branchId") as string) || "",
+        sessionYear: (formData.get("sessionYear") as string) || "",
+        admissionYear: (formData.get("admissionYear") as string) || "",
+        batch: (formData.get("batch") as string) || "",
+        idPrefix: (formData.get("idPrefix") as string) || "",
+        enrollmentPrefix: (formData.get("enrollmentPrefix") as string) || "",
+        fileName: file ? file.name : ((formData.get("fileName") as string) || "")
+      };
+
+      if (file && file.size > 0) {
+        const bytes = await file.arrayBuffer();
+        uploadedFileBuffer = Buffer.from(bytes);
+        uploadedFileName = file.name;
+
+        // Persist copy in public/datafiles if directory exists or can be created
+        try {
+          const uploadDir = path.join(process.cwd(), "public", "datafiles");
+          if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+          const safeName = file.name.replace(/[^a-zA-Z0-9._\- ()]/g, '_');
+          fs.writeFileSync(path.join(uploadDir, safeName), uploadedFileBuffer);
+          uploadedFileName = safeName;
+        } catch (_) {}
+      }
+    } else {
+      body = await request.json();
+      if (body.fileBase64) {
+        uploadedFileBuffer = Buffer.from(body.fileBase64, 'base64');
+        uploadedFileName = body.fileName || 'uploaded.xlsx';
+      }
+    }
+
     const action = body.action || 'preview'; // 'preview' | 'seed' | 'seed_courses'
 
     // ACTION: SEED COURSES IF NEEDED
@@ -418,13 +460,43 @@ export async function POST(request: Request) {
 
     // ACTION: PREVIEW OR SEED STUDENTS
     const dir = path.join(process.cwd(), 'public', 'datafiles');
-    const selectedFile = body.fileName || 'all'; // 'all' or specific file name
+    const selectedFile = body.fileName || (uploadedFileName ? uploadedFileName : 'all');
 
-    let targetFiles: string[] = [];
-    if (selectedFile === 'all') {
-      targetFiles = fs.readdirSync(dir).filter(f => f.endsWith('.xlsx'));
+    interface TargetSheetItem {
+      fileName: string;
+      buffer: Buffer;
+    }
+    const targetSheets: TargetSheetItem[] = [];
+
+    if (uploadedFileBuffer) {
+      targetSheets.push({
+        fileName: uploadedFileName || selectedFile || 'uploaded.xlsx',
+        buffer: uploadedFileBuffer
+      });
+    } else if (selectedFile === 'all') {
+      if (fs.existsSync(dir)) {
+        const diskFiles = fs.readdirSync(dir).filter(f => f.endsWith('.xlsx') || f.endsWith('.xls') || f.endsWith('.csv'));
+        for (const df of diskFiles) {
+          try {
+            targetSheets.push({ fileName: df, buffer: fs.readFileSync(path.join(dir, df)) });
+          } catch (_) {}
+        }
+      }
     } else {
-      targetFiles = [selectedFile];
+      const filePath = path.join(dir, selectedFile);
+      if (fs.existsSync(filePath)) {
+        try {
+          targetSheets.push({ fileName: selectedFile, buffer: fs.readFileSync(filePath) });
+        } catch (_) {}
+      }
+    }
+
+    if (targetSheets.length === 0) {
+      return NextResponse.json({ 
+        error: uploadedFileName 
+          ? `Could not parse uploaded file "${uploadedFileName}".` 
+          : `File "${selectedFile}" not found. Please choose an Excel file to upload directly.`
+      }, { status: 400 });
     }
 
     // 1. Fetch courses and branches for mapping
@@ -477,14 +549,11 @@ export async function POST(request: Request) {
     const duplicateStudents: any[] = [];
     let totalScanned = 0;
 
-    for (const file of targetFiles) {
-      const filePath = path.join(dir, file);
-      if (!fs.existsSync(filePath)) continue;
-
+    for (const item of targetSheets) {
+      const file = item.fileName;
       let wb: any;
       try {
-        const fileBuffer = fs.readFileSync(filePath);
-        wb = XLSX.read(fileBuffer, { type: "buffer" });
+        wb = XLSX.read(item.buffer, { type: "buffer" });
       } catch (readErr: any) {
         console.error(`Error reading ${file}:`, readErr);
         continue;

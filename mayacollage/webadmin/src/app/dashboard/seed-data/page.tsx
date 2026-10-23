@@ -87,6 +87,8 @@ export default function SeedDataPage() {
   const [seeding, setSeeding] = useState(false);
   const [syncingCourses, setSyncingCourses] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [activeUploadedFile, setActiveUploadedFile] = useState<File | null>(null);
+  const [activeFileInfo, setActiveFileInfo] = useState<any>(null);
 
   const [files, setFiles] = useState<FileSummary[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -253,11 +255,12 @@ export default function SeedDataPage() {
     }
   };
 
-  // 2. File Upload Handler
+  // 2. File Upload Handler - works for ANY file from ANY computer or phone directly
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    setActiveUploadedFile(file);
     const formData = new FormData();
     formData.append("file", file);
 
@@ -269,11 +272,59 @@ export default function SeedDataPage() {
       });
       const data = await res.json();
       if (data.success && data.file) {
-        showToast(data.message || `File ${file.name} uploaded successfully!`, "success");
-        // Reload files list
-        await loadStatus();
-        // Automatically select the uploaded file
-        handleFileChange(data.file.fileName);
+        setActiveFileInfo(data.file);
+        setSelectedFile(data.file.fileName);
+
+        // Auto-match course from upload detection
+        let targetCId = "";
+        let targetBId = "";
+        if (data.file.detectedCourse) {
+          const matched = courses.find(c => 
+            c.code.toLowerCase() === data.file.detectedCourse.toLowerCase() ||
+            c.name.toLowerCase().includes(data.file.detectedCourse.toLowerCase()) ||
+            data.file.detectedCourse.toLowerCase().includes(c.code.toLowerCase())
+          );
+          if (matched) {
+            targetCId = matched.id;
+            targetBId = matched.branch_id || "";
+          }
+        }
+        if (!targetCId && courses.length > 0) {
+          targetCId = courses[0].id;
+          targetBId = courses[0].branch_id || "";
+        }
+
+        if (targetCId) setSelectedCourseId(targetCId);
+        if (targetBId) setSelectedBranchId(targetBId);
+
+        const newSession = data.file.detectedSession || data.file.preset?.sessionYear || sessionYear;
+        const newAdm = data.file.preset?.admissionYear || admissionYear;
+        const newBatch = data.file.preset?.batch || batch;
+        const newIdPref = data.file.preset?.idPrefix || idPrefix;
+        const newEnrPref = data.file.preset?.enrollmentPrefix || enrollmentPrefix;
+
+        if (newSession) setSessionYear(newSession);
+        if (newAdm) setAdmissionYear(newAdm);
+        if (newBatch) setBatch(newBatch);
+        if (newIdPref) setIdPrefix(newIdPref);
+        if (newEnrPref) setEnrollmentPrefix(newEnrPref);
+
+        showToast(`Uploaded "${file.name}" (${data.file.rowCount} rows detected). Running database analysis...`, "success");
+
+        // Automatically trigger immediate preview analysis with the direct uploaded file!
+        await executePreview({
+          fileToUse: file,
+          courseIdToUse: targetCId,
+          branchIdToUse: targetBId,
+          sessionYearToUse: newSession,
+          admissionYearToUse: newAdm,
+          batchToUse: newBatch,
+          idPrefixToUse: newIdPref,
+          enrollmentPrefixToUse: newEnrPref
+        });
+
+        // Also reload available file list
+        loadStatus();
       } else {
         showToast(data.error || "File upload failed", "error");
       }
@@ -366,25 +417,65 @@ export default function SeedDataPage() {
   };
 
   // 5. Action: Analyze & Preview Seeding
-  const handleAnalyze = async () => {
+  const executePreview = async (params?: {
+    fileToUse?: File | null;
+    courseIdToUse?: string;
+    branchIdToUse?: string;
+    sessionYearToUse?: string;
+    admissionYearToUse?: string;
+    batchToUse?: string;
+    idPrefixToUse?: string;
+    enrollmentPrefixToUse?: string;
+  }) => {
     setAnalyzing(true);
     setSeedResult(null);
+
+    const fileToUse = params?.fileToUse !== undefined ? params.fileToUse : activeUploadedFile;
+    const cId = params?.courseIdToUse ?? selectedCourseId;
+    const bId = params?.branchIdToUse ?? selectedBranchId;
+    const sYear = params?.sessionYearToUse ?? sessionYear;
+    const aYear = params?.admissionYearToUse ?? admissionYear;
+    const bch = params?.batchToUse ?? batch;
+    const idPref = params?.idPrefixToUse ?? idPrefix;
+    const enrPref = params?.enrollmentPrefixToUse ?? enrollmentPrefix;
+
     try {
-      const res = await fetch("/api/seed/students", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "preview",
-          fileName: selectedFile,
-          courseId: selectedCourseId,
-          branchId: selectedBranchId,
-          sessionYear,
-          admissionYear,
-          batch,
-          idPrefix,
-          enrollmentPrefix
-        })
-      });
+      let res: Response;
+      if (fileToUse) {
+        // Direct stream from user's computer via FormData
+        const formData = new FormData();
+        formData.append("action", "preview");
+        formData.append("file", fileToUse);
+        if (cId) formData.append("courseId", cId);
+        if (bId) formData.append("branchId", bId);
+        formData.append("sessionYear", sYear);
+        formData.append("admissionYear", aYear);
+        formData.append("batch", bch);
+        formData.append("idPrefix", idPref);
+        formData.append("enrollmentPrefix", enrPref);
+
+        res = await fetch("/api/seed/students", {
+          method: "POST",
+          body: formData
+        });
+      } else {
+        res = await fetch("/api/seed/students", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "preview",
+            fileName: selectedFile,
+            courseId: cId,
+            branchId: bId,
+            sessionYear: sYear,
+            admissionYear: aYear,
+            batch: bch,
+            idPrefix: idPref,
+            enrollmentPrefix: enrPref
+          })
+        });
+      }
+
       const data = await res.json();
       if (data.success) {
         setPreviewResult(data);
@@ -399,31 +490,58 @@ export default function SeedDataPage() {
     }
   };
 
+  const handleAnalyze = () => executePreview();
+
   // 6. Action: Live Seed Data into PostgreSQL
   const handleSeed = async () => {
-    const confirmMsg = selectedFile === "all"
-      ? "Are you sure you want to seed all Excel datafiles into PostgreSQL database? All new students will be inserted with complete database fields."
-      : `Are you sure you want to seed file "${selectedFile}" into PostgreSQL course "${courses.find(c => c.id === selectedCourseId)?.name || 'Selected Course'}"?`;
+    const isDirectUpload = Boolean(activeUploadedFile);
+    const fileNameDisplay = activeUploadedFile?.name || selectedFile;
+    const courseObj = courses.find(c => c.id === selectedCourseId);
+
+    const confirmMsg = (!isDirectUpload && selectedFile === "all")
+      ? "Are you sure you want to seed all datasets into PostgreSQL database? All new students will be inserted with complete database fields."
+      : `Are you sure you want to seed "${fileNameDisplay}" into PostgreSQL course "${courseObj?.name || 'Selected Course'}"?`;
 
     if (!window.confirm(confirmMsg)) return;
 
     setSeeding(true);
     try {
-      const res = await fetch("/api/seed/students", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "seed",
-          fileName: selectedFile,
-          courseId: selectedCourseId,
-          branchId: selectedBranchId,
-          sessionYear,
-          admissionYear,
-          batch,
-          idPrefix,
-          enrollmentPrefix
-        })
-      });
+      let res: Response;
+      if (activeUploadedFile) {
+        // Direct stream seed from user's computer via FormData
+        const formData = new FormData();
+        formData.append("action", "seed");
+        formData.append("file", activeUploadedFile);
+        if (selectedCourseId) formData.append("courseId", selectedCourseId);
+        if (selectedBranchId) formData.append("branchId", selectedBranchId);
+        formData.append("sessionYear", sessionYear);
+        formData.append("admissionYear", admissionYear);
+        formData.append("batch", batch);
+        formData.append("idPrefix", idPrefix);
+        formData.append("enrollmentPrefix", enrollmentPrefix);
+
+        res = await fetch("/api/seed/students", {
+          method: "POST",
+          body: formData
+        });
+      } else {
+        res = await fetch("/api/seed/students", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "seed",
+            fileName: selectedFile,
+            courseId: selectedCourseId,
+            branchId: selectedBranchId,
+            sessionYear,
+            admissionYear,
+            batch,
+            idPrefix,
+            enrollmentPrefix
+          })
+        });
+      }
+
       const data = await res.json();
       if (data.success) {
         setSeedResult(data);
@@ -751,7 +869,7 @@ export default function SeedDataPage() {
         <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm hover:shadow-md transition">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Available Files</p>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Available Datasets</p>
               <h3 className="text-3xl font-black text-slate-900 mt-1">{files.length}</h3>
             </div>
             <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
@@ -760,7 +878,7 @@ export default function SeedDataPage() {
           </div>
           <p className="text-xs text-slate-500 mt-3 flex items-center gap-1.5 font-medium">
             <Layers className="w-3.5 h-3.5 text-amber-500" />
-            In public/datafiles repository
+            Cloud datasets & uploaded files
           </p>
         </div>
 
@@ -788,10 +906,10 @@ export default function SeedDataPage() {
           <div>
             <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
               <Upload className="w-5 h-5 text-indigo-600" />
-              Upload Student Excel File
+              Upload Any Student Excel File
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              Upload any student Excel file (.xlsx, .xls, .csv). It will automatically be parsed, scanned for headers, and made ready to map with any course and seed into PostgreSQL.
+              Select any file from your device (.xlsx, .xls, .csv). No computer path needed — upload directly from your browser, preview duplicates, and seed into PostgreSQL.
             </p>
           </div>
 
@@ -818,28 +936,88 @@ export default function SeedDataPage() {
               ) : (
                 <>
                   <Upload className="w-4 h-4" />
-                  Choose Excel File to Upload
+                  Upload Excel File From Device
                 </>
               )}
             </label>
           </div>
         </div>
 
-        {/* Dropzone preview area */}
-        <div 
-          onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/30 hover:bg-indigo-50/60 rounded-2xl p-8 text-center cursor-pointer transition group"
-        >
-          <div className="w-14 h-14 rounded-2xl bg-white shadow-sm border border-indigo-100 text-indigo-600 flex items-center justify-center mx-auto mb-3 group-hover:scale-105 transition">
-            <FileSpreadsheet className="w-7 h-7" />
+        {/* Active Upload Banner or Dropzone */}
+        {activeUploadedFile ? (
+          <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 border-2 border-emerald-500/40 rounded-2xl p-6 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-600/30 shrink-0">
+                  <FileCheck className="w-7 h-7" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider">
+                      Active Device Upload
+                    </span>
+                    <span className="text-xs text-slate-400 font-bold">Ready to Seed</span>
+                  </div>
+                  <h3 className="text-base font-black text-slate-900 mt-1">
+                    {activeUploadedFile.name}
+                  </h3>
+                  <p className="text-xs text-slate-600 font-semibold mt-0.5 flex flex-wrap items-center gap-3">
+                    <span>Size: {(activeUploadedFile.size / 1024).toFixed(1)} KB</span>
+                    {activeFileInfo?.rowCount && <span>• {activeFileInfo.rowCount} student rows</span>}
+                    {activeFileInfo?.detectedCourse && <span>• Program: <strong className="text-emerald-700">{activeFileInfo.detectedCourse}</strong></span>}
+                    {activeFileInfo?.detectedSession && <span>• Session: <strong className="text-emerald-700">{activeFileInfo.detectedSession}</strong></span>}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleSeed}
+                  disabled={seeding || analyzing}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md shadow-emerald-600/25 transition disabled:opacity-50"
+                >
+                  <Play className="w-4 h-4 fill-white" />
+                  Seed This File Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold border border-slate-200 transition shadow-xs"
+                >
+                  Choose Another
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveUploadedFile(null);
+                    setActiveFileInfo(null);
+                    setSelectedFile("all");
+                  }}
+                  className="p-2.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                  title="Remove uploaded file"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
           </div>
-          <p className="text-sm font-bold text-slate-800">
-            Click here to upload your student Excel file or drag & drop
-          </p>
-          <p className="text-xs text-slate-400 mt-1">
-            Supports .xlsx, .xls, and .csv files. Automatically detects student name, mobile, father name, aadhar, and fee fields.
-          </p>
-        </div>
+        ) : (
+          <div 
+            onClick={() => fileInputRef.current?.click()}
+            className="border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/30 hover:bg-indigo-50/60 rounded-2xl p-8 text-center cursor-pointer transition group"
+          >
+            <div className="w-14 h-14 rounded-2xl bg-white shadow-sm border border-indigo-100 text-indigo-600 flex items-center justify-center mx-auto mb-3 group-hover:scale-105 transition">
+              <FileSpreadsheet className="w-7 h-7" />
+            </div>
+            <p className="text-sm font-bold text-slate-800">
+              Click here to upload your student Excel file or drag & drop
+            </p>
+            <p className="text-xs text-slate-400 mt-1">
+              Supports .xlsx, .xls, and .csv files from ANY computer. No server path required — auto-detects fields and seeds directly.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Main Configuration & Action Panel */}
@@ -851,7 +1029,7 @@ export default function SeedDataPage() {
               Student Seed Configuration Console
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              Select an uploaded Excel file or choose from detected files. Select target course and branch, then analyze and seed students data into PostgreSQL.
+              {activeUploadedFile ? `Currently configuring uploaded file "${activeUploadedFile.name}".` : "Select an uploaded Excel file or choose from available datasets. Select target course and branch, then analyze and seed students data into PostgreSQL."}
             </p>
           </div>
 
@@ -903,10 +1081,21 @@ export default function SeedDataPage() {
             </label>
             <select
               value={selectedFile}
-              onChange={(e) => handleFileChange(e.target.value)}
+              onChange={(e) => {
+                if (e.target.value !== activeUploadedFile?.name) {
+                  setActiveUploadedFile(null);
+                  setActiveFileInfo(null);
+                }
+                handleFileChange(e.target.value);
+              }}
               className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
             >
-              <option value="all">⚡ All Files (Batch Seed All Courses)</option>
+              {activeUploadedFile && (
+                <option value={activeUploadedFile.name}>
+                  🚀 [DIRECT UPLOAD] {activeUploadedFile.name} (Active)
+                </option>
+              )}
+              <option value="all">⚡ All Datasets (Batch Seed All Courses)</option>
               {files.map(f => (
                 <option key={f.fileName} value={f.fileName}>
                   📄 {f.fileName} ({f.rowCount} rows)
@@ -914,7 +1103,11 @@ export default function SeedDataPage() {
               ))}
             </select>
             <p className="text-[11px] text-slate-400 mt-1.5">
-              {selectedFile === "all" ? "Processes all files in public/datafiles" : `Rows: ${files.find(f => f.fileName === selectedFile)?.rowCount || 0}`}
+              {activeUploadedFile 
+                ? "Using file uploaded directly from your device" 
+                : selectedFile === "all" 
+                ? "Processes all available datasets" 
+                : `Rows: ${files.find(f => f.fileName === selectedFile)?.rowCount || 0}`}
             </p>
           </div>
 

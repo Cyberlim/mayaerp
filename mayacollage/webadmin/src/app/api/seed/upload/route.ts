@@ -17,16 +17,18 @@ export async function POST(request: Request) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Save to public/datafiles
-    const uploadDir = path.join(process.cwd(), "public", "datafiles");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
-    // Sanitize filename
+    // Sanitize filename and optionally cache to disk
     const safeName = file.name.replace(/[^a-zA-Z0-9._\- ()]/g, '_');
-    const filePath = path.join(uploadDir, safeName);
-    fs.writeFileSync(filePath, buffer);
+    try {
+      const uploadDir = path.join(process.cwd(), "public", "datafiles");
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      const filePath = path.join(uploadDir, safeName);
+      fs.writeFileSync(filePath, buffer);
+    } catch (fsErr) {
+      console.warn("Filesystem write skipped (proceeding in-memory):", fsErr);
+    }
 
     // Parse Excel content
     const wb = XLSX.read(buffer, { type: "buffer" });
