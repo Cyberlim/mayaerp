@@ -111,6 +111,23 @@ export default function StudentManagementDashboard() {
     }
   };
 
+  const getStudentStartYear = (s: any): string => {
+    if (s.admissionYear) {
+      const m = String(s.admissionYear).match(/\b(20\d{2})\b/);
+      if (m) return m[1];
+    }
+    if (s.sessionYear) {
+      const m = String(s.sessionYear).match(/^\s*(20\d{2})/);
+      if (m) return m[1];
+    }
+    if (s.batch) {
+      const m = String(s.batch).match(/^\s*(20\d{2})/);
+      if (m) return m[1];
+    }
+    const any = String(s.sessionYear || s.batch || s.admissionYear || '').match(/(20\d{2})/);
+    return any ? any[1] : '';
+  };
+
   const filteredStudents = useMemo(() => {
     let result = students;
     if (selectedFilter !== "All") {
@@ -129,7 +146,15 @@ export default function StudentManagementDashboard() {
       });
     }
     if (filterBatch !== "All") {
-      result = result.filter(s => s.batch === filterBatch);
+      const qYear = filterBatch.trim();
+      result = result.filter(s => {
+        const startYr = getStudentStartYear(s);
+        if (startYr === qYear) return true;
+        const sy = String(s.sessionYear || "").trim();
+        const ay = String(s.admissionYear || "").trim();
+        const bt = String(s.batch || "").trim();
+        return sy.startsWith(qYear) || ay.startsWith(qYear) || bt.startsWith(qYear);
+      });
     }
     if (filterSemester !== "All") {
       result = result.filter(s => s.selectedSemester === Number(filterSemester));
@@ -156,6 +181,15 @@ export default function StudentManagementDashboard() {
   const uniqueSessionYears = useMemo(() => {
     const years = new Set(students.map(s => s.sessionYear).filter(Boolean));
     return Array.from(years).sort().reverse();
+  }, [students]);
+
+  const uniqueStartYears = useMemo(() => {
+    const yearsSet = new Set<string>();
+    students.forEach((s: any) => {
+      const yr = getStudentStartYear(s);
+      if (yr) yearsSet.add(yr);
+    });
+    return Array.from(yearsSet).sort().reverse();
   }, [students]);
 
   const uniqueBatches = useMemo(() => {
@@ -332,9 +366,9 @@ export default function StudentManagementDashboard() {
               onChange={e => setFilterBatch(e.target.value)} 
               className="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
             >
-              <option value="All">All Batches</option>
-              {uniqueBatches.map((b: any) => (
-                <option key={b} value={b}>{b}</option>
+              <option value="All">All Years</option>
+              {uniqueStartYears.map((yr: string) => (
+                <option key={yr} value={yr}>{yr}</option>
               ))}
             </select>
 

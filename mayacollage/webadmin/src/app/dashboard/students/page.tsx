@@ -2,21 +2,21 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  GraduationCap, 
-  Search, 
-  Plus, 
-  UserCircle, 
-  Trash2, 
-  Shield, 
-  Loader2, 
-  CheckCircle2, 
-  Eye, 
-  UploadCloud, 
-  X, 
-  Building2, 
-  Key, 
-  Lock, 
+import {
+  GraduationCap,
+  Search,
+  Plus,
+  UserCircle,
+  Trash2,
+  Shield,
+  Loader2,
+  CheckCircle2,
+  Eye,
+  UploadCloud,
+  X,
+  Building2,
+  Key,
+  Lock,
   Edit,
   LayoutGrid,
   List,
@@ -46,7 +46,7 @@ export default function StudentManagementDashboard() {
   const [students, setStudents] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
-  
+
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [cacheSource, setCacheSource] = useState<string>("Upstash Redis (sub-10ms)");
@@ -55,7 +55,6 @@ export default function StudentManagementDashboard() {
   const [filterBranch, setFilterBranch] = useState("All");
   const [filterCourse, setFilterCourse] = useState("All");
   const [filterYear, setFilterYear] = useState("All");
-  const [filterBatch, setFilterBatch] = useState("All");
   const [filterSemester, setFilterSemester] = useState("All");
   const [filterSection, setFilterSection] = useState("All");
   const [filterFeeStatus, setFilterFeeStatus] = useState("All");
@@ -70,7 +69,7 @@ export default function StudentManagementDashboard() {
   const [expandedCourses, setExpandedCourses] = useState<Record<string, boolean>>({});
 
   // Password Modal
-  const [passwordModal, setPasswordModal] = useState<{isOpen: boolean, studentId: string, name: string}>({isOpen: false, studentId: "", name: ""});
+  const [passwordModal, setPasswordModal] = useState<{ isOpen: boolean, studentId: string, name: string }>({ isOpen: false, studentId: "", name: "" });
   const [newPassword, setNewPassword] = useState("");
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
@@ -145,7 +144,7 @@ export default function StudentManagementDashboard() {
         sessionStorage.setItem("mayacollage_students_cache", JSON.stringify(studentsList));
         sessionStorage.setItem("mayacollage_branches_cache", JSON.stringify(branchesList));
         sessionStorage.setItem("mayacollage_courses_cache", JSON.stringify(coursesList));
-      } catch (_) {}
+      } catch (_) { }
 
       if (forceRefresh) {
         setToastMsg("Redis & Local cache refreshed fresh from PostgreSQL!");
@@ -170,7 +169,7 @@ export default function StudentManagementDashboard() {
       const cached = localStorage.getItem("mayacollage_students_cache") || sessionStorage.getItem("mayacollage_students_cache");
       const cachedBranches = localStorage.getItem("mayacollage_branches_cache") || sessionStorage.getItem("mayacollage_branches_cache");
       const cachedCourses = localStorage.getItem("mayacollage_courses_cache") || sessionStorage.getItem("mayacollage_courses_cache");
-      
+
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -181,7 +180,7 @@ export default function StudentManagementDashboard() {
       }
       if (cachedBranches) setBranches(JSON.parse(cachedBranches));
       if (cachedCourses) setCourses(JSON.parse(cachedCourses));
-    } catch (_) {}
+    } catch (_) { }
 
     // 2. Background revalidation from server silently
     fetchData();
@@ -190,11 +189,11 @@ export default function StudentManagementDashboard() {
   // Reset lazy load pagination on filter or view mode change
   useEffect(() => {
     setVisibleCount(24);
-  }, [searchQuery, selectedFilter, filterBranch, filterCourse, filterYear, filterBatch, filterSemester, filterSection, filterFeeStatus, viewMode]);
+  }, [searchQuery, selectedFilter, filterBranch, filterCourse, filterYear, filterSemester, filterSection, filterFeeStatus, viewMode]);
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Are you sure you want to delete student: ${name}?`)) return;
-    
+
     // Optimistic UI update and sync to local cache
     setStudents(prev => {
       const next = prev.filter(s => s._id !== id);
@@ -205,8 +204,8 @@ export default function StudentManagementDashboard() {
     try {
       localStorage.removeItem(`maya_student_detail_${id}`);
       sessionStorage.removeItem(`maya_student_detail_${id}`);
-    } catch (_) {}
-    
+    } catch (_) { }
+
     try {
       const res = await fetch(`/api/students/${id}`, { method: "DELETE" });
       if (res.ok) {
@@ -228,7 +227,7 @@ export default function StudentManagementDashboard() {
       alert("Password must be at least 6 characters long");
       return;
     }
-    
+
     setIsChangingPassword(true);
     try {
       const res = await fetch(`/api/students/${passwordModal.studentId}/change-password`, {
@@ -236,7 +235,7 @@ export default function StudentManagementDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ newPassword }),
       });
-      
+
       if (res.ok) {
         setToastMsg("Password updated successfully!");
         setPasswordModal({ isOpen: false, studentId: "", name: "" });
@@ -259,7 +258,7 @@ export default function StudentManagementDashboard() {
       alert("Please select at least one filter to update students.");
       return;
     }
-    
+
     if (!confirm(`Are you sure you want to promote these students to Semester ${newSemester}?`)) return;
 
     setIsBatchUpdating(true);
@@ -296,7 +295,7 @@ export default function StudentManagementDashboard() {
   // Helper for student fee summary (inherits Course total fee if not custom configured)
   const getFeeInfo = (student: any) => {
     const courseObj = courses.find(c => c._id === (typeof student.selectedProgram === 'object' ? student.selectedProgram?._id : student.selectedProgram));
-    
+
     let courseBaseFee = Number(courseObj?.tuitionFee) || 0;
     if (Array.isArray(courseObj?.semesterFees) && courseObj.semesterFees.length > 0) {
       const sumSem = courseObj.semesterFees.reduce((acc: number, sf: any) => acc + (Number(sf.fee) || 0), 0);
@@ -337,15 +336,15 @@ export default function StudentManagementDashboard() {
     const courseDuration = summary.courseObj?.duration || 4;
     const annualTotal = Math.round(targetTotal / courseDuration);
 
-    const existingYears = (student.fees?.years && student.fees.years.length > 0) 
-      ? student.fees.years 
+    const existingYears = (student.fees?.years && student.fees.years.length > 0)
+      ? student.fees.years
       : Array.from({ length: courseDuration }).map((_, i) => ({
-          year: i + 1,
-          tuition: { total: annualTotal, paid: 0 },
-          exam: { total: 0, paid: 0 },
-          transport: { total: 0, paid: 0 },
-          other: { total: 0, paid: 0 }
-        }));
+        year: i + 1,
+        tuition: { total: annualTotal, paid: 0 },
+        exam: { total: 0, paid: 0 },
+        transport: { total: 0, paid: 0 },
+        other: { total: 0, paid: 0 }
+      }));
 
     const updatedYears = existingYears.map((yr: any) => {
       const yrTuitionTot = (Number(yr.tuition?.total) || annualTotal);
@@ -418,7 +417,7 @@ export default function StudentManagementDashboard() {
             localStorage.setItem(`maya_student_detail_${student._id}`, JSON.stringify(detailParsed));
             sessionStorage.setItem(`maya_student_detail_${student._id}`, JSON.stringify(detailParsed));
           }
-        } catch (_) {}
+        } catch (_) { }
 
         setToastMsg(markPaid ? `Marked ${student.firstName}'s fees as Fully Paid (Redis & Postgres Synced)!` : `Marked ${student.firstName}'s fees as Unpaid.`);
         setTimeout(() => setToastMsg(""), 3000);
@@ -431,6 +430,24 @@ export default function StudentManagementDashboard() {
       fetchData();
       alert("Error updating student fee status.");
     }
+  };
+
+  // Helper to extract student's starting academic year (e.g. 2023, 2024, 2025)
+  const getStudentStartYear = (s: any): string => {
+    if (s.admissionYear) {
+      const m = String(s.admissionYear).match(/\b(20\d{2})\b/);
+      if (m) return m[1];
+    }
+    if (s.sessionYear) {
+      const m = String(s.sessionYear).match(/^\s*(20\d{2})/);
+      if (m) return m[1];
+    }
+    if (s.batch) {
+      const m = String(s.batch).match(/^\s*(20\d{2})/);
+      if (m) return m[1];
+    }
+    const any = String(s.sessionYear || s.batch || s.admissionYear || '').match(/(20\d{2})/);
+    return any ? any[1] : '';
   };
 
   const filteredStudents = useMemo(() => {
@@ -451,24 +468,14 @@ export default function StudentManagementDashboard() {
       });
     }
     if (filterYear !== "All") {
-      const qYear = filterYear.trim().toLowerCase();
+      const qYear = filterYear.trim();
       result = result.filter(s => {
-        const sy = (s.sessionYear || "").toLowerCase().trim();
-        const ay = (s.admissionYear || "").toLowerCase().trim();
-        const bt = (s.batch || "").toLowerCase().trim();
-        if (sy === qYear || ay === qYear || bt === qYear) return true;
-        if (sy && (sy.includes(qYear) || qYear.includes(sy))) return true;
-        if (ay && (ay.includes(qYear) || qYear.includes(ay))) return true;
-        if (bt && (bt.includes(qYear) || qYear.includes(bt))) return true;
-        return false;
-      });
-    }
-    if (filterBatch !== "All") {
-      const qBatch = filterBatch.trim().toLowerCase();
-      result = result.filter(s => {
-        const bt = (s.batch || "").toLowerCase().trim();
-        const sy = (s.sessionYear || "").toLowerCase().trim();
-        return bt === qBatch || sy === qBatch || (sy && sy.includes(qBatch)) || (bt && bt.includes(qBatch));
+        const startYr = getStudentStartYear(s);
+        if (startYr === qYear) return true;
+        const sy = String(s.sessionYear || "").trim();
+        const ay = String(s.admissionYear || "").trim();
+        const bt = String(s.batch || "").trim();
+        return sy.startsWith(qYear) || ay.startsWith(qYear) || bt.startsWith(qYear);
       });
     }
     if (filterSemester !== "All") {
@@ -489,9 +496,9 @@ export default function StudentManagementDashboard() {
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      result = result.filter(s => 
-        (s.firstName?.toLowerCase() || "").includes(q) || 
-        (s.lastName?.toLowerCase() || "").includes(q) || 
+      result = result.filter(s =>
+        (s.firstName?.toLowerCase() || "").includes(q) ||
+        (s.lastName?.toLowerCase() || "").includes(q) ||
         (s.studentId?.toLowerCase() || "").includes(q) ||
         (s.admissionNumber?.toLowerCase() || "").includes(q) ||
         (s.mobileNumber?.toLowerCase() || "").includes(q) ||
@@ -499,7 +506,7 @@ export default function StudentManagementDashboard() {
       );
     }
     return result;
-  }, [students, selectedFilter, filterBranch, filterCourse, filterYear, filterBatch, filterSemester, filterSection, filterFeeStatus, searchQuery, courses]);
+  }, [students, selectedFilter, filterBranch, filterCourse, filterYear, filterSemester, filterSection, filterFeeStatus, searchQuery, courses]);
 
   // Lazy loading slice of students for smooth performance
   const displayedStudents = useMemo(() => {
@@ -568,18 +575,12 @@ export default function StudentManagementDashboard() {
     return Array.from(batches).sort().reverse();
   }, [students]);
 
-  const uniqueYears = useMemo(() => {
+  const uniqueStartYears = useMemo(() => {
     const yearsSet = new Set<string>();
     students.forEach((s: any) => {
-      const sy = s.sessionYear && String(s.sessionYear).trim();
-      const ay = s.admissionYear && String(s.admissionYear).trim();
-      const bt = s.batch && String(s.batch).trim();
-      if (sy) yearsSet.add(sy);
-      if (ay) yearsSet.add(ay);
-      if (bt) yearsSet.add(bt);
+      const yr = getStudentStartYear(s);
+      if (yr) yearsSet.add(yr);
     });
-    // Ensure standard academic session formats are readily available
-    ["2024-25", "2024-2027", "2025-2028", "2023-2026", "2022-2025", "2021-2025"].forEach(y => yearsSet.add(y));
     return Array.from(yearsSet).sort().reverse();
   }, [students]);
 
@@ -623,17 +624,17 @@ export default function StudentManagementDashboard() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24 relative font-sans text-slate-800">
-      
+
       {/* Toast Notification */}
       <AnimatePresence>
         {toastMsg && (
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }} 
-            animate={{ opacity: 1, y: 0 }} 
-            exit={{ opacity: 0, y: -20 }} 
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
             className="fixed top-8 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-6 py-3.5 rounded-2xl font-bold shadow-2xl flex items-center gap-3 border border-slate-700"
           >
-            <CheckCircle2 className="w-5 h-5 text-emerald-400" /> 
+            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
             <span>{toastMsg}</span>
           </motion.div>
         )}
@@ -675,47 +676,44 @@ export default function StudentManagementDashboard() {
               </p>
             </div>
           </div>
-          
+
           <div className="flex flex-wrap items-center gap-3">
-            
+
             {/* View Mode Toggle: Cards View (Default), List View, Branch-Course */}
             <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
               <button
                 onClick={() => {
                   setViewMode("cards");
-                  try { localStorage.setItem("maya_students_view_mode", "cards"); } catch (_) {}
+                  try { localStorage.setItem("maya_students_view_mode", "cards"); } catch (_) { }
                 }}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-black transition-all ${
-                  viewMode === "cards" 
-                    ? "bg-white text-indigo-600 shadow-sm" 
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-black transition-all ${viewMode === "cards"
+                  ? "bg-white text-indigo-600 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+                  }`}
               >
                 <LayoutGrid className="w-3.5 h-3.5" /> Cards View
               </button>
               <button
                 onClick={() => {
                   setViewMode("list");
-                  try { localStorage.setItem("maya_students_view_mode", "list"); } catch (_) {}
+                  try { localStorage.setItem("maya_students_view_mode", "list"); } catch (_) { }
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
-                  viewMode === "list" 
-                    ? "bg-white text-indigo-600 shadow-sm" 
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${viewMode === "list"
+                  ? "bg-white text-indigo-600 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+                  }`}
               >
                 <List className="w-3.5 h-3.5" /> List View
               </button>
               <button
                 onClick={() => {
                   setViewMode("branch_course");
-                  try { localStorage.setItem("maya_students_view_mode", "branch_course"); } catch (_) {}
+                  try { localStorage.setItem("maya_students_view_mode", "branch_course"); } catch (_) { }
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
-                  viewMode === "branch_course" 
-                    ? "bg-white text-indigo-600 shadow-sm" 
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${viewMode === "branch_course"
+                  ? "bg-white text-indigo-600 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+                  }`}
               >
                 <Layers className="w-3.5 h-3.5" /> Branch - Course View
               </button>
@@ -727,7 +725,7 @@ export default function StudentManagementDashboard() {
               </button>
             </Link>
 
-            <button 
+            <button
               onClick={() => setShowBatchDialog(true)}
               className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white text-xs font-black rounded-xl shadow-md hover:bg-slate-800 transition-all"
             >
@@ -744,7 +742,7 @@ export default function StudentManagementDashboard() {
       </div>
 
       <div className="max-w-[1600px] mx-auto px-6 lg:px-8 mt-8 space-y-6">
-        
+
         {/* KPI Stats Row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
           {[
@@ -767,11 +765,11 @@ export default function StudentManagementDashboard() {
 
         {/* Search & Filter Toolbar */}
         <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4">
-          
+
           <div className="flex flex-col md:flex-row gap-4 justify-between items-stretch md:items-center">
             <div className="flex-1 relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input 
+              <input
                 type="text"
                 placeholder="Search students by name, student ID, admission number, mobile or email..."
                 value={searchQuery}
@@ -785,11 +783,10 @@ export default function StudentManagementDashboard() {
                 <button
                   key={filter}
                   onClick={() => setSelectedFilter(filter)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                    selectedFilter === filter 
-                      ? 'bg-slate-900 text-white shadow-sm' 
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${selectedFilter === filter
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
                 >
                   {filter}
                 </button>
@@ -798,9 +795,9 @@ export default function StudentManagementDashboard() {
           </div>
 
           <div className="flex flex-wrap gap-3 pt-3 border-t border-slate-100 items-center">
-            <select 
-              value={filterBranch} 
-              onChange={e => setFilterBranch(e.target.value)} 
+            <select
+              value={filterBranch}
+              onChange={e => setFilterBranch(e.target.value)}
               className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none"
             >
               <option value="All">All Branches</option>
@@ -808,45 +805,34 @@ export default function StudentManagementDashboard() {
                 <option key={b._id} value={b._id}>{b.name}</option>
               ))}
             </select>
-            
-            <select 
-              value={filterCourse} 
-              onChange={e => setFilterCourse(e.target.value)} 
+
+            <select
+              value={filterCourse}
+              onChange={e => setFilterCourse(e.target.value)}
               className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none"
             >
               <option value="All">All Courses</option>
               {courses
                 .filter(c => filterBranch === "All" || (typeof c.branchId === 'object' ? c.branchId?._id === filterBranch : c.branchId === filterBranch))
                 .map(c => (
-                <option key={c._id} value={c._id}>{c.name} ({c.code})</option>
-              ))}
+                  <option key={c._id} value={c._id}>{c.name} ({c.code})</option>
+                ))}
             </select>
-            
-            <select 
-              value={filterYear} 
-              onChange={e => setFilterYear(e.target.value)} 
+
+            <select
+              value={filterYear}
+              onChange={e => setFilterYear(e.target.value)}
               className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500/20"
             >
-              <option value="All">All Years / Sessions</option>
-              {uniqueYears.map((yr: string) => (
+              <option value="All">All Years</option>
+              {uniqueStartYears.map((yr: string) => (
                 <option key={yr} value={yr}>{yr}</option>
               ))}
             </select>
 
-            <select 
-              value={filterBatch} 
-              onChange={e => setFilterBatch(e.target.value)} 
-              className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none"
-            >
-              <option value="All">All Batches</option>
-              {uniqueBatches.map((b: any) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
-
-            <select 
-              value={filterSemester} 
-              onChange={e => setFilterSemester(e.target.value)} 
+            <select
+              value={filterSemester}
+              onChange={e => setFilterSemester(e.target.value)}
               className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none"
             >
               <option value="All">All Semesters</option>
@@ -855,9 +841,9 @@ export default function StudentManagementDashboard() {
               ))}
             </select>
 
-            <select 
-              value={filterFeeStatus} 
-              onChange={e => setFilterFeeStatus(e.target.value)} 
+            <select
+              value={filterFeeStatus}
+              onChange={e => setFilterFeeStatus(e.target.value)}
               className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none"
             >
               <option value="All">All Fee Statuses</option>
@@ -866,13 +852,12 @@ export default function StudentManagementDashboard() {
               <option value="unpaid">Completely Unpaid</option>
             </select>
 
-            {(filterBranch !== "All" || filterCourse !== "All" || filterYear !== "All" || filterBatch !== "All" || filterSemester !== "All" || filterFeeStatus !== "All" || searchQuery) && (
+            {(filterBranch !== "All" || filterCourse !== "All" || filterYear !== "All" || filterSemester !== "All" || filterFeeStatus !== "All" || searchQuery) && (
               <button
                 onClick={() => {
                   setFilterBranch("All");
                   setFilterCourse("All");
                   setFilterYear("All");
-                  setFilterBatch("All");
                   setFilterSemester("All");
                   setFilterFeeStatus("All");
                   setSearchQuery("");
@@ -1024,7 +1009,7 @@ export default function StudentManagementDashboard() {
               <div className="space-y-8">
                 {branchCourseHierarchy.map(branch => (
                   <div key={branch._id} className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-6">
-                    
+
                     {/* Branch Header */}
                     <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                       <div className="flex items-center gap-3">
@@ -1050,7 +1035,7 @@ export default function StudentManagementDashboard() {
 
                         return (
                           <div key={course._id} className="bg-slate-50/70 rounded-2xl border border-slate-200/80 overflow-hidden">
-                            
+
                             {/* Course Header Row */}
                             <div className="p-4 sm:p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                               <div>
@@ -1077,7 +1062,7 @@ export default function StudentManagementDashboard() {
                                   <span className="text-xs font-black text-indigo-700">₹{course.totalCourseFee?.toLocaleString('en-IN')}</span>
                                 </div>
 
-                                <button 
+                                <button
                                   onClick={() => setExpandedCourses(prev => ({ ...prev, [course._id]: !isExpanded }))}
                                   className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
                                 >
@@ -1114,8 +1099,8 @@ export default function StudentManagementDashboard() {
                                           const isPaid = feeInfo.status === "paid";
 
                                           return (
-                                            <motion.tr 
-                                              key={student._id} 
+                                            <motion.tr
+                                              key={student._id}
                                               initial={{ opacity: 0, x: -10 }}
                                               animate={{ opacity: 1, x: 0 }}
                                               transition={{ delay: Math.min(idx * 0.03, 0.6), duration: 0.25 }}
@@ -1165,7 +1150,7 @@ export default function StudentManagementDashboard() {
 
                                               <td className="py-3 px-4 text-center">
                                                 <div className="flex items-center justify-center gap-2">
-                                                  
+
                                                   {/* 1-Click Toggle: Mark Paid / Unpaid */}
                                                   {!isPaid ? (
                                                     <button
@@ -1216,7 +1201,7 @@ export default function StudentManagementDashboard() {
             {/* OPTION 2: CARDS VIEW (GRID WITH SEQUENTIAL ENTRANCE ANIMATION)    */}
             {/* ================================================================= */}
             {viewMode === "cards" && (
-              <motion.div 
+              <motion.div
                 key={`cards-${selectedFilter}-${filterBranch}-${filterCourse}-${filterSemester}-${searchQuery}`}
                 initial="hidden"
                 animate="show"
@@ -1243,15 +1228,15 @@ export default function StudentManagementDashboard() {
                       key={student._id}
                       variants={{
                         hidden: { opacity: 0, y: 22, scale: 0.94 },
-                        show: { 
-                          opacity: 1, 
-                          y: 0, 
+                        show: {
+                          opacity: 1,
+                          y: 0,
                           scale: 1,
-                          transition: { 
-                            type: "spring", 
-                            stiffness: 380, 
-                            damping: 26 
-                          } 
+                          transition: {
+                            type: "spring",
+                            stiffness: 380,
+                            damping: 26
+                          }
                         }
                       }}
                       className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all p-5 flex flex-col justify-between group hover:border-indigo-200 relative overflow-hidden"
@@ -1262,10 +1247,10 @@ export default function StudentManagementDashboard() {
                             <div className="relative">
                               <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-indigo-700 text-sm shrink-0 overflow-hidden shadow-xs">
                                 {student.profilePhoto || student.documents?.studentPhoto ? (
-                                  <img 
-                                    src={student.profilePhoto || student.documents?.studentPhoto} 
-                                    alt="" 
-                                    className="w-full h-full object-cover" 
+                                  <img
+                                    src={student.profilePhoto || student.documents?.studentPhoto}
+                                    alt=""
+                                    className="w-full h-full object-cover"
                                   />
                                 ) : (
                                   <span>{student.firstName?.[0]}{student.lastName?.[0]}</span>
@@ -1285,11 +1270,10 @@ export default function StudentManagementDashboard() {
                             </div>
                           </div>
 
-                          <span className={`px-2.5 py-0.5 text-[10px] font-black uppercase rounded-full border shrink-0 ${
-                            student.studentStatus === 'Active' || student.status === 'Active'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                              : 'bg-amber-50 text-amber-700 border-amber-100'
-                          }`}>
+                          <span className={`px-2.5 py-0.5 text-[10px] font-black uppercase rounded-full border shrink-0 ${student.studentStatus === 'Active' || student.status === 'Active'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                            : 'bg-amber-50 text-amber-700 border-amber-100'
+                            }`}>
                             {student.studentStatus || student.status || 'Active'}
                           </span>
                         </div>
@@ -1352,7 +1336,7 @@ export default function StudentManagementDashboard() {
                           </button>
                         </Link>
 
-                        <button 
+                        <button
                           onClick={() => setPasswordModal({ isOpen: true, studentId: student._id, name: `${student.firstName} ${student.lastName}` })}
                           title="Reset Password"
                           className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs transition-colors"
@@ -1371,7 +1355,7 @@ export default function StudentManagementDashboard() {
             {/* ================================================================= */}
             {viewMode === "list" && (
               <div className="space-y-4">
-                
+
                 {/* DESKTOP VIEW: CLEAN TABULAR LIST */}
                 <div className="hidden md:block bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                   <div className="overflow-x-auto">
@@ -1395,11 +1379,11 @@ export default function StudentManagementDashboard() {
                           const branchName = branches.find(b => b._id === (typeof student.selectedBranch === 'object' ? student.selectedBranch?._id : student.selectedBranch))?.name || "-";
 
                           return (
-                            <motion.tr 
-                              key={student._id} 
+                            <motion.tr
+                              key={student._id}
                               initial={{ opacity: 0, x: -16, y: 8 }}
                               animate={{ opacity: 1, x: 0, y: 0 }}
-                              transition={{ 
+                              transition={{
                                 delay: Math.min((index % 24) * 0.035, 0.75),
                                 duration: 0.28,
                                 ease: [0.22, 1, 0.36, 1]
@@ -1414,10 +1398,10 @@ export default function StudentManagementDashboard() {
                                   </span>
                                   <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-indigo-700 text-xs shrink-0 overflow-hidden shadow-xs">
                                     {student.profilePhoto || student.documents?.studentPhoto ? (
-                                      <img 
-                                        src={student.profilePhoto || student.documents?.studentPhoto} 
-                                        alt="" 
-                                        className="w-full h-full object-cover" 
+                                      <img
+                                        src={student.profilePhoto || student.documents?.studentPhoto}
+                                        alt=""
+                                        className="w-full h-full object-cover"
                                       />
                                     ) : (
                                       <span>{student.firstName?.[0]}{student.lastName?.[0]}</span>
@@ -1493,9 +1477,9 @@ export default function StudentManagementDashboard() {
                                     </button>
                                   </Link>
 
-                                  <button 
+                                  <button
                                     onClick={() => handleDelete(student._id, `${student.firstName} ${student.lastName}`)}
-                                    title="Delete Student" 
+                                    title="Delete Student"
                                     className="p-1.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-600 rounded-lg transition-colors"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -1523,9 +1507,9 @@ export default function StudentManagementDashboard() {
                         key={student._id}
                         initial={{ opacity: 0, y: 18 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ 
+                        transition={{
                           delay: Math.min((index % 24) * 0.035, 0.75),
-                          duration: 0.26 
+                          duration: 0.26
                         }}
                         className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3 relative overflow-hidden"
                       >
@@ -1534,10 +1518,10 @@ export default function StudentManagementDashboard() {
                             <div className="relative">
                               <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-indigo-700 text-xs shrink-0 overflow-hidden shadow-xs">
                                 {student.profilePhoto || student.documents?.studentPhoto ? (
-                                  <img 
-                                    src={student.profilePhoto || student.documents?.studentPhoto} 
-                                    alt="" 
-                                    className="w-full h-full object-cover" 
+                                  <img
+                                    src={student.profilePhoto || student.documents?.studentPhoto}
+                                    alt=""
+                                    className="w-full h-full object-cover"
                                   />
                                 ) : (
                                   <span>{student.firstName?.[0]}{student.lastName?.[0]}</span>
@@ -1557,9 +1541,8 @@ export default function StudentManagementDashboard() {
                             </div>
                           </div>
 
-                          <span className={`px-2 py-0.5 text-[10px] font-black uppercase rounded-full border shrink-0 ${
-                            isPaid ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'
-                          }`}>
+                          <span className={`px-2 py-0.5 text-[10px] font-black uppercase rounded-full border shrink-0 ${isPaid ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'
+                            }`}>
                             {isPaid ? 'Paid' : 'Due'}
                           </span>
                         </div>
@@ -1680,17 +1663,17 @@ export default function StudentManagementDashboard() {
       <AnimatePresence>
         {passwordModal.isOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }} 
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
               onClick={() => setPasswordModal({ isOpen: false, studentId: "", name: "" })}
             />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }} 
-              animate={{ opacity: 1, scale: 1, y: 0 }} 
-              exit={{ opacity: 0, scale: 0.95, y: 20 }} 
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="relative bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 overflow-hidden z-10"
             >
               <div className="flex justify-between items-center mb-6">
@@ -1703,7 +1686,7 @@ export default function StudentManagementDashboard() {
                     <p className="text-xs font-bold text-slate-400">{passwordModal.name}</p>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={() => setPasswordModal({ isOpen: false, studentId: "", name: "" })}
                   className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center"
                 >
@@ -1714,7 +1697,7 @@ export default function StudentManagementDashboard() {
               <form onSubmit={handlePasswordChange} className="space-y-4">
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">New Password</label>
-                  <input 
+                  <input
                     type="password"
                     required
                     minLength={6}
@@ -1725,7 +1708,7 @@ export default function StudentManagementDashboard() {
                   />
                 </div>
 
-                <button 
+                <button
                   type="submit"
                   disabled={isChangingPassword}
                   className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
@@ -1743,17 +1726,17 @@ export default function StudentManagementDashboard() {
       <AnimatePresence>
         {showBatchDialog && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }} 
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
               onClick={() => setShowBatchDialog(false)}
             />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }} 
-              animate={{ opacity: 1, scale: 1, y: 0 }} 
-              exit={{ opacity: 0, scale: 0.95, y: 20 }} 
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl p-7 overflow-hidden z-10 space-y-5"
             >
               <div className="flex justify-between items-center border-b border-slate-100 pb-4">
@@ -1766,7 +1749,7 @@ export default function StudentManagementDashboard() {
                     <p className="text-xs font-bold text-slate-400">Promote multiple students in bulk</p>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={() => setShowBatchDialog(false)}
                   className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center"
                 >
@@ -1777,7 +1760,7 @@ export default function StudentManagementDashboard() {
               <div className="space-y-4 text-xs font-bold">
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Target Branch</label>
-                  <select 
+                  <select
                     value={batchBranch}
                     onChange={e => setBatchBranch(e.target.value)}
                     className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl text-slate-800 outline-none"
@@ -1791,7 +1774,7 @@ export default function StudentManagementDashboard() {
 
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Target Course</label>
-                  <select 
+                  <select
                     value={batchProgram}
                     onChange={e => setBatchProgram(e.target.value)}
                     className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl text-slate-800 outline-none"
@@ -1805,7 +1788,7 @@ export default function StudentManagementDashboard() {
 
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Batch / Session Year</label>
-                  <select 
+                  <select
                     value={batchYear}
                     onChange={e => setBatchYear(e.target.value)}
                     className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl text-slate-800 outline-none"
@@ -1819,13 +1802,13 @@ export default function StudentManagementDashboard() {
 
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Current Semester</label>
-                  <select 
+                  <select
                     value={batchCurrentSemester}
                     onChange={e => setBatchCurrentSemester(e.target.value)}
                     className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl text-slate-800 outline-none"
                   >
                     <option value="">All Semesters</option>
-                    {[1,2,3,4,5,6,7,8,9,10].map(sem => (
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(sem => (
                       <option key={sem} value={sem}>Semester {sem}</option>
                     ))}
                   </select>
@@ -1833,7 +1816,7 @@ export default function StudentManagementDashboard() {
 
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Promote To Semester</label>
-                  <select 
+                  <select
                     value={newSemester}
                     onChange={e => setNewSemester(Number(e.target.value))}
                     className="w-full mt-1 bg-slate-50 border border-slate-200 p-3 rounded-xl text-slate-800 outline-none"
@@ -1846,13 +1829,13 @@ export default function StudentManagementDashboard() {
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                <button 
+                <button
                   onClick={() => setShowBatchDialog(false)}
                   className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800"
                 >
                   Cancel
                 </button>
-                <button 
+                <button
                   onClick={handleBatchUpdate}
                   disabled={isBatchUpdating}
                   className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
