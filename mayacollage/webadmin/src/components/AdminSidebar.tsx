@@ -18,7 +18,8 @@ import {
   MessageSquare, 
   Bus, 
   BarChart, 
-  LogOut 
+  LogOut,
+  Database
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -39,6 +40,7 @@ const menuItems = [
     { name: "Finance & Fees", path: "/dashboard/finance", icon: CreditCard },
     { name: "User Management", path: "/dashboard/users", icon: Users },
     { name: "Student Records", path: "/dashboard/students", icon: UserCheck },
+    { name: "Database Seed Hub", path: "/dashboard/seed-data", icon: Database },
     { name: "Library Control", path: "/dashboard/library", icon: Library },
     { name: "Notice Board", path: "/dashboard/notices", icon: MessageSquare },
     { name: "Leave Management", path: "/dashboard/leaves", icon: FileText },

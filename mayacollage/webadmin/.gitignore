@@ -39,3 +39,21 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# backups and database dumps
+/backups/
+/public/backups/
+check_*.ts
+check_*.mjs
+check_*.js
+dump_*.ts
+dump_*.mjs
+test_*.ts
+test_*.mjs
+inspect_*.ts
+analyze_*.ts
+list_*.ts
+seed_datafiles_students.ts
+revert_*.mjs
+delete_*.mjs
+debug_*.mjs

@@ -218,6 +218,8 @@ export default function StudentDetailScreen() {
                 ]} />
 
                 <InfoGrid data={[
+                  {label: "FATHER NAME", value: studentData.fatherName || studentData.documents?.fatherName || (studentData.middleName && studentData.middleName !== studentData.firstName ? studentData.middleName : "Not specified")},
+                  {label: "MOTHER NAME", value: studentData.motherName || studentData.documents?.motherName || "Not specified"},
                   {label: "FULL ADDRESS", value: studentData.address},
                 ]} />
               </motion.div>
@@ -269,31 +271,43 @@ export default function StudentDetailScreen() {
                 ) : (
                   <>
                     <div className="space-y-6 max-h-[600px] overflow-y-auto pr-2">
-                      {studentData.fees.years?.map((fy: any) => (
-                        <div key={fy.year} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
-                          <h4 className="text-lg font-black text-slate-800 mb-4 border-b border-slate-50 pb-2">Year {fy.year}</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {[
+                      {studentData.fees.years?.map((fy: any) => {
+                        const comps = (Array.isArray(fy.components) && fy.components.length > 0)
+                          ? fy.components.map((c: any) => ({
+                              title: c.category || "Fee Component",
+                              total: Number(c.amount ?? c.total) || 0,
+                              paid: Number(c.paid) || 0,
+                              color: (c.category || "").toLowerCase().includes("tuition") ? "bg-blue-500" : (c.category || "").toLowerCase().includes("exam") ? "bg-purple-500" : "bg-orange-500",
+                              icon: (c.category || "").toLowerCase().includes("tuition") ? Calculator : (c.category || "").toLowerCase().includes("exam") ? FileText : Receipt
+                            }))
+                          : [
                               { title: "Tuition Fee", total: fy.tuition?.total || 0, paid: fy.tuition?.paid || 0, color: "bg-blue-500", icon: Calculator },
                               { title: "Exam Fee", total: fy.exam?.total || 0, paid: fy.exam?.paid || 0, color: "bg-purple-500", icon: FileText },
                               { title: "Other Charges", total: fy.other?.total || 0, paid: fy.other?.paid || 0, color: "bg-orange-500", icon: Receipt },
-                            ].map(fee => (
-                              <div key={fee.title} className="bg-slate-50 p-4 rounded-xl flex items-center justify-between border border-slate-100">
-                                <div className="flex items-center gap-3">
-                                  <div className={`w-10 h-10 rounded-xl ${fee.color} bg-opacity-10 flex items-center justify-center`}>
-                                    <fee.icon className={`w-5 h-5 ${fee.color.replace('bg-', 'text-')}`} />
+                            ];
+
+                        return (
+                          <div key={fy.year} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+                            <h4 className="text-lg font-black text-slate-800 mb-4 border-b border-slate-50 pb-2">Year {fy.year}</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              {comps.map((fee: any) => (
+                                <div key={fee.title} className="bg-slate-50 p-4 rounded-xl flex items-center justify-between border border-slate-100">
+                                  <div className="flex items-center gap-3">
+                                    <div className={`w-10 h-10 rounded-xl ${fee.color} bg-opacity-10 flex items-center justify-center`}>
+                                      <fee.icon className={`w-5 h-5 ${fee.color.replace('bg-', 'text-')}`} />
+                                    </div>
+                                    <div>
+                                      <h4 className="text-xs font-black text-slate-800">{fee.title}</h4>
+                                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Paid: ₹{fee.paid}</p>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <h4 className="text-xs font-black text-slate-800">{fee.title}</h4>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Paid: ₹{fee.paid}</p>
-                                  </div>
+                                  <div className="text-sm font-black text-slate-900">₹{fee.total}</div>
                                 </div>
-                                <div className="text-sm font-black text-slate-900">₹{fee.total}</div>
-                              </div>
-                            ))}
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     <div className="mt-8 bg-gradient-to-r from-[#6B0F3A] to-rose-600 rounded-[2rem] p-8 text-white shadow-xl flex flex-col md:flex-row items-center gap-6 justify-between">
@@ -302,14 +316,24 @@ export default function StudentDetailScreen() {
                         <div>
                           <p className="text-xs font-bold uppercase tracking-widest opacity-80">Total Assigned (All Years)</p>
                           <p className="text-4xl font-black mt-1">
-                            ₹{studentData.fees.years?.reduce((sum: number, fy: any) => sum + (fy.tuition?.total || 0) + (fy.exam?.total || 0) + (fy.other?.total || 0), 0) || 0}
+                            ₹{studentData.fees.years?.reduce((sum: number, fy: any) => {
+                              if (Array.isArray(fy.components) && fy.components.length > 0) {
+                                return sum + fy.components.reduce((s: number, c: any) => s + (Number(c.amount ?? c.total) || 0), 0);
+                              }
+                              return sum + (fy.tuition?.total || 0) + (fy.exam?.total || 0) + (fy.other?.total || 0);
+                            }, 0) || 0}
                           </p>
                         </div>
                       </div>
                       <div className="text-right">
                           <p className="text-xs font-bold uppercase tracking-widest opacity-80">Total Paid (All Years)</p>
                           <p className="text-2xl font-black mt-1 text-emerald-300">
-                            ₹{studentData.fees.years?.reduce((sum: number, fy: any) => sum + (fy.tuition?.paid || 0) + (fy.exam?.paid || 0) + (fy.other?.paid || 0), 0) || 0}
+                            ₹{studentData.fees.years?.reduce((sum: number, fy: any) => {
+                              if (Array.isArray(fy.components) && fy.components.length > 0) {
+                                return sum + fy.components.reduce((s: number, c: any) => s + (Number(c.paid) || 0), 0);
+                              }
+                              return sum + (fy.tuition?.paid || 0) + (fy.exam?.paid || 0) + (fy.other?.paid || 0);
+                            }, 0) || 0}
                           </p>
                       </div>
                     </div>

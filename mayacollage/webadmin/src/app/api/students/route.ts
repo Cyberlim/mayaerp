@@ -108,6 +108,25 @@ export async function GET(request: Request) {
       return NextResponse.json({ count });
     }
 
+    // Self-healing migration for legacy records where father's name was placed in middle_name
+    try {
+      await pgQuery(`
+        UPDATE students
+        SET father_name = TRIM(middle_name),
+            middle_name = '',
+            last_name = CASE WHEN LOWER(TRIM(last_name)) = 'student' THEN '' ELSE last_name END,
+            updated_at = NOW()
+        WHERE (father_name IS NULL OR TRIM(father_name) = '')
+          AND middle_name IS NOT NULL
+          AND TRIM(middle_name) != '';
+      `);
+      await pgQuery(`
+        UPDATE students
+        SET last_name = ''
+        WHERE LOWER(TRIM(last_name)) = 'student';
+      `);
+    } catch (_) {}
+
     const sql = `
       SELECT 
         id, enrollment_number, admission_number, student_id, first_name, middle_name, last_name,
@@ -115,7 +134,8 @@ export async function GET(request: Request) {
         aadhar_number, religion, entry_type, selected_branch, branch_name, selected_program, course_name,
         course_duration, selected_semester, selected_section, session_year, admission_year, batch, course_year,
         fees, total_fee, paid_fee, fee_balance, fee_status, tuition_fee, tuition_paid, exam_fee, exam_paid,
-        transport_fee, transport_paid, other_fee, other_paid, documents, status, student_status, created_at, updated_at
+        transport_fee, transport_paid, other_fee, other_paid, documents, status, student_status, created_at, updated_at,
+        father_name, mother_name, caste_category, pan_number, grn_number, admission_form_date, enrollment_date, caste_certificate_number
       FROM students
       ${whereSQL}
       ORDER BY created_at DESC
@@ -196,6 +216,27 @@ export async function POST(request: Request) {
     const feeStatus = totalFee > 0 ? (paidFee >= totalFee ? 'paid' : paidFee > 0 ? 'partial' : 'unpaid') : 'unpaid';
 
     // 2. Insert into PostgreSQL
+    const fatherName = body.fatherName || body.documents?.fatherName || null;
+    const motherName = body.motherName || body.documents?.motherName || null;
+    const casteCategory = body.casteCategory || body.category || body.documents?.casteCategory || null;
+    const panNumber = body.panNumber || body.documents?.panNumber || null;
+    const grnNumber = body.grnNumber || body.documents?.grnNumber || null;
+    const admissionFormDate = body.admissionFormDate || body.documents?.admissionFormDate || null;
+    const enrollmentDate = body.enrollmentDate || body.documents?.enrollmentDate || null;
+    const casteCertificateNumber = body.casteCertificateNumber || body.documents?.casteCertificateNumber || null;
+
+    const mergedDocs = {
+      ...(body.documents || {}),
+      fatherName: fatherName || body.documents?.fatherName || '',
+      motherName: motherName || body.documents?.motherName || '',
+      casteCategory: casteCategory || body.documents?.casteCategory || '',
+      panNumber: panNumber || body.documents?.panNumber || '',
+      grnNumber: grnNumber || body.documents?.grnNumber || '',
+      admissionFormDate: admissionFormDate || body.documents?.admissionFormDate || '',
+      enrollmentDate: enrollmentDate || body.documents?.enrollmentDate || '',
+      casteCertificateNumber: casteCertificateNumber || body.documents?.casteCertificateNumber || ''
+    };
+
     const insertSQL = `
       INSERT INTO students (
         id, enrollment_number, admission_number, student_id, password, library_pin,
@@ -206,13 +247,18 @@ export async function POST(request: Request) {
         selected_section, session_year, admission_year, batch, course_year,
         fees, total_fee, paid_fee, fee_balance, fee_status,
         tuition_fee, tuition_paid, exam_fee, exam_paid, transport_fee, transport_paid, other_fee, other_paid,
-        documents, status, student_status, created_at, updated_at
+        documents, status, student_status,
+        father_name, mother_name, caste_category, pan_number, grn_number,
+        admission_form_date, enrollment_date, caste_certificate_number,
+        created_at, updated_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
         $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
         $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
         $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
-        $41, $42, $43, $44, $45, $46, $47, $48, $49, NOW(), NOW()
+        $41, $42, $43, $44, $45, $46, $47, $48, $49,
+        $50, $51, $52, $53, $54, $55, $56, $57,
+        NOW(), NOW()
       )
       RETURNING *
     `;
@@ -264,9 +310,17 @@ export async function POST(request: Request) {
       transportPaid,
       otherFee,
       otherPaid,
-      JSON.stringify(body.documents || {}),
+      JSON.stringify(mergedDocs),
       body.status || 'Approved',
-      body.studentStatus || 'Active'
+      body.studentStatus || 'Active',
+      fatherName,
+      motherName,
+      casteCategory,
+      panNumber,
+      grnNumber,
+      admissionFormDate,
+      enrollmentDate,
+      casteCertificateNumber
     ]);
 
     const createdStudent = mapPgStudent(insertRes.rows[0]);

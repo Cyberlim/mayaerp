@@ -178,46 +178,106 @@ export async function PATCH(
       console.warn("MongoDB course sync warning:", mgErr);
     }
 
-    // If applyToStudents is requested, sync fees to students in PostgreSQL
-    if (shouldSync && (Number(tuitionFee) > 0 || (courseData.semesterFees && courseData.semesterFees.length > 0))) {
-      try {
-        const courseDuration = Number(duration) || 4;
-        let totalFee = Number(tuitionFee) || 0;
-        const parsedSemesterFees = typeof semesterFees === 'string' ? JSON.parse(semesterFees) : semesterFees;
-        if (Array.isArray(parsedSemesterFees) && parsedSemesterFees.length > 0) {
-          const sumSem = parsedSemesterFees.reduce((acc: number, sf: any) => acc + (Number(sf.fee) || 0), 0);
-          if (sumSem > 0) totalFee = sumSem;
-        }
-        const annualFee = Math.round(totalFee / courseDuration);
+    // Sync feeStructureTemplate to all enrolled students in PostgreSQL for real-time consistency
+    let parsedFeeTemplate: any[] = [];
+    if (courseData.feeStructureTemplate) {
+      parsedFeeTemplate = Array.isArray(courseData.feeStructureTemplate)
+        ? courseData.feeStructureTemplate
+        : (typeof courseData.feeStructureTemplate === 'string' ? JSON.parse(courseData.feeStructureTemplate) : []);
+    } else if (updated.fee_structure_template) {
+      parsedFeeTemplate = typeof updated.fee_structure_template === 'string'
+        ? JSON.parse(updated.fee_structure_template)
+        : (updated.fee_structure_template || []);
+    }
 
-        // Fetch students enrolled in this course from PostgreSQL
-        const studentsRes = await pgQuery('SELECT id, fees FROM students WHERE selected_program = $1', [id]);
+    if (parsedFeeTemplate.length > 0 || shouldSync) {
+      try {
+        const studentsRes = await pgQuery(
+          'SELECT id, fees, paid_fee FROM students WHERE selected_program = $1 OR course_code = $2',
+          [id, updated.code || '']
+        );
+
         for (const st of studentsRes.rows) {
           const existingFees = typeof st.fees === 'string' ? JSON.parse(st.fees) : (st.fees || {});
-          const existingYears = existingFees.years || [];
-          const years = Array.from({ length: courseDuration }).map((_, idx) => ({
-            year: idx + 1,
-            tuition: { total: annualFee, paid: existingYears[idx]?.tuition?.paid || 0 },
-            exam: { total: 0, paid: existingYears[idx]?.exam?.paid || 0 },
-            transport: { total: 0, paid: existingYears[idx]?.transport?.paid || 0 },
-            other: { total: 0, paid: existingYears[idx]?.other?.paid || 0 }
-          }));
+          const existingYears = Array.isArray(existingFees.years) ? existingFees.years : [];
+
+          let grandTotal = 0;
+          let grandPaid = 0;
+
+          const updatedYears = parsedFeeTemplate.map((yt: any, idx: number) => {
+            const yrNum = Number(yt.year) || (idx + 1);
+            const prevYr = existingYears.find((ey: any) => Number(ey.year) === yrNum) || existingYears[idx];
+            const discount = Number(prevYr?.discount) || 0;
+            const discountReason = prevYr?.discountReason || '';
+
+            let yrGross = 0;
+            let yrPaid = 0;
+
+            const components = (yt.components || []).map((c: any) => {
+              const amt = Number(c.amount) || 0;
+              let compPaid = 0;
+
+              if (prevYr?.components && Array.isArray(prevYr.components)) {
+                const matchC = prevYr.components.find((ec: any) =>
+                  (ec.category || '').toLowerCase().trim() === (c.category || '').toLowerCase().trim()
+                );
+                if (matchC) compPaid = Number(matchC.paid) || 0;
+              } else if (prevYr) {
+                const catLower = (c.category || '').toLowerCase();
+                if (catLower.includes('tuition')) compPaid = Number(prevYr.tuition?.paid) || 0;
+                else if (catLower.includes('exam')) compPaid = Number(prevYr.exam?.paid) || 0;
+                else if (catLower.includes('transport')) compPaid = Number(prevYr.transport?.paid) || 0;
+                else compPaid = Number(prevYr.other?.paid) || 0;
+              }
+
+              yrGross += amt;
+              yrPaid += compPaid;
+
+              return {
+                category: c.category || 'Tuition Fee',
+                amount: amt,
+                paid: compPaid,
+                isMandatory: c.isMandatory !== false,
+                frequency: c.frequency || 'Annual'
+              };
+            });
+
+            grandTotal += Math.max(0, yrGross - discount);
+            grandPaid += yrPaid;
+
+            return {
+              year: yrNum,
+              discount,
+              discountReason,
+              components,
+              yearGross: yrGross,
+              yearTotal: Math.max(0, yrGross - discount),
+              yearPaid: yrPaid,
+              tuition: { total: yrGross, paid: yrPaid }
+            };
+          });
 
           const updatedFees = {
             isConfigured: true,
-            years
+            years: updatedYears
           };
 
-          await pgQuery('UPDATE students SET fees = $1, updated_at = NOW() WHERE id = $2', [JSON.stringify(updatedFees), st.id]);
+          const newBalance = Math.max(0, grandTotal - grandPaid);
+          const newStatus = grandPaid >= grandTotal && grandTotal > 0 ? 'paid' : (grandPaid > 0 ? 'partial' : 'unpaid');
+
+          await pgQuery(
+            'UPDATE students SET fees = $1, total_fee = $2, fee_balance = $3, fee_status = $4, updated_at = NOW() WHERE id = $5',
+            [JSON.stringify(updatedFees), grandTotal, newBalance, newStatus, st.id]
+          );
         }
-        // Invalidate students cache
-        await delCachePattern("students:*");
       } catch (feeSyncErr) {
         console.error("Error syncing student fees:", feeSyncErr);
       }
     }
 
-    // Invalidate Redis caches
+    // Invalidate Redis caches for real-time synchronization
+    await delCachePattern("fee:student-account:*");
+    await delCachePattern("students:*");
     await delCachePattern("master:courses:*");
     await delCache(`course:${id}`);
 

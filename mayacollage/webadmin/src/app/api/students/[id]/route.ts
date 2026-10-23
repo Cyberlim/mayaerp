@@ -195,6 +195,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         documents = COALESCE($41, documents),
         status = COALESCE($42, status),
         student_status = COALESCE($43, student_status),
+        father_name = COALESCE($44, father_name),
+        mother_name = COALESCE($45, mother_name),
+        caste_category = COALESCE($46, caste_category),
+        pan_number = COALESCE($47, pan_number),
+        grn_number = COALESCE($48, grn_number),
+        admission_form_date = COALESCE($49, admission_form_date),
+        enrollment_date = COALESCE($50, enrollment_date),
+        caste_certificate_number = COALESCE($51, caste_certificate_number),
         updated_at = NOW()
       WHERE id = $1
       RETURNING *
@@ -243,7 +251,15 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       otherPaid,
       body.documents ? JSON.stringify(body.documents) : null,
       body.status !== undefined ? body.status : null,
-      body.studentStatus !== undefined ? body.studentStatus : null
+      body.studentStatus !== undefined ? body.studentStatus : null,
+      body.fatherName !== undefined ? body.fatherName : (body.documents?.fatherName !== undefined ? body.documents.fatherName : null),
+      body.motherName !== undefined ? body.motherName : (body.documents?.motherName !== undefined ? body.documents.motherName : null),
+      body.casteCategory !== undefined ? body.casteCategory : (body.category !== undefined ? body.category : (body.documents?.casteCategory !== undefined ? body.documents.casteCategory : null)),
+      body.panNumber !== undefined ? body.panNumber : (body.documents?.panNumber !== undefined ? body.documents.panNumber : null),
+      body.grnNumber !== undefined ? body.grnNumber : (body.documents?.grnNumber !== undefined ? body.documents.grnNumber : null),
+      body.admissionFormDate !== undefined ? body.admissionFormDate : (body.documents?.admissionFormDate !== undefined ? body.documents.admissionFormDate : null),
+      body.enrollmentDate !== undefined ? body.enrollmentDate : (body.documents?.enrollmentDate !== undefined ? body.documents.enrollmentDate : null),
+      body.casteCertificateNumber !== undefined ? body.casteCertificateNumber : (body.documents?.casteCertificateNumber !== undefined ? body.documents.casteCertificateNumber : null)
     ]);
 
     const updatedStudent = mapPgStudent(updateRes.rows[0]);

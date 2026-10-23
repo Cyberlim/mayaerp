@@ -169,6 +169,17 @@ export async function POST(request: Request) {
       feesObj.years.push(yearItem);
     }
 
+    if (Array.isArray(yearItem.components) && yearItem.components.length > 0) {
+      const targetCat = (categoryName || catCode).toLowerCase().replace(/[^a-z0-9]/g, '');
+      const matchedComp = yearItem.components.find((c: any) => {
+        const cLower = (c.category || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        return cLower === targetCat || cLower.includes(targetCat) || targetCat.includes(cLower);
+      });
+      if (matchedComp) {
+        matchedComp.paid = (Number(matchedComp.paid) || 0) + payNum;
+      }
+    }
+
     if (['tuition', 'exam', 'transport', 'other'].includes(catCode)) {
       if (!yearItem[catCode]) yearItem[catCode] = { total: 0, paid: 0 };
       yearItem[catCode].paid = (Number(yearItem[catCode].paid) || 0) + payNum;
@@ -188,8 +199,17 @@ export async function POST(request: Request) {
     let newTotalFee = 0;
     let newPaidFee = 0;
     feesObj.years.forEach((y: any) => {
-      const yGross = (Number(y.tuition?.total) || 0) + (Number(y.exam?.total) || 0) + (Number(y.transport?.total) || 0) + (Number(y.other?.total) || 0);
-      const yPaid = (Number(y.tuition?.paid) || 0) + (Number(y.exam?.paid) || 0) + (Number(y.transport?.paid) || 0) + (Number(y.other?.paid) || 0);
+      let yGross = 0;
+      let yPaid = 0;
+      if (Array.isArray(y.components) && y.components.length > 0) {
+        y.components.forEach((c: any) => {
+          yGross += Number(c.amount) || 0;
+          yPaid += Number(c.paid) || 0;
+        });
+      } else {
+        yGross = (Number(y.tuition?.total) || 0) + (Number(y.exam?.total) || 0) + (Number(y.transport?.total) || 0) + (Number(y.other?.total) || 0);
+        yPaid = (Number(y.tuition?.paid) || 0) + (Number(y.exam?.paid) || 0) + (Number(y.transport?.paid) || 0) + (Number(y.other?.paid) || 0);
+      }
       const yDisc = Number(y.discount) || 0;
       newTotalFee += Math.max(0, yGross - yDisc);
       newPaidFee += yPaid;

@@ -54,6 +54,7 @@ export default function StudentManagementDashboard() {
   const [selectedFilter, setSelectedFilter] = useState("All");
   const [filterBranch, setFilterBranch] = useState("All");
   const [filterCourse, setFilterCourse] = useState("All");
+  const [filterYear, setFilterYear] = useState("All");
   const [filterBatch, setFilterBatch] = useState("All");
   const [filterSemester, setFilterSemester] = useState("All");
   const [filterSection, setFilterSection] = useState("All");
@@ -189,7 +190,7 @@ export default function StudentManagementDashboard() {
   // Reset lazy load pagination on filter or view mode change
   useEffect(() => {
     setVisibleCount(24);
-  }, [searchQuery, selectedFilter, filterBranch, filterCourse, filterBatch, filterSemester, filterSection, filterFeeStatus, viewMode]);
+  }, [searchQuery, selectedFilter, filterBranch, filterCourse, filterYear, filterBatch, filterSemester, filterSection, filterFeeStatus, viewMode]);
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Are you sure you want to delete student: ${name}?`)) return;
@@ -449,8 +450,26 @@ export default function StudentManagementDashboard() {
         return pid === filterCourse;
       });
     }
+    if (filterYear !== "All") {
+      const qYear = filterYear.trim().toLowerCase();
+      result = result.filter(s => {
+        const sy = (s.sessionYear || "").toLowerCase().trim();
+        const ay = (s.admissionYear || "").toLowerCase().trim();
+        const bt = (s.batch || "").toLowerCase().trim();
+        if (sy === qYear || ay === qYear || bt === qYear) return true;
+        if (sy && (sy.includes(qYear) || qYear.includes(sy))) return true;
+        if (ay && (ay.includes(qYear) || qYear.includes(ay))) return true;
+        if (bt && (bt.includes(qYear) || qYear.includes(bt))) return true;
+        return false;
+      });
+    }
     if (filterBatch !== "All") {
-      result = result.filter(s => s.batch === filterBatch);
+      const qBatch = filterBatch.trim().toLowerCase();
+      result = result.filter(s => {
+        const bt = (s.batch || "").toLowerCase().trim();
+        const sy = (s.sessionYear || "").toLowerCase().trim();
+        return bt === qBatch || sy === qBatch || (sy && sy.includes(qBatch)) || (bt && bt.includes(qBatch));
+      });
     }
     if (filterSemester !== "All") {
       result = result.filter(s => s.selectedSemester === Number(filterSemester));
@@ -480,7 +499,7 @@ export default function StudentManagementDashboard() {
       );
     }
     return result;
-  }, [students, selectedFilter, filterBranch, filterCourse, filterBatch, filterSemester, filterSection, filterFeeStatus, searchQuery, courses]);
+  }, [students, selectedFilter, filterBranch, filterCourse, filterYear, filterBatch, filterSemester, filterSection, filterFeeStatus, searchQuery, courses]);
 
   // Lazy loading slice of students for smooth performance
   const displayedStudents = useMemo(() => {
@@ -541,8 +560,27 @@ export default function StudentManagementDashboard() {
   }, [branches, courses, filteredStudents]);
 
   const uniqueBatches = useMemo(() => {
-    const batches = new Set(students.map(s => s.batch).filter(Boolean));
+    const batches = new Set<string>();
+    students.forEach((s: any) => {
+      if (s.batch && String(s.batch).trim()) batches.add(String(s.batch).trim());
+      if (s.sessionYear && String(s.sessionYear).trim()) batches.add(String(s.sessionYear).trim());
+    });
     return Array.from(batches).sort().reverse();
+  }, [students]);
+
+  const uniqueYears = useMemo(() => {
+    const yearsSet = new Set<string>();
+    students.forEach((s: any) => {
+      const sy = s.sessionYear && String(s.sessionYear).trim();
+      const ay = s.admissionYear && String(s.admissionYear).trim();
+      const bt = s.batch && String(s.batch).trim();
+      if (sy) yearsSet.add(sy);
+      if (ay) yearsSet.add(ay);
+      if (bt) yearsSet.add(bt);
+    });
+    // Ensure standard academic session formats are readily available
+    ["2024-25", "2024-2027", "2025-2028", "2023-2026", "2022-2025", "2021-2025"].forEach(y => yearsSet.add(y));
+    return Array.from(yearsSet).sort().reverse();
   }, [students]);
 
   const dashboardMaxSemesters = useMemo(() => {
@@ -683,6 +721,12 @@ export default function StudentManagementDashboard() {
               </button>
             </div>
 
+            <Link href="/dashboard/seed-data">
+              <button className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-black rounded-xl shadow-md shadow-blue-600/25 hover:from-blue-700 hover:to-indigo-700 transition-all">
+                <Database className="w-4 h-4" /> Seed / Import Data
+              </button>
+            </Link>
+
             <button 
               onClick={() => setShowBatchDialog(true)}
               className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white text-xs font-black rounded-xl shadow-md hover:bg-slate-800 transition-all"
@@ -779,6 +823,17 @@ export default function StudentManagementDashboard() {
             </select>
             
             <select 
+              value={filterYear} 
+              onChange={e => setFilterYear(e.target.value)} 
+              className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500/20"
+            >
+              <option value="All">All Years / Sessions</option>
+              {uniqueYears.map((yr: string) => (
+                <option key={yr} value={yr}>{yr}</option>
+              ))}
+            </select>
+
+            <select 
               value={filterBatch} 
               onChange={e => setFilterBatch(e.target.value)} 
               className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none"
@@ -811,11 +866,12 @@ export default function StudentManagementDashboard() {
               <option value="unpaid">Completely Unpaid</option>
             </select>
 
-            {(filterBranch !== "All" || filterCourse !== "All" || filterBatch !== "All" || filterSemester !== "All" || filterFeeStatus !== "All" || searchQuery) && (
+            {(filterBranch !== "All" || filterCourse !== "All" || filterYear !== "All" || filterBatch !== "All" || filterSemester !== "All" || filterFeeStatus !== "All" || searchQuery) && (
               <button
                 onClick={() => {
                   setFilterBranch("All");
                   setFilterCourse("All");
+                  setFilterYear("All");
                   setFilterBatch("All");
                   setFilterSemester("All");
                   setFilterFeeStatus("All");

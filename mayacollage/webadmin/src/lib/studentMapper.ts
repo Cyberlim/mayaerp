@@ -9,21 +9,50 @@ export function mapPgStudent(row: any) {
   const fees = typeof row.fees === 'string' ? JSON.parse(row.fees) : (row.fees || { isConfigured: false, years: [] });
   const documents = typeof row.documents === 'string' ? JSON.parse(row.documents) : (row.documents || {});
 
-  return {
-    _id: row.id,
-    id: row.id,
-    enrollmentNumber: row.enrollment_number || '',
-    admissionNumber: row.admission_number || '',
-    studentId: row.student_id || '',
-    password: row.password || '',
-    libraryPin: row.library_pin || '',
-    applicationId: row.application_id || null,
-    applicantPhoto: row.applicant_photo || '',
+    // Personal Details - cleanly resolve legacy father name from middle_name and remove placeholder 'Student'
+    const rawLastName = (row.last_name || '').trim();
+    const isPlaceholderLastName = rawLastName.toLowerCase() === 'student';
+    const cleanLastName = isPlaceholderLastName ? '' : rawLastName;
 
-    // Personal Details
-    firstName: row.first_name || '',
-    middleName: row.middle_name || '',
-    lastName: row.last_name || '',
+    const rawFather = (row.father_name || documents.fatherName || documents.father_name || '').trim();
+    const rawMiddle = (row.middle_name || '').trim();
+
+    let cleanFatherName = rawFather;
+    let cleanMiddleName = rawMiddle;
+
+    // In legacy/previous seed data, father's name was placed in middle_name when father_name was null/empty
+    if (!cleanFatherName && rawMiddle) {
+      cleanFatherName = rawMiddle;
+      cleanMiddleName = '';
+    } else if (cleanFatherName && rawMiddle && cleanFatherName.toLowerCase() === rawMiddle.toLowerCase()) {
+      cleanMiddleName = '';
+    }
+
+    const cleanMotherName = (row.mother_name || documents.motherName || documents.mother_name || '').trim();
+
+    return {
+      _id: row.id,
+      id: row.id,
+      enrollmentNumber: row.enrollment_number || '',
+      admissionNumber: row.admission_number || '',
+      studentId: row.student_id || '',
+      password: row.password || '',
+      libraryPin: row.library_pin || '',
+      applicationId: row.application_id || null,
+      applicantPhoto: row.applicant_photo || '',
+
+      // Personal Details
+      firstName: row.first_name || '',
+      middleName: cleanMiddleName,
+      lastName: cleanLastName,
+      fatherName: cleanFatherName,
+      motherName: cleanMotherName,
+      casteCategory: row.caste_category || documents.casteCategory || '',
+      panNumber: row.pan_number || documents.panNumber || '',
+      grnNumber: row.grn_number || documents.grnNumber || '',
+      admissionFormDate: row.admission_form_date || documents.admissionFormDate || '',
+      enrollmentDate: row.enrollment_date || documents.enrollmentDate || '',
+      casteCertificateNumber: row.caste_certificate_number || documents.casteCertificateNumber || '',
     dob: row.dob || '',
     gender: row.gender || 'Male',
     email: row.email || '',

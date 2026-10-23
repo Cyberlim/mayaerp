@@ -348,12 +348,42 @@ export default function StudentDetailScreen() {
         }
       }
 
+      // Helper to sanitize student data from any legacy fields
+      const sanitizeStudent = (st: any) => {
+        if (!st) return st;
+        const rawFather = (st.fatherName || st.father_name || st.documents?.fatherName || '').trim();
+        const rawMiddle = (st.middleName || st.middle_name || '').trim();
+        const rawMother = (st.motherName || st.mother_name || st.documents?.motherName || '').trim();
+        const rawLast = (st.lastName || st.last_name || '').trim();
+
+        let cleanFather = rawFather;
+        let cleanMiddle = rawMiddle;
+
+        if (!cleanFather && rawMiddle) {
+          cleanFather = rawMiddle;
+          cleanMiddle = '';
+        } else if (cleanFather && rawMiddle && cleanFather.toLowerCase() === rawMiddle.toLowerCase()) {
+          cleanMiddle = '';
+        }
+
+        const cleanLast = rawLast.toLowerCase() === 'student' ? '' : rawLast;
+
+        return {
+          ...st,
+          fatherName: cleanFather,
+          motherName: rawMother,
+          middleName: cleanMiddle,
+          lastName: cleanLast
+        };
+      };
+
       if (student && !student.error) {
-        setStudentData(student);
-        setEditStatus(student.studentStatus || student.status || "Active");
+        const cleanStudent = sanitizeStudent(student);
+        setStudentData(cleanStudent);
+        setEditStatus(cleanStudent.studentStatus || cleanStudent.status || "Active");
 
         // Cache into client localStorage & sessionStorage for 0ms instant subsequent loads
-        syncStudentDetailToStorage(student, validTxns);
+        syncStudentDetailToStorage(cleanStudent, validTxns);
       }
     } catch (e) {
       console.error("fetchStudentData error:", e);
@@ -370,8 +400,22 @@ export default function StudentDetailScreen() {
         if (cachedRaw) {
           const parsed = JSON.parse(cachedRaw);
           if (parsed.student) {
-            setStudentData(parsed.student);
-            setEditStatus(parsed.student.studentStatus || parsed.student.status || "Active");
+            const rawFather = (parsed.student.fatherName || parsed.student.documents?.fatherName || '').trim();
+            const rawMiddle = (parsed.student.middleName || '').trim();
+            const cleanFather = rawFather || rawMiddle;
+            const cleanMiddle = (cleanFather && rawMiddle.toLowerCase() === cleanFather.toLowerCase()) ? '' : rawMiddle;
+            const cleanLast = (parsed.student.lastName || '').toLowerCase() === 'student' ? '' : (parsed.student.lastName || '');
+
+            const sanitized = {
+              ...parsed.student,
+              fatherName: cleanFather,
+              motherName: (parsed.student.motherName || parsed.student.documents?.motherName || '').trim(),
+              middleName: cleanMiddle,
+              lastName: cleanLast
+            };
+
+            setStudentData(sanitized);
+            setEditStatus(sanitized.studentStatus || sanitized.status || "Active");
             if (Array.isArray(parsed.branches) && parsed.branches.length > 0) setBranches(parsed.branches);
             if (Array.isArray(parsed.courses) && parsed.courses.length > 0) setCourses(parsed.courses);
             if (Array.isArray(parsed.transactions)) setTransactions(parsed.transactions);
@@ -391,8 +435,22 @@ export default function StudentDetailScreen() {
           if (Array.isArray(list)) {
             const found = list.find((s: any) => s._id === studentId);
             if (found) {
-              setStudentData(found);
-              setEditStatus(found.studentStatus || found.status || "Active");
+              const rawFather = (found.fatherName || found.documents?.fatherName || '').trim();
+              const rawMiddle = (found.middleName || '').trim();
+              const cleanFather = rawFather || rawMiddle;
+              const cleanMiddle = (cleanFather && rawMiddle.toLowerCase() === cleanFather.toLowerCase()) ? '' : rawMiddle;
+              const cleanLast = (found.lastName || '').toLowerCase() === 'student' ? '' : (found.lastName || '');
+
+              const sanitized = {
+                ...found,
+                fatherName: cleanFather,
+                motherName: (found.motherName || found.documents?.motherName || '').trim(),
+                middleName: cleanMiddle,
+                lastName: cleanLast
+              };
+
+              setStudentData(sanitized);
+              setEditStatus(sanitized.studentStatus || sanitized.status || "Active");
               const cachedBranches = localStorage.getItem("mayacollage_branches_cache");
               const cachedCourses = localStorage.getItem("mayacollage_courses_cache");
               if (cachedBranches) {
@@ -445,13 +503,21 @@ export default function StudentDetailScreen() {
 
   // Handle Quick Edit Personal Details
   const handleStartEditPersonal = () => {
+    const rawFather = (studentData.fatherName || studentData.documents?.fatherName || "").trim();
+    const rawMiddle = (studentData.middleName || "").trim();
+    const isLegacyFatherInMiddle = !rawFather && Boolean(rawMiddle);
+    const resolvedFather = rawFather || (isLegacyFatherInMiddle ? rawMiddle : "");
+    const resolvedMiddle = isLegacyFatherInMiddle || (rawFather && rawMiddle.toLowerCase() === rawFather.toLowerCase()) ? "" : rawMiddle;
+    const resolvedLast = (studentData.lastName || "").toLowerCase() === 'student' ? "" : (studentData.lastName || "");
+    const resolvedMother = (studentData.motherName || studentData.documents?.motherName || "").trim();
+
     setPersonalForm({
       firstName: studentData.firstName || "",
-      middleName: studentData.middleName || "",
-      lastName: studentData.lastName || "",
+      middleName: resolvedMiddle,
+      lastName: resolvedLast,
       dob: studentData.dob || "",
       gender: studentData.gender || "Male",
-      category: studentData.category || studentData.documents?.category || "General",
+      category: studentData.casteCategory || studentData.category || studentData.documents?.category || "General",
       admissionNumber: studentData.admissionNumber || "",
       studentId: studentData.studentId || "",
       enrollmentNumber: studentData.enrollmentNumber || "",
@@ -469,8 +535,8 @@ export default function StudentDetailScreen() {
       state: studentData.state || "",
       pinCode: studentData.pinCode || "",
       permanentAddress: studentData.permanentAddress || studentData.documents?.permanentAddress || studentData.address || "",
-      fatherName: studentData.fatherName || studentData.documents?.fatherName || "",
-      motherName: studentData.motherName || studentData.documents?.motherName || "",
+      fatherName: resolvedFather,
+      motherName: resolvedMother,
       guardianName: studentData.guardianName || studentData.documents?.guardianName || "",
       guardianRelation: studentData.guardianRelation || studentData.documents?.guardianRelation || "",
       nationality: studentData.nationality || studentData.documents?.nationality || "Indian",
@@ -486,6 +552,9 @@ export default function StudentDetailScreen() {
       const currentDocs = studentData.documents || {};
       const payload = {
         ...personalForm,
+        fatherName: personalForm.fatherName,
+        motherName: personalForm.motherName,
+        casteCategory: personalForm.category,
         documents: {
           ...currentDocs,
           fatherName: personalForm.fatherName,
@@ -668,15 +737,15 @@ export default function StudentDetailScreen() {
     if (!fy) return [];
     if (Array.isArray(fy.components) && fy.components.length > 0) {
       return fy.components.map((c: any) => {
-        const total = Number(c.amount) || 0;
+        const total = Number(c.amount ?? c.total) || 0;
         const paid = Number(c.paid) || 0;
-        const due = c.os !== undefined ? Number(c.os) : Math.max(0, total - paid);
+        const due = c.due !== undefined ? Number(c.due) : (c.os !== undefined ? Number(c.os) : Math.max(0, total - paid));
         const isPaid = due === 0 && total > 0;
         const isPartial = paid > 0 && due > 0;
         const isUnpaid = paid === 0 && total > 0;
         return {
-          title: c.category || "Fee Component",
-          code: (c.category || "tuition").toLowerCase().replace(/[^a-z0-9]/g, '_'),
+          title: c.title || c.category || "Fee Component",
+          code: c.code || (c.category || "tuition").toLowerCase().replace(/[^a-z0-9]/g, '_'),
           total,
           paid,
           due,
@@ -766,11 +835,16 @@ export default function StudentDetailScreen() {
 
   // Open Edit Fee Modal
   const handleOpenEditFeeModal = () => {
+    const progId = typeof studentData?.selectedProgram === 'object' ? studentData?.selectedProgram?._id || studentData?.selectedProgram?.id : studentData?.selectedProgram;
+    const selectedCourse = courses.find(c => c._id === progId || c.id === progId || c.code === studentData?.courseCode);
     const years = studentStatementData?.years || studentStatementData?.ledger?.years || studentData?.fees?.years || [];
+
     if (years && years.length > 0) {
       const clonedYears = years.map((y: any, idx: number) => {
         let components = y.components || [];
-        if (components.length === 0 && y.categories) {
+        if (components.length === 0 && selectedCourse?.feeStructureTemplate?.[idx]?.components) {
+          components = selectedCourse.feeStructureTemplate[idx].components;
+        } else if (components.length === 0 && y.categories) {
            components = Object.entries(y.categories).map(([k, c]: any) => ({
               category: k.charAt(0).toUpperCase() + k.slice(1) + " Fee",
               amount: c.total || 0,
@@ -791,9 +865,20 @@ export default function StudentDetailScreen() {
         };
       });
       setEditFeeYears(clonedYears);
+    } else if (selectedCourse?.feeStructureTemplate && selectedCourse.feeStructureTemplate.length > 0) {
+      setEditFeeYears(selectedCourse.feeStructureTemplate.map((yt: any) => ({
+        year: yt.year,
+        discount: 0,
+        discountReason: '',
+        components: (yt.components || []).map((c: any) => ({
+          category: c.category || 'Tuition Fee',
+          amount: Number(c.amount) || 0,
+          paid: 0,
+          frequency: c.frequency || 'Annual'
+        }))
+      })));
     } else {
-      const selectedCourse = courses.find(c => c._id === (typeof studentData?.selectedProgram === 'object' ? studentData?.selectedProgram?._id : studentData?.selectedProgram));
-      const duration = selectedCourse?.durationYears || 4;
+      const duration = selectedCourse?.duration || 4;
       setEditFeeYears(Array.from({ length: duration }).map((_, idx) => ({
         year: idx + 1,
         discount: 0,
@@ -1199,7 +1284,7 @@ export default function StudentDetailScreen() {
             </div>
 
             <h2 className="text-base font-black text-white uppercase tracking-wide text-center mt-3.5">
-              {studentData.firstName} {studentData.lastName}
+              {studentData.firstName} {(studentData.lastName && studentData.lastName.toLowerCase() !== 'student') ? studentData.lastName : ''}
             </h2>
             <p className="text-xs font-bold text-indigo-400 text-center mt-0.5">
               {studentData.studentId || studentData.admissionNumber || "MBA24038"}
@@ -1804,7 +1889,15 @@ export default function StudentDetailScreen() {
                               <span className="text-xs font-medium text-slate-600">Full Legal Name</span>
                             </div>
                             <span className="text-xs font-bold text-slate-900 text-right">
-                              {`${studentData.firstName || ''} ${studentData.middleName ? studentData.middleName + ' ' : ''}${studentData.lastName || ''}`.trim() || <span className="font-normal italic text-slate-400">Not specified</span>}
+                              {(() => {
+                                const fName = studentData.firstName || '';
+                                const rawM = (studentData.middleName || '').trim();
+                                const rawFather = (studentData.fatherName || studentData.documents?.fatherName || '').trim();
+                                const mName = (rawM && rawM.toLowerCase() !== rawFather.toLowerCase()) ? rawM : '';
+                                const lName = (studentData.lastName && studentData.lastName.toLowerCase() !== 'student') ? studentData.lastName : '';
+                                const full = `${fName} ${mName ? mName + ' ' : ''}${lName}`.trim();
+                                return full || <span className="font-normal italic text-slate-400">Not specified</span>;
+                              })()}
                             </span>
                           </div>
 
@@ -2003,8 +2096,8 @@ export default function StudentDetailScreen() {
                             <User className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
                             <div>
                               <p className="text-xs font-medium text-slate-600">Father's Name</p>
-                              <p className={`text-xs mt-0.5 ${studentData.fatherName || studentData.documents?.fatherName ? 'font-bold text-slate-900' : 'italic text-slate-400'}`}>
-                                {studentData.fatherName || studentData.documents?.fatherName || "Not specified"}
+                              <p className={`text-xs mt-0.5 ${studentData.fatherName || studentData.documents?.fatherName || studentData.middleName ? 'font-bold text-slate-900' : 'italic text-slate-400'}`}>
+                                {studentData.fatherName || studentData.documents?.fatherName || (studentData.middleName && studentData.middleName.toLowerCase() !== studentData.firstName?.toLowerCase() ? studentData.middleName : '') || "Not specified"}
                               </p>
                             </div>
                           </div>
