@@ -1823,6 +1823,7 @@ export default function FinanceDashboard() {
                           const fName = s.firstName || s.first_name || "";
                           const lName = s.lastName || s.last_name || "";
                           const fullName = (s.name || `${fName} ${lName}`).trim() || "Student";
+                          const fatherName = (s.fatherName || s.father_name || s.documents?.fatherName || "").trim();
                           const roll = s.enrollmentNumber || s.enrollment_number || s.admissionNumber || s.admission_number || s.studentId || s.student_id || "N/A";
                           const courseCode = summary.courseObj?.code || s.courseCode || s.course_code || "COURSE";
                           const sem = s.selectedSemester || s.selected_semester || s.courseYear || s.course_year || 1;
@@ -1842,7 +1843,12 @@ export default function FinanceDashboard() {
                                   <h4 className="font-black text-slate-900 text-xs uppercase tracking-tight truncate">
                                     {fullName}
                                   </h4>
-                                  <p className="text-[11px] text-slate-400 font-medium truncate mt-0.5">
+                                  {fatherName && (
+                                    <p className="text-[11px] text-slate-600 font-semibold truncate mt-0.5">
+                                      <span className="text-slate-400 font-normal">S/O:</span> {fatherName}
+                                    </p>
+                                  )}
+                                  <p className="text-[10px] text-slate-400 font-medium truncate mt-0.5">
                                     Roll: {roll} • {courseCode} • Sem {sem}
                                   </p>
                                 </div>
@@ -1912,7 +1918,7 @@ export default function FinanceDashboard() {
                                 </button>
 
                                 <button
-                                  onClick={() => router.push(`/dashboard/students/${s._id || s.id}`)}
+                                  onClick={() => router.push(`/dashboard/students/${s._id || s.id}?from=finance`)}
                                   className="inline-flex items-center gap-1 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs"
                                 >
                                   <User className="w-3.5 h-3.5 text-slate-500" />
@@ -2540,6 +2546,7 @@ export default function FinanceDashboard() {
                     const lName = stu.lastName || stu.last_name || "";
                     const fullName = (stu.name || `${fName} ${lName}`).trim() || "Student";
                     const roll = stu.enrollmentNumber || stu.enrollment_number || stu.admissionNumber || stu.admission_number || stu.studentId || stu.student_id || "N/A";
+                    const fatherName = (stu.fatherName || stu.father_name || stu.documents?.fatherName || "").trim();
                     const courseName = stu.selectedProgram?.name || stu.courseName || stu.course_name || stu.courseCode || "Course";
                     const courseCode = stu.selectedProgram?.code || stu.courseCode || stu.course_code || "";
                     const branchName = stu.selectedBranch?.name || stu.branchName || "";
@@ -2580,6 +2587,11 @@ export default function FinanceDashboard() {
                               </span>
                             )}
                           </div>
+                          {fatherName && (
+                            <p className="text-xs text-slate-600 font-semibold truncate mt-0.5">
+                              <span className="text-slate-400 font-normal">S/O:</span> {fatherName}
+                            </p>
+                          )}
                           <p className="text-xs text-slate-400 font-medium truncate mt-0.5">
                             Roll: <strong className="text-slate-700 font-mono">{roll}</strong> • {courseName} {courseCode ? `(${courseCode})` : ""} • Sem {sem}
                             {branchName ? ` • ${branchName}` : ""}

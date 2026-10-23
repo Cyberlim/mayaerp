@@ -59,28 +59,44 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      message: `File "${safeName}" uploaded and scanned successfully! (${rowCount} student rows found)`,
-      file: {
-        fileName: safeName,
-        sizeBytes: buffer.length,
-        rowCount,
-        headers,
-        sampleStudentName,
-        detectedCourse,
-        detectedSession,
-        preset: {
-          courseCode: detectedCourse.slice(0, 5).toUpperCase(),
-          courseNameHint: detectedCourse || 'Uploaded Course',
-          sessionYear: detectedSession || '2025-2029',
-          admissionYear: new Date().getFullYear().toString(),
-          batch: new Date().getFullYear().toString(),
-          idPrefix: (detectedCourse.slice(0, 3) || 'STU').toUpperCase() + '25',
-          enrollmentPrefix: 'ENR' + (detectedCourse.slice(0, 3) || 'STU').toUpperCase() + '25'
-        }
-      }
-    });
+        const yearMatch = safeName.match(/20\d\d/) || (detectedSession ? detectedSession.match(/20\d\d/) : null);
+        const admYear = yearMatch ? yearMatch[0] : '2024';
+        const yr2 = admYear.slice(-2);
+        const upperCourse = (detectedCourse || safeName).toUpperCase();
+        let cPrefix = 'STU';
+        if (upperCourse.includes('DPH') || upperCourse.includes('D.PHARM')) cPrefix = 'DPH';
+        else if (upperCourse.includes('MPH') || upperCourse.includes('M.PHARM') || upperCourse.includes('MPHARMA')) cPrefix = 'MPH';
+        else if (upperCourse.includes('BPH') || upperCourse.includes('B.PHARM') || upperCourse.includes('BPHARMA')) cPrefix = 'BPH';
+        else if (upperCourse.includes('BCA')) cPrefix = 'BCA';
+        else if (upperCourse.includes('BBA')) cPrefix = 'BBA';
+        else if (upperCourse.includes('MBA')) cPrefix = 'MBA';
+        else if (upperCourse.includes('TECH') || upperCourse.includes('CSE') || upperCourse.includes('AI') || upperCourse.includes('ECE') || upperCourse.includes('IT')) cPrefix = 'BTE';
+        else cPrefix = (detectedCourse.replace(/[^A-Z0-9]/g, '').slice(0, 3) || 'STU').toUpperCase();
+
+        const sess = detectedSession || `${admYear}-${Number(admYear) + 4}`;
+
+        return NextResponse.json({
+          success: true,
+          message: `File "${safeName}" uploaded and scanned successfully! (${rowCount} student rows found)`,
+          file: {
+            fileName: safeName,
+            sizeBytes: buffer.length,
+            rowCount,
+            headers,
+            sampleStudentName,
+            detectedCourse,
+            detectedSession,
+            preset: {
+              courseCode: cPrefix,
+              courseNameHint: detectedCourse || 'Uploaded Course',
+              sessionYear: sess,
+              admissionYear: admYear,
+              batch: admYear,
+              idPrefix: `${cPrefix}${yr2}`,
+              enrollmentPrefix: `ENR${cPrefix}${yr2}`
+            }
+          }
+        });
 
   } catch (error: any) {
     console.error("POST /api/seed/upload error:", error);

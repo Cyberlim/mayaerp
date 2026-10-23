@@ -62,7 +62,7 @@ import {
   Link2
 } from "lucide-react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import IdCardModal, { IdCardFront } from "@/components/IdCardModal";
 import ReceiptModal from "@/components/ReceiptModal";
 import { useSocket } from "@/components/SocketProvider";
@@ -214,7 +214,19 @@ function StudentDetailSkeleton() {
 export default function StudentDetailScreen() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const studentId = params.id as string;
+  const fromSource = searchParams ? searchParams.get("from") : null;
+
+  const handleBack = () => {
+    if (fromSource === "finance") {
+      router.push("/dashboard/finance");
+    } else if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/dashboard/students");
+    }
+  };
 
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"Personal" | "Academics" | "Fees" | "Documents" | "Administration">("Personal");
@@ -1184,11 +1196,12 @@ export default function StudentDetailScreen() {
       <div className="min-h-screen flex flex-col justify-center items-center bg-[#F8FAFC]">
         <AlertCircle className="w-12 h-12 text-slate-300 mb-3" />
         <h2 className="text-xl font-bold text-slate-800">Student not found.</h2>
-        <Link href="/dashboard/students">
-          <button className="mt-4 px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl text-xs">
-            Return to Student Directory
-          </button>
-        </Link>
+        <button 
+          onClick={handleBack}
+          className="mt-4 px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl text-xs cursor-pointer"
+        >
+          Return to {fromSource === "finance" ? "Finance & Fees" : "Student Directory"}
+        </button>
       </div>
     );
   }
@@ -1261,12 +1274,13 @@ export default function StudentDetailScreen() {
       {/* LEFT PROFILE SIDEBAR */}
       <div className="w-full md:w-[320px] bg-slate-900 flex flex-col z-10 md:h-screen shadow-2xl overflow-y-auto border-r border-slate-800 text-white shrink-0">
         <div className="p-6">
-          <Link href="/dashboard/students">
-            <button className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-800/90 hover:bg-slate-700/90 rounded-xl text-slate-300 font-bold text-xs transition-colors mb-6 w-fit border border-slate-700/60">
-              <ChevronLeft className="w-3.5 h-3.5" />
-              <span>Student Directory</span>
-            </button>
-          </Link>
+          <button 
+            onClick={handleBack}
+            className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-800/90 hover:bg-slate-700/90 rounded-xl text-slate-300 font-bold text-xs transition-colors mb-6 w-fit border border-slate-700/60 cursor-pointer"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            <span>{fromSource === "finance" ? "Finance & Fees" : "Student Directory"}</span>
+          </button>
 
           {/* Student Dossier Badge & Photo */}
           <div className="text-center">

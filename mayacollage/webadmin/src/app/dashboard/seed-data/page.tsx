@@ -80,6 +80,40 @@ interface Branch {
   location?: string;
 }
 
+function getCoursePrefixes(course?: Course | null, yearStr?: string) {
+  const yr = String(yearStr || '2024').slice(-2);
+  if (!course) return { idPref: `STU${yr}`, enrPref: `ENRSTU${yr}`, defaultDuration: 4 };
+
+  const rawCode = (course.code || course.name || '').toUpperCase();
+  let prefix = 'STU';
+
+  if (rawCode.includes('DPH') || rawCode.includes('D.PHARM')) {
+    prefix = 'DPH';
+  } else if (rawCode.includes('MPH') || rawCode.includes('M.PHARM') || rawCode.includes('MPHARMA')) {
+    prefix = 'MPH';
+  } else if (rawCode.includes('BPH') || rawCode.includes('B.PHARM') || rawCode.includes('BPHARMA')) {
+    prefix = 'BPH';
+  } else if (rawCode.includes('BCA')) {
+    prefix = 'BCA';
+  } else if (rawCode.includes('BBA')) {
+    prefix = 'BBA';
+  } else if (rawCode.includes('MBA')) {
+    prefix = 'MBA';
+  } else if (rawCode.includes('TECH') || rawCode.includes('CSE') || rawCode.includes('AI') || rawCode.includes('ECE') || rawCode.includes('IT')) {
+    prefix = 'BTE';
+  } else {
+    const clean = rawCode.replace(/[^A-Z0-9]/g, '');
+    prefix = clean.slice(0, 3) || 'STU';
+  }
+
+  const duration = Number(course.duration) || 4;
+  return {
+    idPref: `${prefix}${yr}`,
+    enrPref: `ENR${prefix}${yr}`,
+    defaultDuration: duration
+  };
+}
+
 export default function SeedDataPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -200,16 +234,21 @@ export default function SeedDataPage() {
         setDbStats(data.dbStats || { totalStudents: 0, distribution: [] });
         setDbColumns(data.dbColumns || []);
 
-        // Default to first file's mapping if single file selected
+        // Default to first file's mapping if available
         if (data.files && data.files.length > 0) {
           const first = data.files[0];
-          setSelectedCourseId(first.suggestedCourseId || data.courses[0]?.id || "");
-          setSelectedBranchId(first.suggestedBranchId || data.branches[0]?.id || "");
-          setSessionYear(first.preset?.sessionYear || "2025-2029");
-          setAdmissionYear(first.preset?.admissionYear || "2025");
-          setBatch(first.preset?.batch || "2025");
-          setIdPrefix(first.preset?.idPrefix || "BPH25");
-          setEnrollmentPrefix(first.preset?.enrollmentPrefix || "ENRBPH25");
+          const matchedCourseId = first.suggestedCourseId || data.courses[0]?.id || "";
+          setSelectedCourseId(matchedCourseId);
+          const matchedCrs = data.courses.find((c: any) => c.id === matchedCourseId);
+          setSelectedBranchId(matchedCrs?.branch_id || first.suggestedBranchId || data.branches[0]?.id || "");
+          
+          const adm = first.preset?.admissionYear || "2024";
+          setAdmissionYear(adm);
+          setBatch(first.preset?.batch || adm);
+          const { idPref: calcIdPref, enrPref: calcEnrPref, defaultDuration } = getCoursePrefixes(matchedCrs, adm);
+          setIdPrefix(calcIdPref);
+          setEnrollmentPrefix(calcEnrPref);
+          setSessionYear(first.preset?.sessionYear || `${adm}-${Number(adm) + defaultDuration}`);
         }
       } else {
         showToast(data.error || "Failed to load database status", "error");
@@ -235,24 +274,67 @@ export default function SeedDataPage() {
     if (fileVal !== "all") {
       const found = files.find(f => f.fileName === fileVal);
       if (found) {
-        if (found.suggestedCourseId) setSelectedCourseId(found.suggestedCourseId);
-        if (found.suggestedBranchId) setSelectedBranchId(found.suggestedBranchId);
-        if (found.preset?.sessionYear) setSessionYear(found.preset.sessionYear);
-        if (found.preset?.admissionYear) setAdmissionYear(found.preset.admissionYear);
-        if (found.preset?.batch) setBatch(found.preset.batch);
-        if (found.preset?.idPrefix) setIdPrefix(found.preset.idPrefix);
-        if (found.preset?.enrollmentPrefix) setEnrollmentPrefix(found.preset.enrollmentPrefix);
+        const targetCId = found.suggestedCourseId || selectedCourseId;
+        const crs = courses.find(c => c.id === targetCId);
+        if (targetCId) setSelectedCourseId(targetCId);
+        if (crs?.branch_id) setSelectedBranchId(crs.branch_id);
+        else if (found.suggestedBranchId) setSelectedBranchId(found.suggestedBranchId);
+
+        const adm = found.preset?.admissionYear || admissionYear || "2024";
+        setAdmissionYear(adm);
+        setBatch(found.preset?.batch || adm);
+
+        const { idPref: calcIdPref, enrPref: calcEnrPref, defaultDuration } = getCoursePrefixes(crs, adm);
+        setIdPrefix(calcIdPref);
+        setEnrollmentPrefix(calcEnrPref);
+        setSessionYear(found.preset?.sessionYear || `${adm}-${Number(adm) + defaultDuration}`);
       }
     }
   };
 
-  // When course changes, auto-select corresponding branch
-  const handleCourseChange = (courseIdVal: string) => {
+  // When branch changes, filter courses and sync
+  const handleBranchChange = (branchIdVal: string) => {
+    setSelectedBranchId(branchIdVal);
+    const branchCourses = courses.filter(c => c.branch_id === branchIdVal);
+    if (branchCourses.length > 0) {
+      const isCurrentInBranch = branchCourses.some(c => c.id === selectedCourseId);
+      if (!isCurrentInBranch) {
+        handleCourseChange(branchCourses[0].id, branchIdVal);
+      }
+    }
+  };
+
+  // When course changes, auto-select corresponding branch and derive matching student ID prefixes
+  const handleCourseChange = (courseIdVal: string, overrideBranchId?: string) => {
     setSelectedCourseId(courseIdVal);
     const crs = courses.find(c => c.id === courseIdVal);
-    if (crs && crs.branch_id) {
-      setSelectedBranchId(crs.branch_id);
+    const targetBranch = overrideBranchId || crs?.branch_id;
+    if (targetBranch) {
+      setSelectedBranchId(targetBranch);
     }
+
+    const adm = admissionYear || "2024";
+    const { idPref: calcIdPref, enrPref: calcEnrPref, defaultDuration } = getCoursePrefixes(crs, adm);
+    setIdPrefix(calcIdPref);
+    setEnrollmentPrefix(calcEnrPref);
+
+    const numAdm = parseInt(adm, 10) || 2024;
+    setSessionYear(`${numAdm}-${numAdm + defaultDuration}`);
+  };
+
+  // When admission year changes, sync prefixes and session year
+  const handleAdmissionYearChange = (newAdmYear: string) => {
+    setAdmissionYear(newAdmYear);
+    setBatch(newAdmYear);
+    const crs = courses.find(c => c.id === selectedCourseId);
+    const dur = crs?.duration || 4;
+    const numAdm = parseInt(newAdmYear, 10);
+    if (!isNaN(numAdm)) {
+      setSessionYear(`${numAdm}-${numAdm + dur}`);
+    }
+    const { idPref: calcIdPref, enrPref: calcEnrPref } = getCoursePrefixes(crs, newAdmYear);
+    setIdPrefix(calcIdPref);
+    setEnrollmentPrefix(calcEnrPref);
   };
 
   // 2. File Upload Handler - works for ANY file from ANY computer or phone directly
@@ -275,9 +357,9 @@ export default function SeedDataPage() {
         setActiveFileInfo(data.file);
         setSelectedFile(data.file.fileName);
 
-        // Auto-match course from upload detection
-        let targetCId = "";
-        let targetBId = "";
+        // Auto-match course from upload detection, or preserve current selection
+        let targetCId = selectedCourseId;
+        let targetBId = selectedBranchId;
         if (data.file.detectedCourse) {
           const matched = courses.find(c => 
             c.code.toLowerCase() === data.file.detectedCourse.toLowerCase() ||
@@ -286,30 +368,29 @@ export default function SeedDataPage() {
           );
           if (matched) {
             targetCId = matched.id;
-            targetBId = matched.branch_id || "";
+            targetBId = matched.branch_id || targetBId;
           }
         }
         if (!targetCId && courses.length > 0) {
           targetCId = courses[0].id;
-          targetBId = courses[0].branch_id || "";
+          targetBId = courses[0].branch_id || targetBId;
         }
 
+        const crs = courses.find(c => c.id === targetCId);
         if (targetCId) setSelectedCourseId(targetCId);
         if (targetBId) setSelectedBranchId(targetBId);
 
-        const newSession = data.file.detectedSession || data.file.preset?.sessionYear || sessionYear;
-        const newAdm = data.file.preset?.admissionYear || admissionYear;
-        const newBatch = data.file.preset?.batch || batch;
-        const newIdPref = data.file.preset?.idPrefix || idPrefix;
-        const newEnrPref = data.file.preset?.enrollmentPrefix || enrollmentPrefix;
+        const newAdm = data.file.preset?.admissionYear || admissionYear || "2024";
+        const { idPref: calcIdPref, enrPref: calcEnrPref, defaultDuration } = getCoursePrefixes(crs, newAdm);
+        const newSession = data.file.detectedSession || data.file.preset?.sessionYear || `${newAdm}-${Number(newAdm) + defaultDuration}`;
 
-        if (newSession) setSessionYear(newSession);
-        if (newAdm) setAdmissionYear(newAdm);
-        if (newBatch) setBatch(newBatch);
-        if (newIdPref) setIdPrefix(newIdPref);
-        if (newEnrPref) setEnrollmentPrefix(newEnrPref);
+        setAdmissionYear(newAdm);
+        setBatch(newAdm);
+        setSessionYear(newSession);
+        setIdPrefix(calcIdPref);
+        setEnrollmentPrefix(calcEnrPref);
 
-        showToast(`Uploaded "${file.name}" (${data.file.rowCount} rows detected). Running database analysis...`, "success");
+        showToast(`Uploaded "${file.name}" (${data.file.rowCount} rows detected). Running database analysis for ${crs?.name || 'course'}...`, "success");
 
         // Automatically trigger immediate preview analysis with the direct uploaded file!
         await executePreview({
@@ -318,9 +399,9 @@ export default function SeedDataPage() {
           branchIdToUse: targetBId,
           sessionYearToUse: newSession,
           admissionYearToUse: newAdm,
-          batchToUse: newBatch,
-          idPrefixToUse: newIdPref,
-          enrollmentPrefixToUse: newEnrPref
+          batchToUse: newAdm,
+          idPrefixToUse: calcIdPref,
+          enrollmentPrefixToUse: calcEnrPref
         });
 
         // Also reload available file list
@@ -1072,8 +1153,36 @@ export default function SeedDataPage() {
           </div>
         </div>
 
+        {/* Active Seeding Identity & ID Rule Banner */}
+        <div className="bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-50 border border-indigo-200/80 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs font-semibold text-indigo-950 mt-6 mb-2">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-sm shrink-0">
+              ID
+            </div>
+            <div>
+              <p className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                Active Seeding Identity: All seeded students will be assigned to Branch & Course selected below
+              </p>
+              <p className="text-slate-600 mt-0.5">
+                Branch: <strong className="text-indigo-700">{branches.find(b => b.id === selectedBranchId)?.name || 'Selected Branch'}</strong> • Course: <strong className="text-indigo-700">{courses.find(c => c.id === selectedCourseId)?.name || 'Selected Course'}</strong> ({courses.find(c => c.id === selectedCourseId)?.code})
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 font-mono">
+            <span className="px-3 py-1.5 rounded-xl bg-white border border-indigo-200 text-indigo-700 font-bold shadow-xs">
+              ID Sequence: {idPrefix}001, {idPrefix}002...
+            </span>
+            <span className="px-3 py-1.5 rounded-xl bg-white border border-indigo-200 text-slate-700 font-bold shadow-xs">
+              Enrollment: {enrollmentPrefix}001...
+            </span>
+            <span className="px-3 py-1.5 rounded-xl bg-white border border-indigo-200 text-slate-700 font-bold shadow-xs">
+              Session: {sessionYear}
+            </span>
+          </div>
+        </div>
+
         {/* Inputs Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pt-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pt-4">
           {/* File Selector */}
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
@@ -1095,7 +1204,7 @@ export default function SeedDataPage() {
                   🚀 [DIRECT UPLOAD] {activeUploadedFile.name} (Active)
                 </option>
               )}
-              <option value="all">⚡ All Datasets (Batch Seed All Courses)</option>
+              <option value="all">⚡ All Datasets (Batch Seed All Datasets)</option>
               {files.map(f => (
                 <option key={f.fileName} value={f.fileName}>
                   📄 {f.fileName} ({f.rowCount} rows)
@@ -1108,6 +1217,36 @@ export default function SeedDataPage() {
                 : selectedFile === "all" 
                 ? "Processes all available datasets" 
                 : `Rows: ${files.find(f => f.fileName === selectedFile)?.rowCount || 0}`}
+            </p>
+          </div>
+
+          {/* Target Branch */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Target Branch
+              </label>
+              <button
+                type="button"
+                onClick={() => setBranchModalOpen(true)}
+                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3" /> New
+              </button>
+            </div>
+            <select
+              value={selectedBranchId}
+              onChange={(e) => handleBranchChange(e.target.value)}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+            >
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>
+                  {b.name} ({b.code})
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-slate-400 mt-1.5">
+              Academic branch department linked
             </p>
           </div>
 
@@ -1128,49 +1267,44 @@ export default function SeedDataPage() {
             <select
               value={selectedCourseId}
               onChange={(e) => handleCourseChange(e.target.value)}
-              disabled={selectedFile === "all"}
-              className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 ${selectedFile === "all" ? "opacity-60 cursor-not-allowed" : ""}`}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
             >
-              {courses.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.code}) - {c.duration} Yrs
-                </option>
-              ))}
+              {courses.map(c => {
+                const b = branches.find(br => br.id === c.branch_id);
+                return (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.code}) - {c.duration} Yrs {b ? `• [${b.name}]` : ''}
+                  </option>
+                );
+              })}
             </select>
             <p className="text-[11px] text-slate-400 mt-1.5">
-              {selectedFile === "all" ? "Auto-matched per file" : "PostgreSQL course linked"}
+              PostgreSQL course for all seeded students
             </p>
           </div>
 
-          {/* Target Branch */}
+          {/* Admission Year & Batch */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Target Branch
-              </label>
-              <button
-                type="button"
-                onClick={() => setBranchModalOpen(true)}
-                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
-              >
-                <Plus className="w-3 h-3" /> New
-              </button>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+              Admission Year / Batch
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={admissionYear}
+                onChange={(e) => handleAdmissionYearChange(e.target.value)}
+                placeholder="2024"
+                className="w-1/2 px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+              />
+              <input
+                type="text"
+                value={batch}
+                onChange={(e) => setBatch(e.target.value)}
+                placeholder="2024"
+                className="w-1/2 px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+              />
             </div>
-            <select
-              value={selectedBranchId}
-              onChange={(e) => setSelectedBranchId(e.target.value)}
-              disabled={selectedFile === "all"}
-              className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 ${selectedFile === "all" ? "opacity-60 cursor-not-allowed" : ""}`}
-            >
-              {branches.map(b => (
-                <option key={b.id} value={b.id}>
-                  {b.name} ({b.code})
-                </option>
-              ))}
-            </select>
-            <p className="text-[11px] text-slate-400 mt-1.5">
-              {selectedFile === "all" ? "Auto-matched per course" : "Academic branch department"}
-            </p>
+            <p className="text-[11px] text-slate-400 mt-1.5">Intake year & batch tag</p>
           </div>
 
           {/* Session Year */}
@@ -1182,9 +1316,8 @@ export default function SeedDataPage() {
               type="text"
               value={sessionYear}
               onChange={(e) => setSessionYear(e.target.value)}
-              disabled={selectedFile === "all"}
-              placeholder="e.g. 2025-2029"
-              className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 ${selectedFile === "all" ? "opacity-60 cursor-not-allowed" : ""}`}
+              placeholder="e.g. 2024-2028"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
             />
             <p className="text-[11px] text-slate-400 mt-1.5">Academic batch cycle</p>
           </div>
@@ -1198,9 +1331,8 @@ export default function SeedDataPage() {
               type="text"
               value={idPrefix}
               onChange={(e) => setIdPrefix(e.target.value)}
-              disabled={selectedFile === "all"}
-              placeholder="e.g. BPH25"
-              className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 ${selectedFile === "all" ? "opacity-60 cursor-not-allowed" : ""}`}
+              placeholder="e.g. BCA24"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
             />
             <p className="text-[11px] text-slate-400 mt-1.5">Generates {idPrefix}001, {idPrefix}002...</p>
           </div>
@@ -1214,37 +1346,10 @@ export default function SeedDataPage() {
               type="text"
               value={enrollmentPrefix}
               onChange={(e) => setEnrollmentPrefix(e.target.value)}
-              disabled={selectedFile === "all"}
-              placeholder="e.g. ENRBPH25"
-              className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 ${selectedFile === "all" ? "opacity-60 cursor-not-allowed" : ""}`}
+              placeholder="e.g. ENRBCA24"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
             />
             <p className="text-[11px] text-slate-400 mt-1.5">University enrollment code</p>
-          </div>
-
-          {/* Admission Year & Batch */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-              Admission Year / Batch
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={admissionYear}
-                onChange={(e) => setAdmissionYear(e.target.value)}
-                disabled={selectedFile === "all"}
-                placeholder="2025"
-                className={`w-1/2 px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 ${selectedFile === "all" ? "opacity-60 cursor-not-allowed" : ""}`}
-              />
-              <input
-                type="text"
-                value={batch}
-                onChange={(e) => setBatch(e.target.value)}
-                disabled={selectedFile === "all"}
-                placeholder="2025"
-                className={`w-1/2 px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 ${selectedFile === "all" ? "opacity-60 cursor-not-allowed" : ""}`}
-              />
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1.5">Admission Year & Batch tag</p>
           </div>
 
           {/* Default Password Notice */}
@@ -1441,6 +1546,9 @@ export default function SeedDataPage() {
                           <span className="inline-block px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-200">
                             {s.course_name}
                           </span>
+                          {s.branch_name && (
+                            <p className="text-[10px] text-indigo-700 font-semibold mt-0.5">{s.branch_name}</p>
+                          )}
                           <p className="text-[10px] text-slate-400 mt-0.5">{s.session_year}</p>
                         </td>
                         <td className="py-3 px-4">

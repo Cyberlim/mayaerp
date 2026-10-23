@@ -190,6 +190,36 @@ function getFilePreset(file: string, courseNameInSheet?: string, sessionInSheet?
   };
 }
 
+function getStandardCourseCodePrefix(courseObj: any, yearStr: string): { idPrefix: string; enrollmentPrefix: string } {
+  const yr = String(yearStr || '2024').slice(-2);
+  const rawCode = (courseObj?.code || courseObj?.name || 'STU').toUpperCase();
+
+  let prefix = 'STU';
+  if (rawCode.includes('DPH') || rawCode.includes('D.PHARM')) {
+    prefix = 'DPH';
+  } else if (rawCode.includes('MPH') || rawCode.includes('M.PHARM') || rawCode.includes('MPHARMA')) {
+    prefix = 'MPH';
+  } else if (rawCode.includes('BPH') || rawCode.includes('B.PHARM') || rawCode.includes('BPHARMA')) {
+    prefix = 'BPH';
+  } else if (rawCode.includes('BCA')) {
+    prefix = 'BCA';
+  } else if (rawCode.includes('BBA')) {
+    prefix = 'BBA';
+  } else if (rawCode.includes('MBA')) {
+    prefix = 'MBA';
+  } else if (rawCode.includes('TECH') || rawCode.includes('CSE') || rawCode.includes('AI') || rawCode.includes('ECE') || rawCode.includes('IT')) {
+    prefix = 'BTE';
+  } else {
+    const clean = rawCode.replace(/[^A-Z0-9]/g, '');
+    prefix = clean.slice(0, 3) || 'STU';
+  }
+
+  return {
+    idPrefix: `${prefix}${yr}`,
+    enrollmentPrefix: `ENR${prefix}${yr}`
+  };
+}
+
 /**
  * GET: Returns list of available Excel datafiles in public/datafiles,
  * PostgreSQL courses & branches, and database student count statistics.
@@ -586,7 +616,7 @@ export async function POST(request: Request) {
       const preset = getFilePreset(file, sampleCourseInSheet, sampleSessionInSheet);
 
       // Determine course config: user custom inputs override defaults
-      let targetCourseId = (body.courseId && selectedFile !== 'all') ? body.courseId : '';
+      let targetCourseId = body.courseId || '';
       if (!targetCourseId) {
         const courseSearch = sampleCourseInSheet || preset.courseCode || preset.courseNameHint;
         const matched = courses.find((c: any) => 
@@ -599,14 +629,40 @@ export async function POST(request: Request) {
       }
 
       const courseObj = courses.find((c: any) => c.id === targetCourseId);
-      const branchId = (body.branchId && selectedFile !== 'all') ? body.branchId : (courseObj?.branch_id || branches[0]?.id || '');
+      const branchId = body.branchId || courseObj?.branch_id || branches[0]?.id || '';
       const branchObj = branches.find((b: any) => b.id === branchId);
 
-      const sessionYear = (body.sessionYear && selectedFile !== 'all') ? body.sessionYear : (sampleSessionInSheet || preset.sessionYear);
-      const admissionYear = (body.admissionYear && selectedFile !== 'all') ? body.admissionYear : preset.admissionYear;
-      const batch = (body.batch && selectedFile !== 'all') ? body.batch : preset.batch;
-      const idPrefix = (body.idPrefix && selectedFile !== 'all') ? body.idPrefix : preset.idPrefix;
-      const enrollmentPrefix = (body.enrollmentPrefix && selectedFile !== 'all') ? body.enrollmentPrefix : preset.enrollmentPrefix;
+      const admissionYear = body.admissionYear || preset.admissionYear || '2024';
+      const courseDuration = Number(courseObj?.duration) || 4;
+      const sessionYear = body.sessionYear || sampleSessionInSheet || preset.sessionYear || `${admissionYear}-${Number(admissionYear) + courseDuration}`;
+      const batch = body.batch || admissionYear;
+
+      // Determine student ID prefixes: Strictly match course code + admission year!
+      const stdCoursePrefixes = getStandardCourseCodePrefix(courseObj, admissionYear || sessionYear);
+      let idPrefix = stdCoursePrefixes.idPrefix;
+      let enrollmentPrefix = stdCoursePrefixes.enrollmentPrefix;
+
+      if (body.idPrefix) {
+        const userPrefUpper = body.idPrefix.toUpperCase();
+        const stdCourseCode = stdCoursePrefixes.idPrefix.slice(0, 3);
+        const otherCoursePrefixes = ['BPH', 'DPH', 'MPH', 'BCA', 'BBA', 'MBA', 'BTE'].filter(p => p !== stdCourseCode);
+        const hasWrongCourseConflict = otherCoursePrefixes.some(p => userPrefUpper.startsWith(p));
+        if (!hasWrongCourseConflict) {
+          idPrefix = body.idPrefix;
+        }
+      }
+
+      if (body.enrollmentPrefix) {
+        const userEnrUpper = body.enrollmentPrefix.toUpperCase();
+        const stdCourseCode = stdCoursePrefixes.idPrefix.slice(0, 3);
+        const otherCoursePrefixes = ['BPH', 'DPH', 'MPH', 'BCA', 'BBA', 'MBA', 'BTE'].filter(p => p !== stdCourseCode);
+        const hasWrongCourseConflict = otherCoursePrefixes.some(p => userEnrUpper.includes(p));
+        if (!hasWrongCourseConflict) {
+          enrollmentPrefix = body.enrollmentPrefix;
+        } else {
+          enrollmentPrefix = `ENR${idPrefix}`;
+        }
+      }
 
       const nameIdx = getColIdx(["STUDENT NAME", "NAME"]);
       const addr1Idx = getColIdx(["ADDRESS 1", "ADDRESS"]);
@@ -629,8 +685,6 @@ export async function POST(request: Request) {
       const panIdx = getColIdx(["PAN"]);
       const grnIdx = getColIdx(["GRN"]);
       const certIdx = getColIdx(["CASTE CERTIFICATE"]);
-
-      const courseDuration = Number(courseObj?.duration) || 4;
 
       // Fee template
       let feeTemplate = courseObj?.fee_structure_template;
