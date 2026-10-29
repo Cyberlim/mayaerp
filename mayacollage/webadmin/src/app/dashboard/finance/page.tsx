@@ -250,6 +250,8 @@ export default function FinanceDashboard() {
   // Student Accounts Search, Infinite Scroll & Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCourse, setSelectedCourse] = useState("all");
+  const [selectedYear, setSelectedYear] = useState("all");
+  const [selectedSemester, setSelectedSemester] = useState("all");
   const [osFilter, setOsFilter] = useState<"all" | "os_due" | "cleared">("all");
   const [visibleCount, setVisibleCount] = useState(20);
   const scrollSentinelRef = useRef<HTMLDivElement | null>(null);
@@ -557,6 +559,42 @@ export default function FinanceDashboard() {
     return { isConfigured, gross, discount, total, paid, balance, status, courseBaseFee, courseObj, studentTxns };
   };
 
+  // Helper to extract student's starting academic year (e.g. 2023, 2024, 2025)
+  const getStudentStartYear = (s: any): string => {
+    if (s.admissionYear || s.admission_year) {
+      const m = String(s.admissionYear || s.admission_year).match(/\b(20\d{2})\b/);
+      if (m) return m[1];
+    }
+    if (s.sessionYear || s.session_year) {
+      const m = String(s.sessionYear || s.session_year).match(/^\s*(20\d{2})/);
+      if (m) return m[1];
+    }
+    if (s.batch) {
+      const m = String(s.batch).match(/^\s*(20\d{2})/);
+      if (m) return m[1];
+    }
+    const any = String(s.sessionYear || s.session_year || s.batch || s.admissionYear || s.admission_year || "").match(/(20\d{2})/);
+    return any ? any[1] : "";
+  };
+
+  // Helper to extract student's study year (1, 2, 3, 4)
+  const getStudentStudyYear = (s: any): number => {
+    if (s.courseYear || s.course_year) return Number(s.courseYear || s.course_year);
+    const sem = Number(s.selectedSemester || s.selected_semester);
+    if (sem > 0) return Math.ceil(sem / 2);
+    return 1;
+  };
+
+  // Unique list of start/batch years from loaded students
+  const uniqueStartYears = useMemo(() => {
+    const yearsSet = new Set<string>();
+    students.forEach((s: any) => {
+      const yr = getStudentStartYear(s);
+      if (yr) yearsSet.add(yr);
+    });
+    return Array.from(yearsSet).sort().reverse();
+  }, [students]);
+
   // Filtered Students Roster
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
@@ -573,19 +611,40 @@ export default function FinanceDashboard() {
       const sCourseId = typeof s.selectedProgram === "object" ? s.selectedProgram?._id : (s.selectedProgram || s.selected_program);
       const matchesCourse = selectedCourse === "all" || sCourseId === selectedCourse;
 
+      let matchesYear = true;
+      if (selectedYear !== "all") {
+        if (selectedYear.startsWith("year-")) {
+          const targetYr = Number(selectedYear.replace("year-", ""));
+          matchesYear = getStudentStudyYear(s) === targetYr;
+        } else {
+          const qYear = selectedYear.trim();
+          const startYr = getStudentStartYear(s);
+          const sy = String(s.sessionYear || s.session_year || "").trim();
+          const ay = String(s.admissionYear || s.admission_year || "").trim();
+          const bt = String(s.batch || "").trim();
+          matchesYear = startYr === qYear || sy.includes(qYear) || ay.includes(qYear) || bt.includes(qYear);
+        }
+      }
+
+      let matchesSemester = true;
+      if (selectedSemester !== "all") {
+        const sem = Number(s.selectedSemester || s.selected_semester || 1);
+        matchesSemester = sem === Number(selectedSemester);
+      }
+
       const matchesOS =
         osFilter === "all" ||
         (osFilter === "os_due" && summary.balance > 0) ||
         (osFilter === "cleared" && summary.paid > 0);
 
-      return matchesSearch && matchesCourse && matchesOS;
+      return matchesSearch && matchesCourse && matchesYear && matchesSemester && matchesOS;
     });
-  }, [students, searchQuery, selectedCourse, osFilter, courses, transactions]);
+  }, [students, searchQuery, selectedCourse, selectedYear, selectedSemester, osFilter, courses, transactions]);
 
   // Reset visible count when filter changes
   useEffect(() => {
     setVisibleCount(20);
-  }, [searchQuery, selectedCourse, osFilter]);
+  }, [searchQuery, selectedCourse, selectedYear, selectedSemester, osFilter]);
 
   // Lazy loaded students for infinite scroll
   const visibleStudents = useMemo(() => {
@@ -1762,7 +1821,7 @@ export default function FinanceDashboard() {
                       <select
                         value={selectedCourse}
                         onChange={e => setSelectedCourse(e.target.value)}
-                        className="appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 focus:outline-none cursor-pointer shadow-xs"
+                        className="appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 focus:outline-none cursor-pointer shadow-xs hover:border-slate-300 transition-colors"
                       >
                         <option value="all">All courses</option>
                         {courses.map(c => (
@@ -1772,6 +1831,66 @@ export default function FinanceDashboard() {
                       <GraduationCap className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                       <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
+
+                    {/* Year Filter Dropdown */}
+                    <div className="relative">
+                      <select
+                        value={selectedYear}
+                        onChange={e => setSelectedYear(e.target.value)}
+                        className="appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 focus:outline-none cursor-pointer shadow-xs hover:border-slate-300 transition-colors"
+                      >
+                        <option value="all">All years</option>
+                        {uniqueStartYears.length > 0 && (
+                          <optgroup label="Academic / Batch Year">
+                            {uniqueStartYears.map((yr: string) => (
+                              <option key={yr} value={yr}>Batch {yr}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        <optgroup label="Course / Study Year">
+                          <option value="year-1">1st Year</option>
+                          <option value="year-2">2nd Year</option>
+                          <option value="year-3">3rd Year</option>
+                          <option value="year-4">4th Year</option>
+                        </optgroup>
+                      </select>
+                      <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+
+                    {/* Semester Filter Dropdown */}
+                    <div className="relative">
+                      <select
+                        value={selectedSemester}
+                        onChange={e => setSelectedSemester(e.target.value)}
+                        className="appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 focus:outline-none cursor-pointer shadow-xs hover:border-slate-300 transition-colors"
+                      >
+                        <option value="all">All semesters</option>
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map((sm) => (
+                          <option key={sm} value={String(sm)}>Semester {sm}</option>
+                        ))}
+                      </select>
+                      <Layers className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+
+                    {/* Clear / Reset Filter Button */}
+                    {(selectedCourse !== "all" || selectedYear !== "all" || selectedSemester !== "all" || osFilter !== "all" || searchQuery) && (
+                      <button
+                        onClick={() => {
+                          setSelectedCourse("all");
+                          setSelectedYear("all");
+                          setSelectedSemester("all");
+                          setOsFilter("all");
+                          setSearchQuery("");
+                        }}
+                        className="px-2.5 py-2 text-xs font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer flex items-center gap-1 border border-dashed border-slate-200"
+                        title="Reset all filters"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>Reset</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1849,7 +1968,7 @@ export default function FinanceDashboard() {
                                     </p>
                                   )}
                                   <p className="text-[10px] text-slate-400 font-medium truncate mt-0.5">
-                                    Roll: {roll} • {courseCode} • Sem {sem}
+                                    Roll: {roll} • {courseCode} • Sem {sem}{getStudentStartYear(s) ? ` • Batch ${getStudentStartYear(s)}` : ""}
                                   </p>
                                 </div>
                               </div>
