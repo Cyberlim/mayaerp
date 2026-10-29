@@ -23,7 +23,8 @@ import {
   CreditCard,
   ChevronDown,
   ChevronUp,
-  ShieldCheck
+  ShieldCheck,
+  User
 } from "lucide-react";
 import Link from "next/link";
 
@@ -465,24 +466,26 @@ export default function TransportDashboard() {
     if (!cachedStudents || cachedStudents.length === 0) return [];
     const q = studentSearchQuery.trim().toLowerCase();
     
-    // If no query typed yet, suggest first 20 students from local cache
+    // If no query typed yet, suggest first 25 students from local cache
     if (!q) {
-      return cachedStudents.slice(0, 20);
+      return cachedStudents.slice(0, 25);
     }
 
     const tokens = q.split(/\s+/).filter(Boolean);
     return cachedStudents.filter(st => {
-      const name = `${st.firstName || ''} ${st.lastName || ''}`.toLowerCase();
+      const name = `${st.firstName || ''} ${st.middleName || ''} ${st.lastName || ''}`.toLowerCase();
       const sId = (st.studentId || '').toLowerCase();
       const adm = (st.admissionNumber || '').toLowerCase();
+      const enr = (st.enrollmentNumber || '').toLowerCase();
+      const father = (st.fatherName || '').toLowerCase();
       const mob = (st.mobile || '').toLowerCase();
       const email = (st.email || '').toLowerCase();
-      const prog = (st.selectedProgram || st.courseName || '').toLowerCase();
-      const branch = (st.selectedBranch || st.branchName || '').toLowerCase();
+      const prog = (st.courseName || st.selectedProgram || '').toLowerCase();
+      const branch = (st.branchName || st.selectedBranch || '').toLowerCase();
 
-      const haystack = `${name} ${sId} ${adm} ${mob} ${email} ${prog} ${branch}`;
+      const haystack = `${name} ${sId} ${adm} ${enr} ${father} ${mob} ${email} ${prog} ${branch}`;
       return tokens.every(tok => haystack.includes(tok));
-    }).slice(0, 35);
+    }).slice(0, 50);
   }, [cachedStudents, studentSearchQuery]);
 
   // Fallback search directly against PostgreSQL if user explicitly clicks Search button
@@ -1573,256 +1576,401 @@ export default function TransportDashboard() {
         )}
       </AnimatePresence>
 
-      {/* ASSIGN STUDENT TO BUS MODAL */}
+      {/* ASSIGN STUDENT TO BUS MODAL (LARGE SCREEN WITH COMPLETE STUDENT DOSSIER) */}
       <AnimatePresence>
         {showAssignModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.96, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white rounded-3xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 space-y-6"
+              exit={{ opacity: 0, scale: 0.96, y: 15 }}
+              className="bg-white rounded-3xl p-6 sm:p-8 max-w-5xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-100 my-auto overflow-hidden"
             >
-              <div className="flex justify-between items-center pb-6 border-b border-slate-100">
-                <div>
-                  <h3 className="text-2xl font-black text-slate-800">Assign Student to Bus Fleet</h3>
-                  <p className="text-xs text-slate-500 font-medium">
-                    Enrolls student in transport, sets their stop, and automatically writes transport fee into their record
-                  </p>
+              {/* Modal Header */}
+              <div className="flex justify-between items-center pb-5 border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-black shrink-0">
+                    <Bus className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
+                      Assign Student to Bus Fleet
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                      Enrolls student in campus transport, designates pickup stop, and registers fee in the student dossier.
+                    </p>
+                  </div>
                 </div>
                 <button 
                   onClick={() => setShowAssignModal(false)}
-                  className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100"
+                  className="p-2.5 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-100 transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* 1. Select Bus & Stop */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-bold text-slate-700">
-                <div>
-                  <label className="block mb-1">Select Bus Fleet *</label>
-                  <select
-                    value={assignBusId}
-                    onChange={(e) => handleAssignBusChange(e.target.value)}
-                    className="w-full bg-slate-50 border-0 rounded-2xl px-4 py-3 text-sm font-bold text-slate-800 outline-none ring-2 ring-transparent focus:ring-amber-200 cursor-pointer"
-                  >
-                    {buses.map((b) => (
-                      <option key={b._id} value={b._id}>
-                        {b.busNo} ({b.students?.length || 0}/{b.capacity} Seats)
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              {/* Modal Body - 2 Columns on Large Screens */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 py-5 overflow-y-auto pr-1 flex-1">
+                
+                {/* Left Column (5 Cols): Fleet, Stop, Fee Configuration & Selected Student Dossier */}
+                <div className="lg:col-span-5 space-y-4">
+                  <div className="bg-slate-50/80 rounded-2xl p-4.5 border border-slate-100 space-y-3.5">
+                    <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                      <Bus className="w-3.5 h-3.5 text-amber-500" />
+                      Fleet & Station Settings
+                    </h4>
 
-                <div>
-                  <label className="block mb-1">Pickup / Drop Stop *</label>
-                  <select
-                    value={assignStopName}
-                    onChange={(e) => handleAssignStopChange(e.target.value)}
-                    className="w-full bg-slate-50 border-0 rounded-2xl px-4 py-3 text-sm font-bold text-slate-800 outline-none ring-2 ring-transparent focus:ring-amber-200 cursor-pointer"
-                  >
-                    {buses.find(b => b._id === assignBusId)?.stops.map((s, idx) => (
-                      <option key={idx} value={s.stationName}>
-                        {s.stationName} (₹{s.price})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+                    {/* 1. Fleet Selection */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Select Bus Fleet *
+                      </label>
+                      <select
+                        value={assignBusId}
+                        onChange={(e) => handleAssignBusChange(e.target.value)}
+                        className="w-full bg-white border border-slate-200/80 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-amber-500/20 cursor-pointer shadow-2xs"
+                      >
+                        {buses.map((b) => (
+                          <option key={b._id} value={b._id}>
+                            {b.busNo} — {b.routeName} ({b.students?.length || 0}/{b.capacity} Seats)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-              {/* 2. Fare & Initial Payment Status */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-bold text-slate-700">
-                <div>
-                  <label className="block mb-1">Assessed Transport Fee (₹) *</label>
-                  <input 
-                    type="number"
-                    min={0}
-                    value={assignCustomFare}
-                    onChange={(e) => setAssignCustomFare(e.target.value ? Number(e.target.value) : "")}
-                    placeholder="Fee amount"
-                    className="w-full bg-slate-50 border-0 rounded-2xl px-4 py-3 text-sm font-bold text-slate-800 outline-none ring-2 ring-transparent focus:ring-amber-200"
-                  />
-                </div>
+                    {/* 2. Stop Selection */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Pickup / Drop Stop *
+                      </label>
+                      <select
+                        value={assignStopName}
+                        onChange={(e) => handleAssignStopChange(e.target.value)}
+                        className="w-full bg-white border border-slate-200/80 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-amber-500/20 cursor-pointer shadow-2xs"
+                      >
+                        {buses.find(b => b._id === assignBusId)?.stops.map((s, idx) => (
+                          <option key={idx} value={s.stationName}>
+                            {s.stationName} (Standard: ₹{s.price?.toLocaleString('en-IN')})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div>
-                  <label className="block mb-1">Initial Fee Status</label>
-                  <select
-                    value={assignPaymentStatus}
-                    onChange={(e) => setAssignPaymentStatus(e.target.value as any)}
-                    className="w-full bg-slate-50 border-0 rounded-2xl px-4 py-3 text-sm font-bold text-slate-800 outline-none ring-2 ring-transparent focus:ring-amber-200 cursor-pointer"
-                  >
-                    <option value="Pending">Pending / Unpaid (Record Due)</option>
-                    <option value="Paid">Mark as Paid Immediately</option>
-                  </select>
-                </div>
-              </div>
+                    {/* 3. Fare & Payment Status */}
+                    <div className="grid grid-cols-2 gap-3 pt-0.5">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Assessed Fee (₹) *
+                        </label>
+                        <input 
+                          type="number"
+                          min={0}
+                          value={assignCustomFare}
+                          onChange={(e) => setAssignCustomFare(e.target.value ? Number(e.target.value) : "")}
+                          placeholder="Amount in ₹"
+                          className="w-full bg-white border border-slate-200/80 rounded-xl px-3.5 py-2 text-xs font-black text-slate-800 outline-none focus:ring-2 focus:ring-amber-500/20 shadow-2xs"
+                        />
+                      </div>
 
-              {/* 3. Search & Select Student from Local Cache Memory */}
-              <div className="space-y-3 pt-2">
-                <div className="flex items-center justify-between">
-                  <label className="block font-black text-slate-800 uppercase tracking-wider text-xs">
-                    Search & Select Student
-                  </label>
-                  
-                  {/* Local Cache Memory Indicator & Sync Button */}
-                  <div className="flex items-center gap-2">
-                    {isPreloadingStudents && cachedStudents.length === 0 ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-[10px] font-bold border border-amber-200 animate-pulse">
-                        <RefreshCw className="w-3 h-3 animate-spin" />
-                        Caching from PostgreSQL...
-                      </span>
-                    ) : (
-                      <div className="flex items-center gap-1.5">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200/60">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                          {cachedStudents.length} Students in Local Cache (0ms Instant)
-                        </span>
-                        <button 
-                          type="button"
-                          onClick={() => loadStudentsIntoCache(true)}
-                          disabled={isPreloadingStudents}
-                          title="Sync & refresh local cache memory from PostgreSQL"
-                          className="p-1 text-slate-400 hover:text-amber-600 rounded-lg hover:bg-slate-100 transition-colors"
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Initial Status
+                        </label>
+                        <select
+                          value={assignPaymentStatus}
+                          onChange={(e) => setAssignPaymentStatus(e.target.value as any)}
+                          className="w-full bg-white border border-slate-200/80 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-amber-500/20 cursor-pointer shadow-2xs"
                         >
-                          <RefreshCw className={`w-3.5 h-3.5 ${isPreloadingStudents ? 'animate-spin text-amber-600' : ''}`} />
-                        </button>
+                          <option value="Pending">Unpaid (Due)</option>
+                          <option value="Paid">Mark Paid</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Selected Student Complete Profile Showcase Card */}
+                  <div>
+                    <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-indigo-500" />
+                        Selected Student Dossier
+                      </span>
+                      {selectedStudent && (
+                        <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full font-bold border border-emerald-200/60 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          Ready for Fleet
+                        </span>
+                      )}
+                    </h4>
+
+                    {selectedStudent ? (
+                      <div className="bg-gradient-to-br from-emerald-50/90 to-teal-50/70 border-2 border-emerald-300/80 rounded-2xl p-4 space-y-3 shadow-xs">
+                        <div className="flex items-start gap-3">
+                          <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white font-black text-sm flex items-center justify-center shrink-0 shadow-sm uppercase">
+                            {(selectedStudent.firstName?.[0] || 'S').toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-black text-slate-900 text-sm tracking-tight truncate uppercase">
+                              {selectedStudent.firstName} {selectedStudent.lastName}
+                            </h4>
+                            {selectedStudent.fatherName ? (
+                              <p className="text-xs text-slate-700 font-semibold truncate mt-0.5">
+                                <span className="text-slate-400 font-normal">S/O:</span> {selectedStudent.fatherName}
+                              </p>
+                            ) : (
+                              <p className="text-[11px] text-slate-400 italic">Father details not specified</p>
+                            )}
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                              <span className="px-2 py-0.5 bg-white border border-emerald-200 text-emerald-800 rounded-lg text-[10px] font-black">
+                                Adm No: {selectedStudent.admissionNumber || selectedStudent.studentId || 'N/A'}
+                              </span>
+                              {selectedStudent.enrollmentNumber && (
+                                <span className="px-2 py-0.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-[10px] font-bold">
+                                  Roll: {selectedStudent.enrollmentNumber}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Detailed Badges Grid */}
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-emerald-200/60 text-[11px]">
+                          <div className="bg-white/80 p-2.5 rounded-xl border border-emerald-100">
+                            <span className="text-[10px] text-slate-400 font-bold block uppercase">Course & Branch</span>
+                            <span className="font-black text-slate-900 block truncate">
+                              {selectedStudent.courseName || selectedStudent.selectedProgram || 'Course'}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-medium block truncate">
+                              {selectedStudent.branchName || selectedStudent.selectedBranch || 'Branch'}
+                            </span>
+                          </div>
+
+                          <div className="bg-white/80 p-2.5 rounded-xl border border-emerald-100">
+                            <span className="text-[10px] text-slate-400 font-bold block uppercase">Academic Year</span>
+                            <span className="font-black text-slate-900 block">
+                              Year {selectedStudent.courseYear || 1} • Sem {selectedStudent.selectedSemester || 1}
+                            </span>
+                            {selectedStudent.batch && (
+                              <span className="text-[10px] text-slate-500 font-medium block">
+                                Batch {selectedStudent.batch}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {selectedStudent.mobile && (
+                          <div className="flex items-center gap-2 text-xs text-slate-700 bg-white/70 px-3 py-1.5 rounded-xl border border-emerald-100">
+                            <Phone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span className="font-bold">{selectedStudent.mobile}</span>
+                            {selectedStudent.parentMobile && (
+                              <span className="text-slate-400 text-[11px]">
+                                • Parent: {selectedStudent.parentMobile}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center text-slate-400 space-y-1.5">
+                        <Users className="w-7 h-7 text-slate-300 mx-auto" />
+                        <p className="text-xs font-bold text-slate-600">No Student Selected</p>
+                        <p className="text-[11px] text-slate-400">
+                          Click "Select" on any student in the right directory to view their complete admission dossier.
+                        </p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Instant Search Input */}
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                    <Search className="w-4 h-4" />
+                {/* Right Column (7 Cols): Search & Large Rich Student Selection List */}
+                <div className="lg:col-span-7 flex flex-col space-y-3">
+                  
+                  {/* Search Bar & Instant Cache Indicator */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <label className="block font-black text-slate-800 uppercase tracking-wider text-xs">
+                      Student Directory
+                    </label>
+
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200/60 shadow-2xs">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        {cachedStudents.length} Students Available
+                      </span>
+                      <button 
+                        type="button"
+                        onClick={() => loadStudentsIntoCache(true)}
+                        disabled={isPreloadingStudents}
+                        title="Refresh student cache from PostgreSQL"
+                        className="p-1.5 text-slate-400 hover:text-amber-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border border-slate-200/80"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isPreloadingStudents ? 'animate-spin text-amber-600' : ''}`} />
+                      </button>
+                    </div>
                   </div>
-                  <input 
-                    type="text"
-                    value={studentSearchQuery}
-                    onChange={(e) => setStudentSearchQuery(e.target.value)}
-                    placeholder="Type by character: Name, Student ID (e.g. BPH), Admission No, Mobile..."
-                    className="w-full bg-slate-50 border-0 rounded-2xl pl-10 pr-10 py-3 text-sm font-bold text-slate-800 outline-none ring-2 ring-transparent focus:ring-amber-200"
-                  />
-                  {studentSearchQuery && (
-                    <button 
-                      type="button"
-                      onClick={() => setStudentSearchQuery("")}
-                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
 
-                {/* Local Cache Memory Suggestions Dropdown */}
-                <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1 p-1 bg-slate-50/50 rounded-2xl border border-slate-100">
-                  {isPreloadingStudents && cachedStudents.length === 0 ? (
-                    <div className="p-4 space-y-2">
-                      <div className="h-8 bg-slate-200/60 rounded-xl animate-pulse" />
-                      <div className="h-8 bg-slate-200/60 rounded-xl animate-pulse" />
-                      <div className="h-8 bg-slate-200/60 rounded-xl animate-pulse" />
-                    </div>
-                  ) : studentSuggestions.length > 0 ? (
-                    studentSuggestions.map((st) => {
-                      const isSelected = (selectedStudent?._id || selectedStudent?.id) === (st._id || st.id);
-                      return (
-                        <div
-                          key={st._id || st.id}
-                          onClick={() => setSelectedStudent(st)}
-                          className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between text-xs ${
-                            isSelected 
-                              ? 'border-amber-500 bg-amber-50/80 ring-2 ring-amber-300 shadow-sm' 
-                              : 'border-white bg-white hover:border-amber-200 hover:bg-amber-50/40 shadow-xs'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-sm">
-                              {(st.firstName?.[0] || 'S').toUpperCase()}
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="font-black text-slate-900">{st.firstName} {st.lastName}</p>
-                                <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded-md font-bold text-[10px]">
-                                  {st.studentId || st.admissionNumber}
-                                </span>
-                              </div>
-                              <p className="text-slate-500 font-medium text-[11px]">
-                                {[st.selectedProgram || st.courseName, st.selectedBranch || st.branchName, st.courseYear ? `Yr ${st.courseYear}` : '']
-                                  .filter(Boolean)
-                                  .join(" • ")}
-                              </p>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-2">
-                            {st.mobile && (
-                              <span className="text-slate-400 font-semibold text-[11px] hidden sm:inline">
-                                {st.mobile}
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              className={`px-3 py-1 rounded-lg font-bold text-[11px] transition-all ${
-                                isSelected 
-                                  ? 'bg-amber-600 text-white' 
-                                  : 'bg-slate-100 text-slate-700 hover:bg-amber-100 hover:text-amber-800'
-                              }`}
-                            >
-                              {isSelected ? "Selected" : "Select"}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="p-4 text-center text-slate-400 text-xs font-medium">
-                      No students matching "{studentSearchQuery}" in local cache memory.
-                    </div>
-                  )}
-                </div>
+                  {/* Search Input Box */}
+                  <div className="relative">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <input 
+                      type="text"
+                      value={studentSearchQuery}
+                      onChange={(e) => setStudentSearchQuery(e.target.value)}
+                      placeholder="Search by student name, father's name, admission no, roll, course..."
+                      className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs font-bold text-slate-800 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-amber-500/20 focus:bg-white shadow-2xs transition-all"
+                    />
+                    {studentSearchQuery && (
+                      <button 
+                        type="button"
+                        onClick={() => setStudentSearchQuery("")}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
 
-                {/* Selected Student Card */}
-                {selectedStudent && (
-                  <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex items-center justify-between gap-3 text-xs shadow-xs">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white font-black flex items-center justify-center text-sm shadow-sm">
-                        {(selectedStudent.firstName?.[0] || 'S').toUpperCase()}
+                  {/* Student Directory List (Tall & Spacious) */}
+                  <div className="bg-slate-50/50 rounded-2xl border border-slate-200/80 p-2 max-h-[460px] overflow-y-auto space-y-2 flex-1 shadow-inner">
+                    {isPreloadingStudents && cachedStudents.length === 0 ? (
+                      <div className="p-6 space-y-3">
+                        <div className="h-16 bg-slate-200/70 rounded-2xl animate-pulse" />
+                        <div className="h-16 bg-slate-200/70 rounded-2xl animate-pulse" />
+                        <div className="h-16 bg-slate-200/70 rounded-2xl animate-pulse" />
                       </div>
-                      <div>
-                        <p className="font-black text-slate-900 text-sm">{selectedStudent.firstName} {selectedStudent.lastName}</p>
-                        <p className="text-emerald-800 font-bold">
-                          ID: {selectedStudent.studentId || selectedStudent.admissionNumber} • {selectedStudent.selectedProgram || selectedStudent.courseName || 'Maya Student'}
+                    ) : studentSuggestions.length > 0 ? (
+                      studentSuggestions.map((st) => {
+                        const isSelected = (selectedStudent?._id || selectedStudent?.id) === (st._id || st.id);
+                        const father = st.fatherName || '';
+                        const course = st.courseName || st.selectedProgram || 'Course';
+                        const branch = st.branchName || st.selectedBranch || 'General';
+                        const admNo = st.admissionNumber || st.studentId || 'N/A';
+                        const rollNo = st.enrollmentNumber;
+
+                        return (
+                          <div
+                            key={st._id || st.id}
+                            onClick={() => setSelectedStudent(st)}
+                            className={`p-3 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                              isSelected 
+                                ? 'border-amber-500 bg-amber-50/90 ring-2 ring-amber-300/80 shadow-sm' 
+                                : 'border-white bg-white hover:border-amber-200 hover:bg-amber-50/30 shadow-2xs'
+                            }`}
+                          >
+                            {/* Left: Avatar & Details */}
+                            <div className="flex items-start gap-3 min-w-0">
+                              <div className={`w-10 h-10 rounded-2xl font-black text-sm flex items-center justify-center shrink-0 uppercase shadow-2xs ${
+                                isSelected ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-700'
+                              }`}>
+                                {(st.firstName?.[0] || 'S').toUpperCase()}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <p className="font-black text-slate-900 text-xs tracking-tight uppercase">
+                                    {st.firstName} {st.lastName}
+                                  </p>
+                                  <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-md font-bold text-[10px]">
+                                    Adm: {admNo}
+                                  </span>
+                                  {rollNo && (
+                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md font-semibold text-[10px] hidden sm:inline">
+                                      Roll: {rollNo}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {father && (
+                                  <p className="text-[11px] text-slate-600 font-semibold truncate mt-0.5">
+                                    <span className="text-slate-400 font-normal">S/O:</span> {father}
+                                  </p>
+                                )}
+
+                                <p className="text-[11px] text-slate-500 font-semibold truncate mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-amber-800 font-black">{course}</span>
+                                  <span className="text-slate-300">•</span>
+                                  <span className="text-slate-600">{branch}</span>
+                                  <span className="text-slate-300">•</span>
+                                  <span className="text-slate-500 font-medium">Year {st.courseYear || 1} (Sem {st.selectedSemester || 1})</span>
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Right: Phone & Action Button */}
+                            <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                              {st.mobile && (
+                                <span className="text-slate-400 font-bold text-[11px] flex items-center gap-1">
+                                  <Phone className="w-3 h-3 text-slate-300" />
+                                  {st.mobile}
+                                </span>
+                              )}
+
+                              <button
+                                type="button"
+                                className={`px-4 py-2 rounded-xl font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                                  isSelected 
+                                    ? 'bg-amber-600 text-white' 
+                                    : 'bg-slate-100 text-slate-700 hover:bg-amber-100 hover:text-amber-800'
+                                }`}
+                              >
+                                {isSelected ? (
+                                  <>
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                                    <span>Selected</span>
+                                  </>
+                                ) : (
+                                  <span>Select</span>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="py-12 text-center text-slate-400 text-xs font-semibold space-y-1">
+                        <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                        <p>No students matching "{studentSearchQuery}"</p>
+                        <p className="text-[11px] text-slate-400 font-normal">
+                          Try searching by student name, roll number, father's name, or mobile.
                         </p>
                       </div>
-                    </div>
-                    <span className="px-3 py-1.5 bg-emerald-200 text-emerald-900 rounded-xl font-black text-xs flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
-                      Ready to Enroll
-                    </span>
+                    )}
                   </div>
-                )}
+                </div>
+
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                <button 
-                  type="button"
-                  onClick={() => setShowAssignModal(false)}
-                  className="px-6 py-3 rounded-2xl font-bold text-slate-600 hover:bg-slate-100 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="button"
-                  onClick={handleSubmitAssignStudent}
-                  disabled={actionLoading || !selectedStudent || !assignStopName}
-                  className="px-8 py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:opacity-50 text-white rounded-2xl font-black shadow-lg shadow-amber-600/20 transition-all flex items-center gap-2"
-                >
-                  <UserCheck className="w-4 h-4" />
-                  <span>{actionLoading ? "Enrolling..." : "Confirm & Enroll Student"}</span>
-                </button>
+              {/* Modal Footer */}
+              <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3 shrink-0">
+                <div className="text-xs text-slate-500 font-medium truncate w-full sm:w-auto">
+                  {selectedStudent ? (
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                      <span>Assigning <strong className="text-slate-900 font-black">{selectedStudent.firstName} {selectedStudent.lastName}</strong> to <strong className="text-amber-700 font-black">{buses.find(b => b._id === assignBusId)?.busNo}</strong> at <strong className="text-slate-800">{assignStopName}</strong></span>
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 italic">Please select a student from the directory above.</span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                  <button 
+                    type="button"
+                    onClick={() => setShowAssignModal(false)}
+                    className="px-6 py-2.5 rounded-xl font-bold text-xs text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={handleSubmitAssignStudent}
+                    disabled={actionLoading || !selectedStudent || !assignStopName}
+                    className="px-7 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:opacity-50 text-white rounded-xl font-black text-xs shadow-lg shadow-amber-600/20 transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                    <UserCheck className="w-4 h-4" />
+                    <span>{actionLoading ? "Enrolling..." : "Confirm & Enroll Student"}</span>
+                  </button>
+                </div>
               </div>
+
             </motion.div>
           </div>
         )}

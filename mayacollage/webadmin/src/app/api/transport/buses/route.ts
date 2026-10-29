@@ -37,22 +37,42 @@ export async function GET(request: Request) {
     if (studentIds.size > 0) {
       const idArray = Array.from(studentIds);
       const stuRes = await pgQuery(
-        `SELECT id, first_name, last_name, email, mobile, student_id, admission_number, selected_branch, selected_program, branch_name, course_name, course_year, fees FROM students WHERE id = ANY($1)`,
+        `SELECT 
+          s.id, s.first_name, s.middle_name, s.last_name, s.father_name, s.email, s.mobile, 
+          s.student_id, s.admission_number, s.enrollment_number,
+          COALESCE(NULLIF(s.branch_name, ''), b.name, '') as branch_name, 
+          COALESCE(NULLIF(s.course_name, ''), c.name, '') as course_name, 
+          s.course_year, s.selected_semester, s.fees, s.documents 
+        FROM students s 
+        LEFT JOIN courses c ON s.selected_program = c.id
+        LEFT JOIN branches b ON s.selected_branch = b.id
+        WHERE s.id = ANY($1)`,
         [idArray]
       );
       stuRes.rows.forEach(s => {
+        const docs = typeof s.documents === 'string' ? JSON.parse(s.documents) : (s.documents || {});
+        const father = (s.father_name || docs.fatherName || docs.father_name || '').trim();
+        const course = (s.course_name || '').trim() || 'Course';
+        const branch = (s.branch_name || '').trim() || 'General';
+
         studentMap[s.id] = {
           _id: s.id,
           id: s.id,
-          firstName: s.first_name,
-          lastName: s.last_name,
-          email: s.email,
-          mobile: s.mobile,
-          studentId: s.student_id,
-          admissionNumber: s.admission_number,
-          selectedBranch: s.selected_branch || s.branch_name,
-          selectedProgram: s.selected_program || s.course_name,
-          courseYear: s.course_year,
+          firstName: s.first_name || '',
+          middleName: s.middle_name || '',
+          lastName: s.last_name || '',
+          fatherName: father,
+          email: s.email || '',
+          mobile: s.mobile || '',
+          studentId: s.student_id || s.admission_number || '',
+          admissionNumber: s.admission_number || s.student_id || '',
+          enrollmentNumber: s.enrollment_number || '',
+          selectedBranch: branch,
+          selectedProgram: course,
+          courseName: course,
+          branchName: branch,
+          courseYear: Number(s.course_year) || 1,
+          selectedSemester: Number(s.selected_semester) || 1,
           fees: typeof s.fees === 'string' ? JSON.parse(s.fees) : s.fees
         };
       });
