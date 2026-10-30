@@ -292,30 +292,77 @@ export default function StudentManagementDashboard() {
     }
   };
 
-  // Helper for student fee summary (inherits Course total fee if not custom configured)
+  // Helper for student fee summary (Reconciled with Finance fee engine, components, and ledger)
   const getFeeInfo = (student: any) => {
-    const courseObj = courses.find(c => c._id === (typeof student.selectedProgram === 'object' ? student.selectedProgram?._id : student.selectedProgram));
+    const progId = typeof student.selectedProgram === 'object' ? student.selectedProgram?._id : student.selectedProgram;
+    const courseObj = courses.find(c => c._id === progId || c.id === progId || c.code === student.courseCode);
 
-    let courseBaseFee = Number(courseObj?.tuitionFee) || 0;
+    let courseBaseFee = Number(courseObj?.tuitionFee) || Number(student.courseTuitionFee || student.course_tuition_fee) || 0;
     if (Array.isArray(courseObj?.semesterFees) && courseObj.semesterFees.length > 0) {
       const sumSem = courseObj.semesterFees.reduce((acc: number, sf: any) => acc + (Number(sf.fee) || 0), 0);
       if (sumSem > 0) courseBaseFee = sumSem;
     }
 
-    const isConfigured = Boolean(student?.fees?.isConfigured && student?.fees?.years?.length > 0);
-    let total = 0;
-    let paid = 0;
+    const feesObj = student?.fees || {};
+    const hasYears = Boolean(feesObj.years && Array.isArray(feesObj.years) && feesObj.years.length > 0);
+    const isConfigured = Boolean(feesObj.isConfigured || hasYears);
 
-    if (isConfigured && student.fees.years) {
-      student.fees.years.forEach((fy: any) => {
-        total += (Number(fy.tuition?.total) || 0) + (Number(fy.exam?.total) || 0) + (Number(fy.transport?.total) || 0) + (Number(fy.other?.total) || 0);
-        paid += (Number(fy.tuition?.paid) || 0) + (Number(fy.exam?.paid) || 0) + (Number(fy.transport?.paid) || 0) + (Number(fy.other?.paid) || 0);
+    let total = Number(student.totalFee ?? student.total_fee) || 0;
+    let paid = Number(student.paidFee ?? student.paid_fee) || 0;
+    let gross = 0;
+    let discount = 0;
+
+    if (hasYears) {
+      let calcGross = 0;
+      let calcPaid = 0;
+      let calcDiscount = 0;
+
+      feesObj.years.forEach((fy: any) => {
+        let yrGross = 0;
+        let yrPaid = 0;
+
+        if (Array.isArray(fy.components) && fy.components.length > 0) {
+          fy.components.forEach((c: any) => {
+            yrGross += Number(c.amount) || 0;
+            yrPaid += Number(c.paid) || 0;
+          });
+        } else {
+          yrGross += (Number(fy.tuition?.total) || 0) + (Number(fy.exam?.total) || 0) + (Number(fy.transport?.total) || 0) + (Number(fy.other?.total) || 0);
+          yrPaid += (Number(fy.tuition?.paid) || 0) + (Number(fy.exam?.paid) || 0) + (Number(fy.transport?.paid) || 0) + (Number(fy.other?.paid) || 0);
+        }
+
+        if (Number(fy.yearPaid) > 0 && yrPaid === 0) {
+          yrPaid = Number(fy.yearPaid);
+        }
+
+        const yrDisc = Number(fy.discount) || 0;
+        calcDiscount += yrDisc;
+        calcGross += Math.max(0, yrGross - yrDisc);
+        calcPaid += yrPaid;
       });
+
+      discount = calcDiscount;
+      if (calcGross > 0) total = calcGross;
+      if (calcPaid > paid) paid = calcPaid;
     }
 
-    // Default to Course base fee if student total is 0
+    if (Number(feesObj.totalPaid) > paid) {
+      paid = Number(feesObj.totalPaid);
+    }
+
+    // Direct component-level paid attributes on student
+    const directCompsPaid = (Number(student.tuitionPaid || student.tuition_paid) || 0) +
+                            (Number(student.examPaid || student.exam_paid) || 0) +
+                            (Number(student.transportPaid || student.transport_paid) || 0) +
+                            (Number(student.otherPaid || student.other_paid) || 0);
+    if (directCompsPaid > paid) {
+      paid = directCompsPaid;
+    }
+
+    // Default to Course base fee if total is 0
     if (total === 0 && courseBaseFee > 0) {
       total = courseBaseFee;
+      gross = courseBaseFee;
     }
 
     const balance = Math.max(0, total - paid);
@@ -324,9 +371,13 @@ export default function StudentManagementDashboard() {
       if (paid >= total) status = "paid";
       else if (paid > 0) status = "partial";
       else status = "unpaid";
+    } else if (student.feeStatus === "paid" || student.fee_status === "paid") {
+      status = "paid";
     }
 
-    return { isConfigured, total, paid, balance, status, courseBaseFee, courseObj };
+    const percentage = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+
+    return { isConfigured, gross, discount, total, paid, balance, status, percentage, courseBaseFee, courseObj };
   };
 
   // Quick 1-Click Toggle: Mark student as Paid or Unpaid
@@ -348,21 +399,37 @@ export default function StudentManagementDashboard() {
 
     const updatedYears = existingYears.map((yr: any) => {
       const yrTuitionTot = (Number(yr.tuition?.total) || annualTotal);
+      const yrExamTot = Number(yr.exam?.total) || 0;
+      const yrTransportTot = Number(yr.transport?.total) || 0;
+      const yrOtherTot = Number(yr.other?.total) || 0;
+
+      let updatedComponents = yr.components;
+      if (Array.isArray(yr.components) && yr.components.length > 0) {
+        updatedComponents = yr.components.map((c: any) => ({
+          ...c,
+          paid: markPaid ? (Number(c.amount) || 0) : 0
+        }));
+      }
+
       if (markPaid) {
         return {
           ...yr,
-          tuition: { total: yrTuitionTot, paid: yrTuitionTot },
-          exam: { ...yr.exam, paid: yr.exam?.total || 0 },
-          transport: { ...yr.transport, paid: yr.transport?.total || 0 },
-          other: { ...yr.other, paid: yr.other?.total || 0 }
+          components: updatedComponents,
+          yearPaid: Number(yr.yearTotal) || (yrTuitionTot + yrExamTot + yrTransportTot + yrOtherTot),
+          tuition: { ...yr.tuition, total: yrTuitionTot, paid: yrTuitionTot },
+          exam: { ...yr.exam, total: yrExamTot, paid: yrExamTot },
+          transport: { ...yr.transport, total: yrTransportTot, paid: yrTransportTot },
+          other: { ...yr.other, total: yrOtherTot, paid: yrOtherTot }
         };
       } else {
         return {
           ...yr,
-          tuition: { total: yrTuitionTot, paid: 0 },
-          exam: { ...yr.exam, paid: 0 },
-          transport: { ...yr.transport, paid: 0 },
-          other: { ...yr.other, paid: 0 }
+          components: updatedComponents,
+          yearPaid: 0,
+          tuition: { ...yr.tuition, total: yrTuitionTot, paid: 0 },
+          exam: { ...yr.exam, total: yrExamTot, paid: 0 },
+          transport: { ...yr.transport, total: yrTransportTot, paid: 0 },
+          other: { ...yr.other, total: yrOtherTot, paid: 0 }
         };
       }
     });
@@ -374,8 +441,10 @@ export default function StudentManagementDashboard() {
           return {
             ...s,
             fees: {
+              ...s.fees,
               isConfigured: true,
-              years: updatedYears
+              years: updatedYears,
+              totalPaid: markPaid ? targetTotal : 0
             },
             feeStatus: markPaid ? 'paid' : 'unpaid',
             paidFee: markPaid ? targetTotal : 0,
@@ -394,9 +463,14 @@ export default function StudentManagementDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fees: {
+            ...student.fees,
             isConfigured: true,
-            years: updatedYears
-          }
+            years: updatedYears,
+            totalPaid: markPaid ? targetTotal : 0
+          },
+          paidFee: markPaid ? targetTotal : 0,
+          feeBalance: markPaid ? 0 : targetTotal,
+          feeStatus: markPaid ? 'paid' : 'unpaid'
         })
       });
 
@@ -1286,24 +1360,41 @@ export default function StudentManagementDashboard() {
                           </div>
                         </div>
 
-                        {/* Fee Status Card with 1-Click Update */}
-                        <div className="mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2">
+                        {/* Fee Status Card with 1-Click Update & Real-time Progress */}
+                        <div className="mb-4 bg-slate-50/90 p-3.5 rounded-2xl border border-slate-200/80 space-y-2 shadow-2xs">
                           <div className="flex justify-between items-center text-xs">
-                            <span className="text-[10px] font-black uppercase text-slate-400">Total Fee:</span>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total Fee:</span>
                             <span className="font-black text-slate-900">₹{feeInfo.total.toLocaleString('en-IN')}</span>
                           </div>
                           <div className="flex justify-between items-center text-xs">
-                            <span className="text-[10px] font-black uppercase text-slate-400">Paid Amount:</span>
-                            <span className="font-black text-emerald-600">₹{feeInfo.paid.toLocaleString('en-IN')}</span>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Paid Amount:</span>
+                            <span className={`font-black ${feeInfo.paid > 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
+                              ₹{feeInfo.paid.toLocaleString('en-IN')}
+                            </span>
                           </div>
-                          <div className="flex justify-between items-center pt-1 border-t border-slate-200 text-xs">
-                            <span className="text-[10px] font-black uppercase text-slate-400">Status:</span>
+
+                          {/* Visual Payment Progress Bar */}
+                          <div className="w-full bg-slate-200/70 h-1.5 rounded-full overflow-hidden my-1">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                isPaid ? 'bg-emerald-500' : feeInfo.paid > 0 ? 'bg-amber-500' : 'bg-slate-300'
+                              }`} 
+                              style={{ width: `${feeInfo.percentage}%` }} 
+                            />
+                          </div>
+
+                          <div className="flex justify-between items-center pt-1.5 border-t border-slate-200/70 text-xs">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Status:</span>
                             {isPaid ? (
-                              <span className="text-[10px] font-black text-emerald-600 flex items-center gap-1">
-                                <CheckCircle2 className="w-3 h-3" /> Cleared
+                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-lg inline-flex items-center gap-1 shadow-2xs">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Cleared (100%)
+                              </span>
+                            ) : feeInfo.status === "partial" ? (
+                              <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-black rounded-lg inline-flex items-center gap-1 shadow-2xs">
+                                Due: ₹{feeInfo.balance.toLocaleString('en-IN')} ({feeInfo.percentage}% Paid)
                               </span>
                             ) : (
-                              <span className="text-[10px] font-black text-amber-600">
+                              <span className="px-2 py-0.5 bg-rose-50 text-rose-700 text-[10px] font-black rounded-lg shadow-2xs">
                                 Due: ₹{feeInfo.balance.toLocaleString('en-IN')}
                               </span>
                             )}

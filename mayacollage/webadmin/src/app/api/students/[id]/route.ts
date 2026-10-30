@@ -145,10 +145,28 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           paidFee += yrPaid;
         });
       }
+
+      // Reconcile paidFee with actual ledger transactions so recorded receipts are never lost
+      const txnCheck = await pgQuery(
+        `SELECT COALESCE(SUM(amount), 0) as total_txns_paid FROM fee_transactions WHERE student_id = $1`,
+        [id]
+      );
+      const ledgerPaid = Number(txnCheck.rows[0]?.total_txns_paid) || 0;
+      if (ledgerPaid > paidFee) {
+        paidFee = ledgerPaid;
+      }
+
+      fees.isConfigured = true;
+      fees.grandTotal = totalFee;
+      fees.totalPaid = paidFee;
     }
 
     const feeBalance = Math.max(0, totalFee - paidFee);
     const feeStatus = totalFee > 0 ? (paidFee >= totalFee ? 'paid' : paidFee > 0 ? 'partial' : 'unpaid') : 'unpaid';
+    if (fees) {
+      fees.feeBalance = feeBalance;
+      fees.feeStatus = feeStatus;
+    }
 
     // 2. Update PostgreSQL
     const updateSQL = `
@@ -268,11 +286,22 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const cacheKey = `student:${id}`;
     await Promise.all([
       setCache(cacheKey, updatedStudent, DEFAULT_CACHE_TTL),
+      delCache(`student:${id}`),
+      delCache(`student:${current.id}`),
+      delCache(`student:${current.student_id}`),
+      delCache(`student:${current.admission_number}`),
       delCachePattern("students:*"),
       delCache(`fee:student-account:${id}`),
+      delCache(`fee:student-account:${current.id}`),
+      delCache(`fee:student-account:${current.student_id}`),
+      delCache(`fee:student-account:${current.admission_number}`),
       delCache("finance:all-data"),
       delCachePattern("fee:student-accounts:*"),
-      delCachePattern("fee:alerts:*")
+      delCachePattern("fee:student-account:*"),
+      delCachePattern("fee:transactions:*"),
+      delCachePattern("fee:alerts:*"),
+      delCachePattern("fee:bundle:*"),
+      delCachePattern("fee:stats:*")
     ]);
 
     return NextResponse.json(updatedStudent);

@@ -48,53 +48,53 @@ export async function GET(request: Request) {
     let paramIndex = 1;
 
     if (selectedProgram) {
-      whereClauses.push(`selected_program = $${paramIndex++}`);
+      whereClauses.push(`s.selected_program = $${paramIndex++}`);
       values.push(selectedProgram);
     }
 
     if (selectedBranch) {
-      whereClauses.push(`selected_branch = $${paramIndex++}`);
+      whereClauses.push(`s.selected_branch = $${paramIndex++}`);
       values.push(selectedBranch);
     }
 
     if (batch) {
-      whereClauses.push(`batch = $${paramIndex++}`);
+      whereClauses.push(`s.batch = $${paramIndex++}`);
       values.push(batch);
     }
 
     if (sessionYear) {
-      whereClauses.push(`(session_year ILIKE $${paramIndex} OR batch = $${paramIndex})`);
+      whereClauses.push(`(s.session_year ILIKE $${paramIndex} OR s.batch = $${paramIndex})`);
       paramIndex++;
       values.push(`%${sessionYear}%`);
     }
 
     if (courseYear) {
-      whereClauses.push(`course_year = $${paramIndex++}`);
+      whereClauses.push(`s.course_year = $${paramIndex++}`);
       values.push(Number(courseYear));
     }
 
     if (selectedSemester) {
-      whereClauses.push(`selected_semester = $${paramIndex++}`);
+      whereClauses.push(`s.selected_semester = $${paramIndex++}`);
       values.push(Number(selectedSemester));
     }
 
     if (selectedSection) {
-      whereClauses.push(`selected_section = $${paramIndex++}`);
+      whereClauses.push(`s.selected_section = $${paramIndex++}`);
       values.push(selectedSection);
     }
 
     if (feeStatus && feeStatus !== 'all') {
-      whereClauses.push(`fee_status = $${paramIndex++}`);
+      whereClauses.push(`s.fee_status = $${paramIndex++}`);
       values.push(feeStatus);
     }
 
     if (search) {
       whereClauses.push(`(
-        first_name ILIKE $${paramIndex} OR
-        last_name ILIKE $${paramIndex} OR
-        student_id ILIKE $${paramIndex} OR
-        admission_number ILIKE $${paramIndex} OR
-        email ILIKE $${paramIndex}
+        s.first_name ILIKE $${paramIndex} OR
+        s.last_name ILIKE $${paramIndex} OR
+        s.student_id ILIKE $${paramIndex} OR
+        s.admission_number ILIKE $${paramIndex} OR
+        s.email ILIKE $${paramIndex}
       )`);
       paramIndex++;
       values.push(`%${search.trim()}%`);
@@ -103,7 +103,7 @@ export async function GET(request: Request) {
     const whereSQL = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
     if (countOnly) {
-      const countRes = await pgQuery(`SELECT COUNT(*) FROM students ${whereSQL}`, values);
+      const countRes = await pgQuery(`SELECT COUNT(*) FROM students s ${whereSQL}`, values);
       const count = Number(countRes.rows[0]?.count) || 0;
       return NextResponse.json({ count });
     }
@@ -129,16 +129,30 @@ export async function GET(request: Request) {
 
     const sql = `
       SELECT 
-        id, enrollment_number, admission_number, student_id, first_name, middle_name, last_name,
-        dob, gender, email, mobile, parent_mobile, alternate_mobile, address, city, state, pin_code,
-        aadhar_number, religion, entry_type, selected_branch, branch_name, selected_program, course_name,
-        course_duration, selected_semester, selected_section, session_year, admission_year, batch, course_year,
-        fees, total_fee, paid_fee, fee_balance, fee_status, tuition_fee, tuition_paid, exam_fee, exam_paid,
-        transport_fee, transport_paid, other_fee, other_paid, documents, status, student_status, created_at, updated_at,
-        father_name, mother_name, caste_category, pan_number, grn_number, admission_form_date, enrollment_date, caste_certificate_number
-      FROM students
+        s.id, s.enrollment_number, s.admission_number, s.student_id, s.first_name, s.middle_name, s.last_name,
+        s.dob, s.gender, s.email, s.mobile, s.parent_mobile, s.alternate_mobile, s.address, s.city, s.state, s.pin_code,
+        s.aadhar_number, s.religion, s.entry_type, s.selected_branch, s.branch_name, s.selected_program, s.course_name,
+        s.course_duration, s.selected_semester, s.selected_section, s.session_year, s.admission_year, s.batch, s.course_year,
+        s.fees, s.total_fee,
+        GREATEST(COALESCE(s.paid_fee, 0), COALESCE(tx.txn_paid, 0)) as paid_fee,
+        GREATEST(0, COALESCE(s.total_fee, 0) - GREATEST(COALESCE(s.paid_fee, 0), COALESCE(tx.txn_paid, 0))) as fee_balance,
+        CASE 
+          WHEN COALESCE(s.total_fee, 0) > 0 AND GREATEST(COALESCE(s.paid_fee, 0), COALESCE(tx.txn_paid, 0)) >= COALESCE(s.total_fee, 0) THEN 'paid'
+          WHEN GREATEST(COALESCE(s.paid_fee, 0), COALESCE(tx.txn_paid, 0)) > 0 THEN 'partial'
+          ELSE 'unpaid'
+        END as fee_status,
+        s.tuition_fee, s.tuition_paid, s.exam_fee, s.exam_paid,
+        s.transport_fee, s.transport_paid, s.other_fee, s.other_paid, s.documents, s.status, s.student_status, s.created_at, s.updated_at,
+        s.father_name, s.mother_name, s.caste_category, s.pan_number, s.grn_number, s.admission_form_date, s.enrollment_date, s.caste_certificate_number
+      FROM students s
+      LEFT JOIN (
+        SELECT student_id, SUM(amount) as txn_paid
+        FROM fee_transactions
+        WHERE status = 'Completed'
+        GROUP BY student_id
+      ) tx ON s.id = tx.student_id
       ${whereSQL}
-      ORDER BY created_at DESC
+      ORDER BY s.created_at DESC
     `;
 
     const res = await pgQuery(sql, values);

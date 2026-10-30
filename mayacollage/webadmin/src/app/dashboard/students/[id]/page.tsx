@@ -326,7 +326,7 @@ export default function StudentDetailScreen() {
       const [branchesData, coursesData, student, txnsData, busesData, categoriesData, statementData] = await Promise.all([
         fetch("/api/branches").then(res => res.json()).catch(() => []),
         fetch("/api/courses").then(res => res.json()).catch(() => []),
-        fetch(`/api/students/${studentId}`).then(res => res.json()).catch(() => null),
+        fetch(`/api/students/${studentId}?t=${Date.now()}&refresh=true`).then(res => res.json()).catch(() => null),
         fetch(`/api/finance/transactions?studentId=${studentId}&t=${Date.now()}`).then(res => res.json()).catch(() => []),
         fetch("/api/transport/buses").then(res => res.json()).catch(() => []),
         fetch("/api/finance/categories").then(res => res.json()).catch(() => []),
@@ -798,10 +798,24 @@ export default function StudentDetailScreen() {
     const years = studentStatementData?.years || studentStatementData?.ledger?.years || studentData?.fees?.years || [];
     const summary = studentStatementData?.summary || studentStatementData?.ledger || {};
 
-    const gross = summary.totalGross || summary.totalAssessed || years.reduce((s: number, y: any) => s + (y.yearGross || y.yearTotal || 0), 0);
+    const gross = summary.totalGross || summary.totalAssessed || years.reduce((s: number, y: any) => {
+      if (y.yearGross) return s + Number(y.yearGross);
+      if (y.yearTotal) return s + Number(y.yearTotal);
+      if (Array.isArray(y.components)) {
+        return s + y.components.reduce((cAcc: number, c: any) => cAcc + (Number(c.amount ?? c.total) || 0), 0);
+      }
+      return s;
+    }, 0) || Number(studentData?.totalFee) || 0;
+
     const discount = summary.totalDiscount || years.reduce((s: number, y: any) => s + (Number(y.discount) || 0), 0);
     const total = summary.totalAssessed || Math.max(0, gross - discount);
-    const paid = summary.totalPaid || years.reduce((s: number, y: any) => s + (Number(y.yearPaid) || 0), 0);
+    const paid = summary.totalPaid || years.reduce((s: number, y: any) => {
+      if (y.yearPaid !== undefined) return s + Number(y.yearPaid);
+      if (Array.isArray(y.components)) {
+        return s + y.components.reduce((cAcc: number, c: any) => cAcc + (Number(c.paid) || 0), 0);
+      }
+      return s;
+    }, 0) || Number(studentData?.paidFee) || 0;
     const balance = summary.totalOutstanding ?? summary.outstandingAmount ?? Math.max(0, total - paid);
 
     const isConfigured = Boolean(years && years.length > 0) || Boolean(studentData?.fees?.isConfigured) || (total > 0);
@@ -854,7 +868,9 @@ export default function StudentDetailScreen() {
     if (years && years.length > 0) {
       const clonedYears = years.map((y: any, idx: number) => {
         let components = y.components || [];
-        if (components.length === 0 && selectedCourse?.feeStructureTemplate?.[idx]?.components) {
+        if (components.length === 0 && studentData?.fees?.years?.[idx]?.components?.length > 0) {
+          components = studentData.fees.years[idx].components;
+        } else if (components.length === 0 && selectedCourse?.feeStructureTemplate?.[idx]?.components) {
           components = selectedCourse.feeStructureTemplate[idx].components;
         } else if (components.length === 0 && y.categories) {
            components = Object.entries(y.categories).map(([k, c]: any) => ({
@@ -869,9 +885,9 @@ export default function StudentDetailScreen() {
           discount: Number(y.discount) || 0,
           discountReason: y.discountReason || '',
           components: components.map((c: any) => ({
-             category: c.category || '',
-             amount: c.amount || 0,
-             paid: c.paid || 0,
+             category: c.category || c.title || c.name || 'Fee Component',
+             amount: Number(c.amount ?? c.total) || 0,
+             paid: Number(c.paid) || 0,
              frequency: c.frequency || 'Annual'
           }))
         };
@@ -883,8 +899,8 @@ export default function StudentDetailScreen() {
         discount: 0,
         discountReason: '',
         components: (yt.components || []).map((c: any) => ({
-          category: c.category || 'Tuition Fee',
-          amount: Number(c.amount) || 0,
+          category: c.category || c.title || c.name || 'Tuition Fee',
+          amount: Number(c.amount ?? c.total) || 0,
           paid: 0,
           frequency: c.frequency || 'Annual'
         }))
@@ -1056,7 +1072,7 @@ export default function StudentDetailScreen() {
     const updated = [...editFeeYears];
     const yearObj = { ...updated[yearIndex] };
     const comps = [...(yearObj.components || [])];
-    comps.push({ category: 'Custom Charge', amount: 0, paid: 0, frequency: 'Annual' });
+    comps.push({ category: 'Extra Charge', amount: 0, paid: 0, frequency: 'Annual' });
     yearObj.components = comps;
     updated[yearIndex] = yearObj;
     setEditFeeYears(updated);
@@ -1128,20 +1144,61 @@ export default function StudentDetailScreen() {
   const handleSaveStudentFeeStructure = async () => {
     setIsSavingFeeEdit(true);
     try {
+      let totalGross = 0;
+      let totalDiscount = 0;
+      let totalAssessed = 0;
+      let totalPaid = 0;
+
+      const structuredYears = editFeeYears.map(yr => {
+        let yrGross = 0;
+        let yrPaid = 0;
+        const validComps = (yr.components || []).map((c: any) => {
+          const amt = Number(c.amount ?? c.total) || 0;
+          const pd = Number(c.paid) || 0;
+          yrGross += amt;
+          yrPaid += pd;
+          const compCat = (c.category || c.title || c.name || 'Fee Component').trim();
+          return {
+            category: compCat,
+            title: compCat,
+            amount: amt,
+            paid: pd,
+            due: Math.max(0, amt - pd),
+            frequency: c.frequency || 'Annual'
+          };
+        });
+
+        const yrDiscount = Number(yr.discount) || 0;
+        const yrNet = Math.max(0, yrGross - yrDiscount);
+        const yrOS = Math.max(0, yrNet - yrPaid);
+
+        totalGross += yrGross;
+        totalDiscount += yrDiscount;
+        totalAssessed += yrNet;
+        totalPaid += yrPaid;
+
+        return {
+          year: yr.year,
+          discount: yrDiscount,
+          discountReason: yr.discountReason || '',
+          yearGross: yrGross,
+          yearTotal: yrNet,
+          yearNet: yrNet,
+          yearPaid: yrPaid,
+          yearOS: yrOS,
+          components: validComps
+        };
+      });
+
       const payload = {
         fees: {
           isConfigured: true,
-          years: editFeeYears.map(yr => ({
-            year: yr.year,
-            discount: Number(yr.discount) || 0,
-            discountReason: yr.discountReason || '',
-            components: (yr.components || []).map((c: any) => ({
-              category: c.category || '',
-              amount: Number(c.amount) || 0,
-              paid: Number(c.paid) || 0,
-              frequency: c.frequency || 'Annual'
-            }))
-          }))
+          grandTotal: totalAssessed,
+          totalGross,
+          totalDiscount,
+          totalPaid,
+          totalDue: Math.max(0, totalAssessed - totalPaid),
+          years: structuredYears
         }
       };
 
@@ -1155,7 +1212,24 @@ export default function StudentDetailScreen() {
       if (res.ok && !updatedStudent.error) {
         setStudentData(updatedStudent);
         syncStudentDetailToStorage(updatedStudent);
-        showToast("Fee structure and discounts saved to database!");
+
+        // Optimistically update studentStatementData so hero numbers and cards update instantly
+        const optDue = Math.max(0, totalAssessed - Math.max(totalPaid, Number(updatedStudent.paidFee) || 0));
+        setStudentStatementData((prev: any) => ({
+          ...prev,
+          summary: {
+            ...(prev?.summary || {}),
+            totalGross,
+            totalDiscount,
+            totalAssessed,
+            totalPaid: Math.max(totalPaid, Number(updatedStudent.paidFee) || 0),
+            totalOutstanding: optDue,
+            status: optDue === 0 && totalAssessed > 0 ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Unpaid')
+          },
+          years: structuredYears
+        }));
+
+        showToast("Fee structure and extra charges saved to database!");
         setIsEditFeeModalOpen(false);
         fetchStudentData(true);
       } else {
@@ -3607,9 +3681,10 @@ export default function StudentDetailScreen() {
                             <div className="flex justify-between items-center">
                               <input 
                                 type="text"
-                                value={comp.category || ""}
+                                value={comp.category ?? comp.title ?? ""}
+                                placeholder="Charge Name (e.g. Exam Fee)"
                                 onChange={e => handleEditFeeChange(yIdx, cIdx, "category", e.target.value)}
-                                className="text-xs font-bold text-slate-800 bg-transparent border-none outline-none focus:ring-0 p-0 hover:bg-slate-100 rounded px-1 -ml-1 transition-colors w-[60%]"
+                                className="text-xs font-bold text-slate-800 bg-slate-50 border border-slate-200 focus:border-indigo-400 outline-none rounded-lg px-2 py-1 transition-colors w-[65%]"
                               />
                               <div className="flex items-center gap-2">
                                 <button 
