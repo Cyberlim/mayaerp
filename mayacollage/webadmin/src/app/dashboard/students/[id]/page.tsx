@@ -217,12 +217,19 @@ export default function StudentDetailScreen() {
   const searchParams = useSearchParams();
   const studentId = params.id as string;
   const fromSource = searchParams ? searchParams.get("from") : null;
+  const returnUrl = searchParams ? searchParams.get("returnUrl") : null;
 
   const handleBack = () => {
-    if (fromSource === "finance") {
-      router.push("/dashboard/finance");
-    } else if (typeof window !== "undefined" && window.history.length > 1) {
+    if (returnUrl) {
+      try {
+        router.push(decodeURIComponent(returnUrl));
+        return;
+      } catch (_) {}
+    }
+    if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();
+    } else if (fromSource === "finance") {
+      router.push("/dashboard/finance");
     } else {
       router.push("/dashboard/students");
     }

@@ -47,6 +47,26 @@ import {
 import ReceiptModal from "@/components/ReceiptModal";
 
 const LOCAL_CACHE_KEY = "mayacollage_finance_master_cache";
+const FINANCE_FILTERS_KEY = "mayacollage_finance_filters_state";
+
+function getInitialFinanceFilter(paramKey: string, storageKey: string, fallback: any) {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has(paramKey)) {
+      const val = params.get(paramKey);
+      if (val !== null && val !== "") return val;
+    }
+    const raw = sessionStorage.getItem(FINANCE_FILTERS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed[storageKey] !== undefined && parsed[storageKey] !== null) {
+        return parsed[storageKey];
+      }
+    }
+  } catch (_) {}
+  return fallback;
+}
 
 const AVATAR_COLORS = [
   "bg-amber-100 text-amber-800",
@@ -234,7 +254,7 @@ export default function FinanceDashboard() {
 
   const [activeTab, setActiveTab] = useState<
     "student_accounts" | "fee_records" | "categories" | "receipts" | "alerts" | "branch_course" | "payouts"
-  >("student_accounts");
+  >(() => getInitialFinanceFilter("tab", "activeTab", "student_accounts"));
 
   const [stats, setStats] = useState({ totalCollected: 0, totalReceivable: 0, activeStudentCount: 0 });
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -247,14 +267,19 @@ export default function FinanceDashboard() {
     defaulters: []
   });
 
-  // Student Accounts Search, Infinite Scroll & Filters
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCourse, setSelectedCourse] = useState("all");
-  const [selectedYear, setSelectedYear] = useState("all");
-  const [selectedSemester, setSelectedSemester] = useState("all");
-  const [osFilter, setOsFilter] = useState<"all" | "os_due" | "cleared">("all");
-  const [visibleCount, setVisibleCount] = useState(20);
+  // Student Accounts Search, Infinite Scroll & Filters (Preserved across profile navigation)
+  const [searchQuery, setSearchQuery] = useState(() => getInitialFinanceFilter("q", "searchQuery", ""));
+  const [selectedCourse, setSelectedCourse] = useState(() => getInitialFinanceFilter("course", "selectedCourse", "all"));
+  const [selectedYear, setSelectedYear] = useState(() => getInitialFinanceFilter("year", "selectedYear", "all"));
+  const [selectedSemester, setSelectedSemester] = useState(() => getInitialFinanceFilter("sem", "selectedSemester", "all"));
+  const [osFilter, setOsFilter] = useState<"all" | "os_due" | "cleared">(() => getInitialFinanceFilter("os", "osFilter", "all"));
+  const [visibleCount, setVisibleCount] = useState<number>(() => {
+    const count = Number(getInitialFinanceFilter("count", "visibleCount", 20));
+    return count > 20 ? count : 20;
+  });
   const scrollSentinelRef = useRef<HTMLDivElement | null>(null);
+  const isHydratedFiltersRef = useRef(false);
+  const pendingScrollYRef = useRef<number | null>(null);
 
   const [students, setStudents] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
@@ -477,11 +502,151 @@ export default function FinanceDashboard() {
       } catch (err) {
         console.warn("Local storage cache read error:", err);
       }
+
+      // 1b. Restore saved active filters & scroll position (e.g. returning from Student profile)
+      try {
+        const savedFiltersRaw = sessionStorage.getItem(FINANCE_FILTERS_KEY);
+        if (savedFiltersRaw) {
+          const saved = JSON.parse(savedFiltersRaw);
+          if (saved.activeTab) setActiveTab(saved.activeTab);
+          if (saved.searchQuery !== undefined) setSearchQuery(saved.searchQuery);
+          if (saved.selectedCourse !== undefined) setSelectedCourse(saved.selectedCourse);
+          if (saved.selectedYear !== undefined) setSelectedYear(saved.selectedYear);
+          if (saved.selectedSemester !== undefined) setSelectedSemester(saved.selectedSemester);
+          if (saved.osFilter !== undefined) setOsFilter(saved.osFilter);
+          if (saved.visibleCount && Number(saved.visibleCount) > 20) setVisibleCount(Number(saved.visibleCount));
+          if (saved.recordSemesterFilter !== undefined) setRecordSemesterFilter(saved.recordSemesterFilter);
+          if (saved.recordYearFilter !== undefined) setRecordYearFilter(saved.recordYearFilter);
+          if (saved.recordCategoryFilter !== undefined) setRecordCategoryFilter(saved.recordCategoryFilter);
+          if (saved.recordSearch !== undefined) setRecordSearch(saved.recordSearch);
+          if (saved.receiptFilterType !== undefined) setReceiptFilterType(saved.receiptFilterType);
+          if (saved.receiptSearchQuery !== undefined) setReceiptSearchQuery(saved.receiptSearchQuery);
+
+          if (saved.scrollY && Number(saved.scrollY) > 0) {
+            pendingScrollYRef.current = Number(saved.scrollY);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to restore finance filters:", err);
+      } finally {
+        isHydratedFiltersRef.current = true;
+      }
     }
 
     // 2. Fetch fresh from PostgreSQL & Redis backend
     fetchData(true);
   }, []);
+
+  // Restore scroll position once student rows have rendered
+  useEffect(() => {
+    if (pendingScrollYRef.current !== null && students.length > 0) {
+      const targetY = pendingScrollYRef.current;
+      const t1 = setTimeout(() => {
+        window.scrollTo({ top: targetY, behavior: "instant" as ScrollBehavior });
+      }, 50);
+      const t2 = setTimeout(() => {
+        if (pendingScrollYRef.current !== null) {
+          window.scrollTo({ top: targetY, behavior: "instant" as ScrollBehavior });
+          pendingScrollYRef.current = null;
+        }
+      }, 250);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
+    }
+  }, [students.length, visibleCount]);
+
+  // Sync active filters to sessionStorage & browser URL on every change
+  useEffect(() => {
+    if (typeof window === "undefined" || !isHydratedFiltersRef.current) return;
+    try {
+      const currentScroll = window.scrollY || window.pageYOffset || 0;
+      const stateToSave = {
+        activeTab,
+        searchQuery,
+        selectedCourse,
+        selectedYear,
+        selectedSemester,
+        osFilter,
+        visibleCount,
+        recordSemesterFilter,
+        recordYearFilter,
+        recordCategoryFilter,
+        recordSearch,
+        receiptFilterType,
+        receiptSearchQuery,
+        scrollY: currentScroll > 0 ? currentScroll : (pendingScrollYRef.current || 0)
+      };
+      sessionStorage.setItem(FINANCE_FILTERS_KEY, JSON.stringify(stateToSave));
+
+      // Synchronize with URL search parameters so browser Back/Forward retain filters
+      const params = new URLSearchParams();
+      if (activeTab && activeTab !== "student_accounts") params.set("tab", activeTab);
+      if (searchQuery) params.set("q", searchQuery);
+      if (selectedCourse && selectedCourse !== "all") params.set("course", selectedCourse);
+      if (selectedYear && selectedYear !== "all") params.set("year", selectedYear);
+      if (selectedSemester && selectedSemester !== "all") params.set("sem", selectedSemester);
+      if (osFilter && osFilter !== "all") params.set("os", osFilter);
+
+      const qs = params.toString();
+      const newUrl = `${window.location.pathname}${qs ? `?${qs}` : ""}`;
+      window.history.replaceState(null, "", newUrl);
+    } catch (_) {}
+  }, [
+    activeTab, 
+    searchQuery, 
+    selectedCourse, 
+    selectedYear, 
+    selectedSemester, 
+    osFilter, 
+    visibleCount,
+    recordSemesterFilter,
+    recordYearFilter,
+    recordCategoryFilter,
+    recordSearch,
+    receiptFilterType,
+    receiptSearchQuery
+  ]);
+
+  const handleNavigateToStudentProfile = (s: any) => {
+    const currentScroll = window.scrollY || window.pageYOffset || 0;
+    const filterState = {
+      activeTab,
+      searchQuery,
+      selectedCourse,
+      selectedYear,
+      selectedSemester,
+      osFilter,
+      visibleCount,
+      recordSemesterFilter,
+      recordYearFilter,
+      recordCategoryFilter,
+      recordSearch,
+      receiptFilterType,
+      receiptSearchQuery,
+      scrollY: currentScroll
+    };
+    try {
+      sessionStorage.setItem(FINANCE_FILTERS_KEY, JSON.stringify(filterState));
+    } catch (_) {}
+
+    const returnUrl = encodeURIComponent(`${window.location.pathname}${window.location.search}`);
+    router.push(`/dashboard/students/${s._id || s.id}?from=finance&returnUrl=${returnUrl}`);
+  };
+
+  const handleResetFinanceFilters = () => {
+    setSelectedCourse("all");
+    setSelectedYear("all");
+    setSelectedSemester("all");
+    setOsFilter("all");
+    setSearchQuery("");
+    setVisibleCount(20);
+    try {
+      sessionStorage.removeItem(FINANCE_FILTERS_KEY);
+      window.history.replaceState(null, "", window.location.pathname);
+    } catch (_) {}
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -641,8 +806,9 @@ export default function FinanceDashboard() {
     });
   }, [students, searchQuery, selectedCourse, selectedYear, selectedSemester, osFilter, courses, transactions]);
 
-  // Reset visible count when filter changes
+  // Reset visible count when filter changes (only after initial hydration)
   useEffect(() => {
+    if (!isHydratedFiltersRef.current) return;
     setVisibleCount(20);
   }, [searchQuery, selectedCourse, selectedYear, selectedSemester, osFilter]);
 
@@ -1824,6 +1990,11 @@ export default function FinanceDashboard() {
                         className="appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 focus:outline-none cursor-pointer shadow-xs hover:border-slate-300 transition-colors"
                       >
                         <option value="all">All courses</option>
+                        {selectedCourse !== "all" && !courses.some(c => (c._id || c.id) === selectedCourse) && (
+                          <option value={selectedCourse} hidden>
+                            {courses.find(c => (c._id || c.id) === selectedCourse)?.name || "Selected Course"}
+                          </option>
+                        )}
                         {courses.map(c => (
                           <option key={c._id || c.id} value={c._id || c.id}>{c.name}</option>
                         ))}
@@ -1840,6 +2011,11 @@ export default function FinanceDashboard() {
                         className="appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 focus:outline-none cursor-pointer shadow-xs hover:border-slate-300 transition-colors"
                       >
                         <option value="all">All years</option>
+                        {selectedYear !== "all" && !uniqueStartYears.includes(selectedYear) && !["year-1", "year-2", "year-3", "year-4"].includes(selectedYear) && (
+                          <option value={selectedYear} hidden>
+                            Batch {selectedYear}
+                          </option>
+                        )}
                         {uniqueStartYears.length > 0 && (
                           <optgroup label="Academic / Batch Year">
                             {uniqueStartYears.map((yr: string) => (
@@ -1877,13 +2053,7 @@ export default function FinanceDashboard() {
                     {/* Clear / Reset Filter Button */}
                     {(selectedCourse !== "all" || selectedYear !== "all" || selectedSemester !== "all" || osFilter !== "all" || searchQuery) && (
                       <button
-                        onClick={() => {
-                          setSelectedCourse("all");
-                          setSelectedYear("all");
-                          setSelectedSemester("all");
-                          setOsFilter("all");
-                          setSearchQuery("");
-                        }}
+                        onClick={handleResetFinanceFilters}
                         className="px-2.5 py-2 text-xs font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer flex items-center gap-1 border border-dashed border-slate-200"
                         title="Reset all filters"
                       >
@@ -1954,12 +2124,15 @@ export default function FinanceDashboard() {
                               className="grid grid-cols-12 gap-4 px-5 py-4 items-center hover:bg-slate-50/60 transition-colors"
                             >
                               {/* Column 1: Student Details */}
-                              <div className="col-span-12 sm:col-span-4 lg:col-span-3 flex items-center gap-3">
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0 uppercase ${avatarColor}`}>
+                              <div 
+                                onClick={() => handleNavigateToStudentProfile(s)}
+                                className="col-span-12 sm:col-span-4 lg:col-span-3 flex items-center gap-3 cursor-pointer group"
+                              >
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0 uppercase ${avatarColor} group-hover:scale-105 transition-transform shadow-2xs`}>
                                   {fullName[0] || "S"}
                                 </div>
                                 <div className="min-w-0">
-                                  <h4 className="font-black text-slate-900 text-xs uppercase tracking-tight truncate">
+                                  <h4 className="font-black text-slate-900 group-hover:text-blue-600 transition-colors text-xs uppercase tracking-tight truncate">
                                     {fullName}
                                   </h4>
                                   {fatherName && (
@@ -2037,7 +2210,7 @@ export default function FinanceDashboard() {
                                 </button>
 
                                 <button
-                                  onClick={() => router.push(`/dashboard/students/${s._id || s.id}?from=finance`)}
+                                  onClick={() => handleNavigateToStudentProfile(s)}
                                   className="inline-flex items-center gap-1 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs"
                                 >
                                   <User className="w-3.5 h-3.5 text-slate-500" />

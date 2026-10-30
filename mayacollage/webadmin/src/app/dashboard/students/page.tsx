@@ -42,6 +42,27 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+const STUDENTS_FILTERS_KEY = "mayacollage_students_filters_state";
+
+function getInitialStudentFilter(paramKey: string, storageKey: string, fallback: any) {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has(paramKey)) {
+      const val = params.get(paramKey);
+      if (val !== null && val !== "") return val;
+    }
+    const raw = sessionStorage.getItem(STUDENTS_FILTERS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed[storageKey] !== undefined && parsed[storageKey] !== null) {
+        return parsed[storageKey];
+      }
+    }
+  } catch (_) {}
+  return fallback;
+}
+
 export default function StudentManagementDashboard() {
   const [students, setStudents] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
@@ -50,19 +71,24 @@ export default function StudentManagementDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [cacheSource, setCacheSource] = useState<string>("Upstash Redis (sub-10ms)");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedFilter, setSelectedFilter] = useState("All");
-  const [filterBranch, setFilterBranch] = useState("All");
-  const [filterCourse, setFilterCourse] = useState("All");
-  const [filterYear, setFilterYear] = useState("All");
-  const [filterSemester, setFilterSemester] = useState("All");
-  const [filterSection, setFilterSection] = useState("All");
-  const [filterFeeStatus, setFilterFeeStatus] = useState("All");
+  const [searchQuery, setSearchQuery] = useState(() => getInitialStudentFilter("q", "searchQuery", ""));
+  const [selectedFilter, setSelectedFilter] = useState(() => getInitialStudentFilter("status", "selectedFilter", "All"));
+  const [filterBranch, setFilterBranch] = useState(() => getInitialStudentFilter("branch", "filterBranch", "All"));
+  const [filterCourse, setFilterCourse] = useState(() => getInitialStudentFilter("course", "filterCourse", "All"));
+  const [filterYear, setFilterYear] = useState(() => getInitialStudentFilter("year", "filterYear", "All"));
+  const [filterSemester, setFilterSemester] = useState(() => getInitialStudentFilter("sem", "filterSemester", "All"));
+  const [filterSection, setFilterSection] = useState(() => getInitialStudentFilter("sec", "filterSection", "All"));
+  const [filterFeeStatus, setFilterFeeStatus] = useState(() => getInitialStudentFilter("fee", "filterFeeStatus", "All"));
   const [toastMsg, setToastMsg] = useState("");
 
   // Progressive Lazy Loading State
-  const [visibleCount, setVisibleCount] = useState<number>(24);
+  const [visibleCount, setVisibleCount] = useState<number>(() => {
+    const count = Number(getInitialStudentFilter("count", "visibleCount", 24));
+    return count > 24 ? count : 24;
+  });
   const observerTarget = useRef<HTMLDivElement>(null);
+  const pendingScrollYRef = useRef<number | null>(null);
+  const isHydratedFiltersRef = useRef(false);
 
   // View Mode: Default to Cards View
   const [viewMode, setViewMode] = useState<"list" | "cards" | "branch_course">("cards");
@@ -180,16 +206,92 @@ export default function StudentManagementDashboard() {
       }
       if (cachedBranches) setBranches(JSON.parse(cachedBranches));
       if (cachedCourses) setCourses(JSON.parse(cachedCourses));
-    } catch (_) { }
+
+      // Check saved scroll position from sessionStorage
+      const rawFilters = sessionStorage.getItem(STUDENTS_FILTERS_KEY);
+      if (rawFilters) {
+        const parsedF = JSON.parse(rawFilters);
+        if (parsedF && parsedF.scrollY && Number(parsedF.scrollY) > 0) {
+          pendingScrollYRef.current = Number(parsedF.scrollY);
+        }
+      }
+    } catch (_) { } finally {
+      isHydratedFiltersRef.current = true;
+    }
 
     // 2. Background revalidation from server silently
     fetchData();
   }, []);
 
-  // Reset lazy load pagination on filter or view mode change
+  // Restore scroll position once student rows have rendered
   useEffect(() => {
+    if (pendingScrollYRef.current !== null && students.length > 0) {
+      const targetY = pendingScrollYRef.current;
+      const t = setTimeout(() => {
+        window.scrollTo({ top: targetY, behavior: "instant" as ScrollBehavior });
+        pendingScrollYRef.current = null;
+      }, 100);
+      return () => clearTimeout(t);
+    }
+  }, [students.length, visibleCount]);
+
+  // Sync active filters to sessionStorage & browser URL on every change
+  useEffect(() => {
+    if (typeof window === "undefined" || !isHydratedFiltersRef.current) return;
+    try {
+      const currentScroll = window.scrollY || window.pageYOffset || 0;
+      const stateToSave = {
+        searchQuery,
+        selectedFilter,
+        filterBranch,
+        filterCourse,
+        filterYear,
+        filterSemester,
+        filterSection,
+        filterFeeStatus,
+        viewMode,
+        visibleCount,
+        scrollY: currentScroll > 0 ? currentScroll : (pendingScrollYRef.current || 0)
+      };
+      sessionStorage.setItem(STUDENTS_FILTERS_KEY, JSON.stringify(stateToSave));
+
+      const params = new URLSearchParams();
+      if (searchQuery) params.set("q", searchQuery);
+      if (selectedFilter !== "All") params.set("status", selectedFilter);
+      if (filterBranch !== "All") params.set("branch", filterBranch);
+      if (filterCourse !== "All") params.set("course", filterCourse);
+      if (filterYear !== "All") params.set("year", filterYear);
+      if (filterSemester !== "All") params.set("sem", filterSemester);
+      if (filterSection !== "All") params.set("sec", filterSection);
+      if (filterFeeStatus !== "All") params.set("fee", filterFeeStatus);
+
+      const qs = params.toString();
+      const newUrl = `${window.location.pathname}${qs ? `?${qs}` : ""}`;
+      window.history.replaceState(null, "", newUrl);
+    } catch (_) {}
+  }, [
+    searchQuery,
+    selectedFilter,
+    filterBranch,
+    filterCourse,
+    filterYear,
+    filterSemester,
+    filterSection,
+    filterFeeStatus,
+    viewMode,
+    visibleCount
+  ]);
+
+  // Reset lazy load pagination on user filter change
+  useEffect(() => {
+    if (!isHydratedFiltersRef.current) return;
     setVisibleCount(24);
   }, [searchQuery, selectedFilter, filterBranch, filterCourse, filterYear, filterSemester, filterSection, filterFeeStatus, viewMode]);
+
+  const getStudentProfileUrl = (id: string) => {
+    const returnUrl = typeof window !== "undefined" ? encodeURIComponent(window.location.pathname + window.location.search) : "";
+    return `/dashboard/students/${id}?from=students${returnUrl ? `&returnUrl=${returnUrl}` : ""}`;
+  };
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Are you sure you want to delete student: ${name}?`)) return;
@@ -935,8 +1037,13 @@ export default function StudentManagementDashboard() {
                   setFilterSemester("All");
                   setFilterFeeStatus("All");
                   setSearchQuery("");
+                  setVisibleCount(24);
+                  try {
+                    sessionStorage.removeItem(STUDENTS_FILTERS_KEY);
+                    window.history.replaceState(null, "", window.location.pathname);
+                  } catch (_) {}
                 }}
-                className="text-xs font-bold text-rose-600 hover:underline px-2 py-1"
+                className="text-xs font-bold text-rose-600 hover:underline px-2 py-1 cursor-pointer"
               >
                 Reset Filters
               </button>
@@ -1244,7 +1351,7 @@ export default function StudentManagementDashboard() {
                                                     </button>
                                                   )}
 
-                                                  <Link href={`/dashboard/students/${student._id}`}>
+                                                  <Link href={getStudentProfileUrl(student._id)}>
                                                     <button title="View Detail Profile" className="p-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs">
                                                       <Eye className="w-3 h-3" />
                                                     </button>
@@ -1562,7 +1669,7 @@ export default function StudentManagementDashboard() {
                                     </button>
                                   )}
 
-                                  <Link href={`/dashboard/students/${student._id}`}>
+                                  <Link href={getStudentProfileUrl(student._id)}>
                                     <button title="View Detail Profile" className="p-1.5 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white rounded-lg transition-colors">
                                       <Eye className="w-3.5 h-3.5" />
                                     </button>
@@ -1662,7 +1769,7 @@ export default function StudentManagementDashboard() {
                         </div>
 
                         <div className="pt-2 flex items-center gap-2">
-                          <Link href={`/dashboard/students/${student._id}`} className="flex-1">
+                          <Link href={getStudentProfileUrl(student._id)} className="flex-1">
                             <button className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1">
                               <Eye className="w-3.5 h-3.5" /> View Profile
                             </button>

@@ -100,3 +100,33 @@ export async function PUT(req: Request) {
         return NextResponse.json({ message: "Error updating book", error: error.message }, { status: 500 });
     }
 }
+
+export async function DELETE(req: Request) {
+    try {
+        await connectDB();
+        const { searchParams } = new URL(req.url);
+        const id = searchParams.get("id");
+        const all = searchParams.get("all") === "true";
+
+        if (all) {
+            const count = await Book.countDocuments();
+            await Book.deleteMany({});
+            return NextResponse.json({ message: `Successfully removed all ${count} books from the library`, count }, { status: 200 });
+        }
+
+        if (!id) {
+            return NextResponse.json({ message: "Book ID or ?all=true is required" }, { status: 400 });
+        }
+
+        const deleted = await Book.findByIdAndDelete(id);
+        if (!deleted) {
+            return NextResponse.json({ message: "Book not found" }, { status: 404 });
+        }
+
+        return NextResponse.json({ message: "Book removed successfully", book: deleted }, { status: 200 });
+    } catch (error: any) {
+        console.error("Library DELETE Book Error:", error);
+        return NextResponse.json({ message: "Error deleting book", error: error.message }, { status: 500 });
+    }
+}
+
