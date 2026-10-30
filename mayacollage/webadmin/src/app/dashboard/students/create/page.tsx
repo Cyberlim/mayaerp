@@ -37,7 +37,7 @@ export default function CreateStudentPage() {
 
   useEffect(() => {
     if (formData.selectedProgram && courses.length > 0) {
-      const course = courses.find(c => c._id === formData.selectedProgram);
+      const course = courses.find(c => (c._id || c.id) === formData.selectedProgram || c.name === formData.selectedProgram);
       const duration = course ? course.duration || 4 : 4;
       const newFees = Array.from({length: duration}, (_, i) => ({
         year: i + 1,
@@ -98,8 +98,8 @@ export default function CreateStudentPage() {
   const handleSubmit = async () => {
     setIsSaving(true);
     try {
-      const selectedCourse = courses.find(c => c._id === formData.selectedProgram);
-      const selectedBranchFull = branches.find(b => b._id === formData.selectedBranch);
+      const selectedCourse = courses.find(c => (c._id || c.id) === formData.selectedProgram || c.name === formData.selectedProgram);
+      const selectedBranchFull = branches.find(b => (b._id || b.id) === formData.selectedBranch || b.name === formData.selectedBranch);
 
       const payload = {
         ...formData,
@@ -151,8 +151,8 @@ export default function CreateStudentPage() {
     }
   };
 
-  const selectedCourse = courses.find(c => c._id === formData.selectedProgram);
-  const selectedBranchFull = branches.find(b => b._id === formData.selectedBranch);
+  const selectedCourse = courses.find(c => (c._id || c.id) === formData.selectedProgram || c.name === formData.selectedProgram);
+  const selectedBranchFull = branches.find(b => (b._id || b.id) === formData.selectedBranch || b.name === formData.selectedBranch);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-slate-800">
@@ -254,18 +254,54 @@ export default function CreateStudentPage() {
                 <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm space-y-6">
                   <div>
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Branch</label>
-                    <select value={formData.selectedBranch} onChange={e => setFormData({...formData, selectedBranch: e.target.value})} className="w-full mt-1 bg-slate-50 border border-slate-100 p-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm appearance-none">
+                    <select 
+                      value={formData.selectedBranch} 
+                      onChange={e => {
+                        const newBranch = e.target.value;
+                        const branchCourses = courses.filter(c => {
+                          const bId = c.branchId && typeof c.branchId === 'object' ? (c.branchId._id || c.branchId.id) : (c.branchId || c.branch_id);
+                          return !newBranch || bId === newBranch;
+                        });
+                        let nextProgram = formData.selectedProgram;
+                        if (branchCourses.length > 0 && !branchCourses.some(c => (c.id || c._id) === formData.selectedProgram)) {
+                          nextProgram = branchCourses[0].id || branchCourses[0]._id;
+                        }
+                        setFormData({
+                          ...formData, 
+                          selectedBranch: newBranch,
+                          selectedProgram: nextProgram
+                        });
+                      }} 
+                      className="w-full mt-1 bg-slate-50 border border-slate-100 p-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm appearance-none"
+                    >
                       <option value="">Select Branch...</option>
-                      {branches.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                      {branches.map(b => <option key={b.id || b._id} value={b.id || b._id}>{b.name}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Course / Program</label>
-                    <select value={formData.selectedProgram} onChange={e => setFormData({...formData, selectedProgram: e.target.value})} className="w-full mt-1 bg-slate-50 border border-slate-100 p-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm appearance-none">
+                    <select 
+                      value={formData.selectedProgram} 
+                      onChange={e => {
+                        const newProg = e.target.value;
+                        const course = courses.find(c => (c.id || c._id) === newProg || c.name === newProg);
+                        const bId = course?.branchId && typeof course.branchId === 'object' ? (course.branchId._id || course.branchId.id) : (course?.branchId || course?.branch_id);
+                        setFormData({
+                          ...formData, 
+                          selectedProgram: newProg,
+                          selectedBranch: bId || formData.selectedBranch
+                        });
+                      }} 
+                      className="w-full mt-1 bg-slate-50 border border-slate-100 p-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm appearance-none"
+                    >
                       <option value="">Select Course...</option>
                       {courses
-                        .filter(c => !formData.selectedBranch || (typeof c.branchId === 'object' ? c.branchId?._id === formData.selectedBranch : c.branchId === formData.selectedBranch))
-                        .map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                        .filter(c => {
+                          if (!formData.selectedBranch) return true;
+                          const bId = c.branchId && typeof c.branchId === 'object' ? (c.branchId._id || c.branchId.id) : (c.branchId || c.branch_id);
+                          return bId === formData.selectedBranch;
+                        })
+                        .map(c => <option key={c.id || c._id} value={c.id || c._id}>{c.name} ({c.duration || 4} Years)</option>)}
                     </select>
                   </div>
                   <div className="grid grid-cols-2 gap-4">

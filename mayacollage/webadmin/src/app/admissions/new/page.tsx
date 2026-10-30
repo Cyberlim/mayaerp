@@ -96,7 +96,44 @@ export default function StandaloneNewApplication() {
   });
 
   const handleChange = (e: any) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+
+    if (name === "selectedBranch") {
+      const branchCourses = courses.filter((c) => {
+        const bId = c.branchId && typeof c.branchId === "object" ? (c.branchId._id || c.branchId.id) : (c.branchId || c.branch_id);
+        return !value || bId === value;
+      });
+      let nextProgram = formData.selectedProgram;
+      if (branchCourses.length > 0 && !branchCourses.some((c) => (c.id || c._id) === formData.selectedProgram)) {
+        nextProgram = branchCourses[0].id || branchCourses[0]._id;
+      }
+      setFormData((prev) => ({
+        ...prev,
+        selectedBranch: value,
+        selectedProgram: nextProgram,
+      }));
+      return;
+    }
+
+    if (name === "selectedProgram") {
+      const course = courses.find((c) => (c.id || c._id) === value || c.name === value);
+      const bId = course?.branchId && typeof course.branchId === "object"
+        ? (course.branchId._id || course.branchId.id)
+        : (course?.branchId || course?.branch_id || formData.selectedBranch);
+      const duration = course?.duration || 4;
+      const year = new Date().getFullYear();
+
+      setFormData((prev) => ({
+        ...prev,
+        selectedProgram: value,
+        selectedBranch: bId || prev.selectedBranch,
+        batch: prev.batch || `${year}-${year + duration}`,
+        sessionYear: prev.sessionYear || `${year}-${year + 1}`,
+      }));
+      return;
+    }
+
+    setFormData({ ...formData, [name]: value });
   };
 
   const handleNext = () => {
@@ -349,8 +386,26 @@ export default function StandaloneNewApplication() {
 
                 {currentStep === 3 && (
                   <>
-                    <DropdownGroup icon={<Briefcase />} label="Select Branch" name="selectedBranch" options={branches.map(b => ({ label: b.name, value: b._id }))} value={formData.selectedBranch} onChange={handleChange} />
-                    <DropdownGroup icon={<School />} label="Select Course" name="selectedProgram" options={courses.filter(c => !formData.selectedBranch || c.branchId === formData.selectedBranch || c.branchId?._id === formData.selectedBranch).map(c => ({ label: c.name, value: c._id }))} value={formData.selectedProgram} onChange={handleChange} />
+                    <DropdownGroup 
+                      icon={<Briefcase />} 
+                      label="Select Branch" 
+                      name="selectedBranch" 
+                      options={branches.map(b => ({ label: b.name, value: b.id || b._id }))} 
+                      value={formData.selectedBranch} 
+                      onChange={handleChange} 
+                    />
+                    <DropdownGroup 
+                      icon={<School />} 
+                      label="Select Course" 
+                      name="selectedProgram" 
+                      options={courses.filter(c => {
+                        if (!formData.selectedBranch) return true;
+                        const bId = c.branchId && typeof c.branchId === 'object' ? (c.branchId._id || c.branchId.id) : (c.branchId || c.branch_id);
+                        return bId === formData.selectedBranch;
+                      }).map(c => ({ label: `${c.name} (${c.duration || 4} Years)`, value: c.id || c._id }))} 
+                      value={formData.selectedProgram} 
+                      onChange={handleChange} 
+                    />
                     
                     <InputGroup icon={<CalendarDays />} label="Batch" name="batch" placeholder="e.g. 2024-2028" value={formData.batch} onChange={handleChange} />
                     <InputGroup icon={<Book />} label="Semester" name="semester" placeholder="e.g. 1" value={formData.semester} onChange={handleChange} />

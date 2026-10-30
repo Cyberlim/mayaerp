@@ -17,7 +17,11 @@ import {
   Mail,
   MapPin,
   Calendar,
-  BookOpen
+  BookOpen,
+  Building2,
+  Briefcase,
+  Settings2,
+  Layers
 } from "lucide-react";
 
 export default function ApplicationDetailScreen() {
@@ -26,14 +30,21 @@ export default function ApplicationDetailScreen() {
   
   const [app, setApp] = useState<any>(null);
   const [courses, setCourses] = useState<any[]>([]);
+  const [branches, setBranches] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [fromCache, setFromCache] = useState(false);
   const [error, setError] = useState("");
   
-  // Approval Modal State
+  // Approval / Academic Assignment Modal State
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
   const [approvalData, setApprovalData] = useState({
+    selectedBranch: "",
+    selectedProgram: "",
+    sessionYear: "2024-2025",
+    batch: "2024-2028",
+    selectedSemester: 1,
+    selectedSection: "A",
     studentId: "",
     admissionNumber: "",
     feesYears: [] as any[]
@@ -55,17 +66,20 @@ export default function ApplicationDetailScreen() {
 
   const fetchApplication = async () => {
     try {
-      const [appRes, coursesRes] = await Promise.all([
+      const [appRes, coursesRes, branchesRes] = await Promise.all([
         fetch(`/api/applications/${id}`),
-        fetch('/api/courses')
+        fetch('/api/courses'),
+        fetch('/api/branches')
       ]);
       
       if (!appRes.ok) throw new Error("Application not found");
       const appData = await appRes.json();
       const coursesData = await coursesRes.json();
+      const branchesData = await branchesRes.json();
       
       setApp(appData);
       setCourses(Array.isArray(coursesData) ? coursesData : []);
+      setBranches(Array.isArray(branchesData) ? branchesData : []);
 
       // Persist in localStorage for 0ms loads
       try {
@@ -80,11 +94,16 @@ export default function ApplicationDetailScreen() {
 
   const handleOpenApprovalModal = async () => {
     const course = courses.find(c => (c.id || c._id) === app.selectedProgram || c.name === app.selectedProgram);
+    const branch = branches.find(b => (b.id || b._id) === app.selectedBranch || b.name === app.selectedBranch || (course && (course.branchId === b.id || course.branch_id === b.id)));
+    
+    const chosenCourseId = course?.id || course?._id || app.selectedProgram || (courses[0]?.id || "");
+    const chosenBranchId = branch?.id || branch?._id || course?.branchId || course?.branch_id || app.selectedBranch || (branches[0]?.id || "");
+    
     const courseCode = course?.name ? course.name.replace(/[^A-Za-z]/g, '').substring(0, 3).toUpperCase() : "CRS";
     
     let rollCount = 0;
     try {
-      const countRes = await fetch(`/api/students?selectedProgram=${app.selectedProgram}&countOnly=true`);
+      const countRes = await fetch(`/api/students?selectedProgram=${chosenCourseId}&countOnly=true`);
       if (countRes.ok) {
         const countData = await countRes.json();
         rollCount = countData.count || 0;
@@ -96,9 +115,11 @@ export default function ApplicationDetailScreen() {
     const year = new Date().getFullYear();
     const sequentialRoll = (rollCount + 1).toString().padStart(3, '0');
     
-    const defaultStudentId = `${year}${courseCode}${sequentialRoll}`;
-    const defaultAdmissionNo = `${year}${courseCode}${sequentialRoll}`;
+    const defaultStudentId = app.studentId || `${year}${courseCode}${sequentialRoll}`;
+    const defaultAdmissionNo = app.admissionNumber || `${year}${courseCode}${sequentialRoll}`;
     const duration = course?.duration || 4;
+    const sessionYear = app.sessionYear || `${year}-${year + 1}`;
+    const batch = app.batch || `${year}-${year + duration}`;
 
     const initialFees = Array.from({ length: duration }).map((_, idx) => ({
       year: idx + 1,
@@ -109,6 +130,12 @@ export default function ApplicationDetailScreen() {
     }));
 
     setApprovalData({
+      selectedBranch: chosenBranchId,
+      selectedProgram: chosenCourseId,
+      sessionYear: sessionYear,
+      batch: batch,
+      selectedSemester: app.selectedSemester || 1,
+      selectedSection: app.selectedSection || "A",
       studentId: defaultStudentId,
       admissionNumber: defaultAdmissionNo,
       feesYears: initialFees
@@ -117,22 +144,87 @@ export default function ApplicationDetailScreen() {
     setIsApprovalModalOpen(true);
   };
 
+  const filteredCourses = approvalData.selectedBranch
+    ? courses.filter(c => (c.branchId === approvalData.selectedBranch || c.branch_id === approvalData.selectedBranch || c.branchName === branches.find(b => (b.id || b._id) === approvalData.selectedBranch)?.name))
+    : courses;
+  const activeCourses = filteredCourses.length > 0 ? filteredCourses : courses;
+
+  const handleBranchChange = (newBranchId: string) => {
+    const branchCourses = courses.filter(c => c.branchId === newBranchId || c.branch_id === newBranchId);
+    let newCourseId = approvalData.selectedProgram;
+    if (branchCourses.length > 0 && !branchCourses.some(c => (c.id || c._id) === approvalData.selectedProgram)) {
+      newCourseId = branchCourses[0].id || branchCourses[0]._id;
+    }
+    
+    setApprovalData(prev => ({
+      ...prev,
+      selectedBranch: newBranchId,
+      selectedProgram: newCourseId
+    }));
+
+    if (newCourseId !== approvalData.selectedProgram) {
+      handleCourseChange(newCourseId, newBranchId);
+    }
+  };
+
+  const handleCourseChange = (newCourseId: string, overrideBranchId?: string) => {
+    const course = courses.find(c => (c.id || c._id) === newCourseId || c.name === newCourseId);
+    const duration = course?.duration || 4;
+    const courseCode = course?.name ? course.name.replace(/[^A-Za-z]/g, '').substring(0, 3).toUpperCase() : "CRS";
+    
+    const year = new Date().getFullYear();
+    const branchId = overrideBranchId || course?.branchId || course?.branch_id || approvalData.selectedBranch;
+    
+    const initialFees = Array.from({ length: duration }).map((_, idx) => ({
+      year: idx + 1,
+      tuition: course?.baseFee || course?.base_fee || 45000,
+      exam: 2500,
+      transport: 0,
+      other: 1000
+    }));
+
+    setApprovalData(prev => ({
+      ...prev,
+      selectedBranch: branchId,
+      selectedProgram: newCourseId,
+      batch: prev.sessionYear ? `${prev.sessionYear.split('-')[0]}-${Number(prev.sessionYear.split('-')[0]) + duration}` : prev.batch,
+      studentId: prev.studentId.includes(courseCode) ? prev.studentId : `${year}${courseCode}001`,
+      admissionNumber: prev.admissionNumber.includes(courseCode) ? prev.admissionNumber : `${year}${courseCode}001`,
+      feesYears: initialFees
+    }));
+  };
+
   const handleUpdateStatus = async (newStatus: string) => {
     setIsUpdating(true);
     try {
-      const payload: any = { status: newStatus };
-      if (newStatus === "Approved") {
-        payload.studentId = approvalData.studentId;
-        payload.admissionNumber = approvalData.admissionNumber;
-        payload.feesYears = approvalData.feesYears;
-      }
+      const selectedCourseObj = courses.find(c => (c.id || c._id) === approvalData.selectedProgram || c.name === approvalData.selectedProgram);
+      const selectedBranchObj = branches.find(b => (b.id || b._id) === approvalData.selectedBranch || b.name === approvalData.selectedBranch);
+
+      const payload: any = { 
+        status: newStatus,
+        selectedBranch: approvalData.selectedBranch,
+        branchName: selectedBranchObj?.name || "",
+        selectedProgram: approvalData.selectedProgram,
+        courseName: selectedCourseObj?.name || "",
+        courseDuration: selectedCourseObj?.duration || 4,
+        sessionYear: approvalData.sessionYear,
+        batch: approvalData.batch,
+        selectedSemester: approvalData.selectedSemester,
+        selectedSection: approvalData.selectedSection,
+        studentId: approvalData.studentId,
+        admissionNumber: approvalData.admissionNumber,
+        feesYears: approvalData.feesYears
+      };
 
       const res = await fetch(`/api/applications/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error("Failed to update status in PostgreSQL");
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to update status in PostgreSQL");
+      }
       
       const updatedApp = await res.json();
       setApp(updatedApp);
@@ -221,6 +313,16 @@ export default function ApplicationDetailScreen() {
                 Approve & Enroll
               </button>
             </>
+          )}
+
+          {(app.status === "Approved" || app.status === "Accepted") && (
+            <button
+              onClick={handleOpenApprovalModal}
+              disabled={isUpdating}
+              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/25 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all disabled:opacity-50 text-sm"
+            >
+              <Settings2 className="w-4 h-4" /> Change Course / Branch
+            </button>
           )}
         </div>
       </div>
@@ -324,16 +426,125 @@ export default function ApplicationDetailScreen() {
             className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
           >
             <div className="p-6 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white/95 backdrop-blur-sm z-10">
-              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                <CheckCircle className="w-6 h-6 text-emerald-500" /> 
-                Enrollment & Fee Configuration (PostgreSQL)
-              </h2>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  <CheckCircle className="w-6 h-6 text-emerald-500" /> 
+                  {app.status === 'Approved' ? 'Update Course & Branch Assignment' : 'Enrollment & Academic Configuration'}
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Assign branch, course, academic session, batch, and fees synced to PostgreSQL & MongoDB
+                </p>
+              </div>
               <button onClick={() => setIsApprovalModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl text-slate-400">
                 <XCircle className="w-6 h-6" />
               </button>
             </div>
             
             <div className="p-6 space-y-8">
+              {/* Academic Placement (Course & Branch Selection) */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-indigo-500" /> Academic Placement
+                  </h3>
+                  <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+                    Course & Branch Allocation
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Branch Selection */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Assigned Branch / Department <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={approvalData.selectedBranch}
+                      onChange={(e) => handleBranchChange(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 outline-none focus:border-indigo-500 transition-colors"
+                    >
+                      <option value="">Select Branch</option>
+                      {branches.map((b) => (
+                        <option key={b.id || b._id} value={b.id || b._id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Course / Program Selection */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Enrolled Course / Program <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={approvalData.selectedProgram}
+                      onChange={(e) => handleCourseChange(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 outline-none focus:border-indigo-500 transition-colors"
+                    >
+                      <option value="">Select Course</option>
+                      {activeCourses.map((c) => (
+                        <option key={c.id || c._id} value={c.id || c._id}>
+                          {c.name} ({c.duration || 4} Years)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Session Year */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Academic Session Year</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 2026-2027"
+                      value={approvalData.sessionYear}
+                      onChange={(e) => setApprovalData({ ...approvalData, sessionYear: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  {/* Batch */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Batch</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 2026-2030"
+                      value={approvalData.batch}
+                      onChange={(e) => setApprovalData({ ...approvalData, batch: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  {/* Semester */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Current Semester</label>
+                    <select
+                      value={approvalData.selectedSemester}
+                      onChange={(e) => setApprovalData({ ...approvalData, selectedSemester: Number(e.target.value) })}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 outline-none focus:border-indigo-500"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+                        <option key={sem} value={sem}>
+                          Semester {sem}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Section */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Section</label>
+                    <input
+                      type="text"
+                      placeholder="A, B, or C"
+                      value={approvalData.selectedSection}
+                      onChange={(e) => setApprovalData({ ...approvalData, selectedSection: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* IDs Section */}
               <div className="space-y-4">
                 <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Student Identity</h3>
@@ -408,7 +619,7 @@ export default function ApplicationDetailScreen() {
                 className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white font-bold rounded-xl shadow-md hover:bg-emerald-700 transition-colors disabled:opacity-50 text-sm"
               >
                 {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                Confirm & Enroll Student
+                {app.status === 'Approved' ? 'Save & Update Placement' : 'Confirm & Enroll Student'}
               </button>
             </div>
           </motion.div>
