@@ -9,12 +9,23 @@ import {
   Settings,
   PackageSearch,
   ArrowRightLeft,
-  BookOpen
+  BookOpen,
+  LogOut
 } from 'lucide-react';
 
 export default function LabSidebar() {
   const pathname = usePathname();
   const [userProfile, setUserProfile] = useState<{name: string, role: string, photo: string} | null>(null);
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      localStorage.removeItem('mayaerp_user');
+      window.location.href = '/login?role=Lab';
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -101,12 +112,12 @@ export default function LabSidebar() {
       </div>
       
       <div className="p-4 border-t border-slate-800">
-        <Link 
-          href="/logout"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-all text-sm font-medium"
+        <button 
+          onClick={handleLogout}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-all text-sm font-medium"
         >
-          Logout
-        </Link>
+          <LogOut size={16} /> Logout
+        </button>
       </div>
     </div>
   );

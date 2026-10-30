@@ -57,8 +57,14 @@ export default function AdminSidebar() {
   const router = useRouter();
 
   const handleLogout = async () => {
-    // Implement logout logic here (clear cookies, etc.)
-    router.push("/");
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      localStorage.removeItem('mayaerp_user');
+      window.location.href = '/login?role=Admin';
+    } catch (err) {
+      console.error('Logout error:', err);
+      window.location.href = '/login?role=Admin';
+    }
   };
 
   return (

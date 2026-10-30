@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 import { 
   LayoutDashboard, 
   Book,
@@ -15,10 +16,28 @@ import {
 
 export default function LibrarySidebar() {
   const pathname = usePathname();
+  const [userProfile, setUserProfile] = useState<{name: string, role: string, photo: string} | null>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(res => res.json())
+      .then(data => {
+        if (data && (data.firstName || data.name)) {
+          const fullName = data.name || `${data.firstName || ''} ${data.lastName || ''}`.trim() || 'Librarian';
+          setUserProfile({
+            name: fullName,
+            role: data.role || 'Library',
+            photo: data.profilePhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=ffffff&color=4F46E5&bold=true`
+          });
+        }
+      })
+      .catch(err => console.error(err));
+  }, []);
 
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
+      localStorage.removeItem('mayaerp_user');
       window.location.href = '/login?role=Librarian';
     } catch (error) {
       console.error('Logout error:', error);
@@ -75,15 +94,20 @@ export default function LibrarySidebar() {
       </div>
 
       {/* Profile Section with Cutout */}
-      <div className="relative mt-auto p-6 z-10 bg-[#3f38b9] mx-4 mb-4 rounded-3xl overflow-hidden shadow-inner flex flex-col items-center group">
-        <div className="w-16 h-16 rounded-full bg-white/20 p-1 mb-3">
+      <div className="relative mt-auto p-6 z-10 bg-[#3f38b9] mx-4 mb-4 rounded-3xl overflow-hidden shadow-inner flex flex-col items-center group text-center">
+        <div className="w-16 h-16 rounded-full bg-white/20 p-1 mb-2 overflow-hidden">
           <img 
-            src="https://ui-avatars.com/api/?name=Admin+User&background=ffffff&color=4F46E5&bold=true" 
+            src={userProfile?.photo || "https://ui-avatars.com/api/?name=Librarian&background=ffffff&color=4F46E5&bold=true"} 
             alt="Profile" 
             className="w-full h-full rounded-full object-cover"
           />
         </div>
-        <span className="text-sm font-bold tracking-wider uppercase mb-3">Admin</span>
+        <span className="text-sm font-bold tracking-wide text-white mb-0.5 max-w-[180px] truncate">
+          {userProfile?.name || "Library In-Charge"}
+        </span>
+        <span className="text-[11px] font-semibold tracking-wider uppercase text-indigo-200 mb-3">
+          {userProfile?.role || "Librarian"}
+        </span>
         
         <button 
           onClick={handleLogout}

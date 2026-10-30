@@ -17,7 +17,7 @@ export default function UserManagementDashboard() {
   const [newPassword, setNewPassword] = useState("");
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  const filters = ["All", "Admin", "Staff", "Accountant", "Librarian"];
+  const filters = ["All", "Admin", "Staff", "Office", "Library", "Lab"];
 
   const fetchUsers = async () => {
     setIsLoading(true);
@@ -87,14 +87,25 @@ export default function UserManagementDashboard() {
   const filteredUsers = useMemo(() => {
     let result = users;
     if (selectedFilter !== "All") {
-      result = result.filter(u => u.role === selectedFilter);
+      result = result.filter(u => {
+        const r = (u.role || "").toLowerCase();
+        const sf = selectedFilter.toLowerCase();
+        if (sf === "staff") return r === "staff" || r === "faculty";
+        if (sf === "office") return r === "office" || r === "accountant";
+        if (sf === "library") return r === "library" || r === "librarian";
+        if (sf === "lab") return r === "lab" || r === "lab assistant";
+        return r === sf;
+      });
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(u => 
         (u.firstName?.toLowerCase() || "").includes(q) || 
         (u.lastName?.toLowerCase() || "").includes(q) || 
-        (u.email?.toLowerCase() || "").includes(q)
+        (u.email?.toLowerCase() || "").includes(q) ||
+        (u.employeeId?.toLowerCase() || "").includes(q) ||
+        (u.phone?.toLowerCase() || "").includes(q) ||
+        (u.department?.toLowerCase() || "").includes(q)
       );
     }
     return result;
@@ -198,72 +209,82 @@ export default function UserManagementDashboard() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             <AnimatePresence>
-              {filteredUsers.map((user, idx) => (
-                <motion.div 
-                  key={user._id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.2 }}
-                  className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden group hover:shadow-xl hover:shadow-slate-200/50 hover:border-rose-100 transition-all flex flex-col"
-                >
-                  <div className="h-24 bg-gradient-to-r from-rose-50 to-pink-50 group-hover:from-rose-100 group-hover:to-pink-100 transition-colors relative">
-                    <div className="absolute top-4 right-4 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full border border-white/40 shadow-sm">
-                      <span className={`text-[9px] font-black uppercase tracking-wider ${user.status === 'Active' ? 'text-emerald-600' : 'text-amber-500'}`}>
-                        {user.status}
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <div className="px-6 pb-6 flex-1 flex flex-col relative -mt-12">
-                    <div className="w-24 h-24 rounded-full border-4 border-white bg-slate-100 shadow-md overflow-hidden mb-4 mx-auto flex items-center justify-center">
-                      {user.profilePhoto ? (
-                        <img src={user.profilePhoto} alt={user.firstName} className="w-full h-full object-cover" />
-                      ) : (
-                        <UserCircle className="w-12 h-12 text-slate-300" />
-                      )}
-                    </div>
-                    
-                    <div className="text-center mb-6">
-                      <h3 className="text-lg font-black text-slate-900 group-hover:text-rose-600 transition-colors line-clamp-1">
-                        {user.firstName} {user.lastName}
-                      </h3>
-                      <p className="text-xs font-bold text-slate-400 mt-1 line-clamp-1">{user.email}</p>
-                      
-                      <div className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-600 rounded-lg border border-slate-100 text-xs font-black uppercase tracking-wider">
-                        <Shield className="w-3.5 h-3.5 text-rose-500" />
-                        {user.role}
+              {filteredUsers.map((user) => {
+                const uid = user._id || user.id;
+                const displayName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.name || user.email;
+                return (
+                  <motion.div 
+                    key={uid}
+                    layout
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    transition={{ duration: 0.2 }}
+                    className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden group hover:shadow-xl hover:shadow-slate-200/50 hover:border-rose-100 transition-all flex flex-col"
+                  >
+                    <div className="h-24 bg-gradient-to-r from-rose-50 to-pink-50 group-hover:from-rose-100 group-hover:to-pink-100 transition-colors relative">
+                      <div className="absolute top-4 right-4 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full border border-white/40 shadow-sm">
+                        <span className={`text-[9px] font-black uppercase tracking-wider ${user.status === 'Active' ? 'text-emerald-600' : 'text-amber-500'}`}>
+                          {user.status || 'Active'}
+                        </span>
                       </div>
                     </div>
+                    
+                    <div className="px-6 pb-6 flex-1 flex flex-col relative -mt-12">
+                      <div className="w-24 h-24 rounded-full border-4 border-white bg-slate-100 shadow-md overflow-hidden mb-4 mx-auto flex items-center justify-center">
+                        {user.profilePhoto ? (
+                          <img src={user.profilePhoto} alt={displayName} className="w-full h-full object-cover" />
+                        ) : (
+                          <UserCircle className="w-12 h-12 text-slate-300" />
+                        )}
+                      </div>
+                      
+                      <div className="text-center mb-6">
+                        <h3 className="text-lg font-black text-slate-900 group-hover:text-rose-600 transition-colors line-clamp-1">
+                          {displayName}
+                        </h3>
+                        <p className="text-xs font-bold text-slate-400 mt-1 line-clamp-1">{user.email}</p>
+                        {user.department && (
+                          <p className="text-[11px] font-semibold text-rose-500 mt-0.5 line-clamp-1">{user.department}</p>
+                        )}
+                        {user.employeeId && (
+                          <p className="text-[10px] font-bold text-slate-400 mt-0.5">ID: {user.employeeId}</p>
+                        )}
+                        
+                        <div className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-600 rounded-lg border border-slate-100 text-xs font-black uppercase tracking-wider">
+                          <Shield className="w-3.5 h-3.5 text-rose-500" />
+                          {user.role}
+                        </div>
+                      </div>
 
-                    <div className="mt-auto grid grid-cols-2 gap-3 pt-6 border-t border-slate-50">
-                      <Link href={`/dashboard/users/${user._id}/details`} className="col-span-2">
-                        <button className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-bold text-xs rounded-xl transition-colors">
-                          <Eye className="w-3.5 h-3.5" /> View Details
+                      <div className="mt-auto grid grid-cols-2 gap-3 pt-6 border-t border-slate-50">
+                        <Link href={`/dashboard/users/${uid}/details`} className="col-span-2">
+                          <button className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-bold text-xs rounded-xl transition-colors">
+                            <Eye className="w-3.5 h-3.5" /> View Details
+                          </button>
+                        </Link>
+                        <button 
+                          onClick={() => setPasswordModal({ isOpen: true, userId: uid, name: displayName })}
+                          className="col-span-2 w-full flex items-center justify-center gap-2 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-600 font-bold text-xs rounded-xl transition-colors border border-transparent hover:border-amber-200"
+                        >
+                          <Key className="w-3.5 h-3.5" /> Change Password
                         </button>
-                      </Link>
-                      <button 
-                        onClick={() => setPasswordModal({ isOpen: true, userId: user._id, name: `${user.firstName} ${user.lastName}` })}
-                        className="col-span-2 w-full flex items-center justify-center gap-2 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-600 font-bold text-xs rounded-xl transition-colors border border-transparent hover:border-amber-200"
-                      >
-                        <Key className="w-3.5 h-3.5" /> Change Password
-                      </button>
-                      <Link href={`/dashboard/users/${user._id}`}>
-                        <button className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 font-bold text-xs rounded-xl transition-colors border border-transparent hover:border-indigo-100">
-                          <Edit2 className="w-3.5 h-3.5" /> Edit
+                        <Link href={`/dashboard/users/${uid}`}>
+                          <button className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 font-bold text-xs rounded-xl transition-colors border border-transparent hover:border-indigo-100">
+                            <Edit2 className="w-3.5 h-3.5" /> Edit
+                          </button>
+                        </Link>
+                        <button 
+                          onClick={() => handleDelete(uid, displayName)}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-50 hover:bg-rose-50 text-slate-600 hover:text-rose-600 font-bold text-xs rounded-xl transition-colors border border-transparent hover:border-rose-100"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" /> Delete
                         </button>
-                      </Link>
-                      <button 
-                        onClick={() => handleDelete(user._id, `${user.firstName} ${user.lastName}`)}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-50 hover:bg-rose-50 text-slate-600 hover:text-rose-600 font-bold text-xs rounded-xl transition-colors border border-transparent hover:border-rose-100"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" /> Delete
-                      </button>
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
             </AnimatePresence>
           </div>
         )}

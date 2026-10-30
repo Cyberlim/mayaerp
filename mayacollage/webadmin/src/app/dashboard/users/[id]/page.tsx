@@ -24,13 +24,20 @@ export default function EditUserPage() {
     address: "",
     dob: "",
     gender: "",
-    role: "Faculty",
+    role: "Staff",
     employeeId: "",
     status: "Active",
-    profilePhoto: ""
+    profilePhoto: "",
+    department: ""
   });
 
-  const roles = ["Admin", "Office", "Staff", "Library", "Lab Assistant"];
+  const roles = [
+    { label: "Admin (Full Control)", value: "Admin" },
+    { label: "Staff / Faculty", value: "Staff" },
+    { label: "Office CRM", value: "Office" },
+    { label: "Library Management", value: "Library" },
+    { label: "Lab Management", value: "Lab" }
+  ];
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -47,10 +54,11 @@ export default function EditUserPage() {
             address: data.address || "",
             dob: data.dob || "",
             gender: data.gender || "",
-            role: data.role || "Faculty",
+            role: data.role || "Staff",
             employeeId: data.employeeId || "",
             status: data.status || "Active",
-            profilePhoto: data.profilePhoto || ""
+            profilePhoto: data.profilePhoto || "",
+            department: data.department || ""
           });
         }
       } catch (err) {
@@ -245,9 +253,9 @@ export default function EditUserPage() {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Role / Designation</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Role / Portal Gateway</label>
                   <select required value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full mt-1 bg-slate-50 border border-slate-100 p-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm appearance-none">
-                    {roles.map(r => <option key={r} value={r}>{r}</option>)}
+                    {roles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                   </select>
                 </div>
                 <div>
@@ -255,6 +263,14 @@ export default function EditUserPage() {
                   <div className="relative mt-1">
                     <input required value={formData.employeeId} onChange={e => setFormData({...formData, employeeId: e.target.value})} type="text" className="w-full bg-slate-50 border border-slate-100 py-4 pl-10 pr-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm" placeholder="EMP-2026-001" />
                     <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Department (Optional)</label>
+                  <div className="relative mt-1">
+                    <input value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} type="text" className="w-full bg-slate-50 border border-slate-100 py-4 pl-10 pr-4 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-sm" placeholder="e.g. Pharmacy, Computer Science, Accounts" />
+                    <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   </div>
                 </div>
 

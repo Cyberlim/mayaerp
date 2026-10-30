@@ -16,7 +16,8 @@ import {
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const role = searchParams.get("role") || "Admin";
+  const roleParam = searchParams.get("role");
+  const callbackUrl = searchParams.get("callbackUrl");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,10 +46,18 @@ function LoginContent() {
     setError("");
 
     try {
+      const payload: { email: string; password: string; role?: string } = {
+        email: email.trim(),
+        password,
+      };
+      if (roleParam) {
+        payload.role = roleParam;
+      }
+
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, role }), // pass role if backend needs it
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -60,29 +69,28 @@ function LoginContent() {
       }
 
       if (rememberMe) {
-        localStorage.setItem("mayaerp_email", email);
+        localStorage.setItem("mayaerp_email", email.trim());
         localStorage.setItem("mayaerp_password", password);
       } else {
         localStorage.removeItem("mayaerp_email");
         localStorage.removeItem("mayaerp_password");
       }
 
-      // Use the actual role from the database for redirection
-      const actualRole = data.user.role;
-
-      if (actualRole === "Staff" || actualRole === "Faculty") {
-        router.push("/staff");
-      } else if (actualRole === "Student") {
-        router.push("/student");
-      } else if (actualRole === "Office") {
-        router.push("/office");
-      } else if (actualRole === "Librarian" || actualRole === "Library") {
-        router.push("/library");
-      } else if (actualRole === "Lab") {
-        router.push("/lab");
-      } else {
-        router.push("/dashboard"); // Admin/Super Admin
+      // Store authenticated user profile in localStorage for client-side access
+      if (data.user) {
+        localStorage.setItem("mayaerp_user", JSON.stringify(data.user));
       }
+
+      // Determine redirect destination
+      const userPortal = data.user?.portal || "/dashboard";
+      
+      // If callbackUrl matches their portal access or user is Admin, use callbackUrl
+      if (callbackUrl && (data.user?.role === "Admin" || data.user?.role === "Super Admin" || callbackUrl.startsWith(userPortal))) {
+        router.push(callbackUrl);
+      } else {
+        router.push(userPortal);
+      }
+      router.refresh();
     } catch (err) {
       setError("An unexpected error occurred.");
       setIsLoading(false);
@@ -168,7 +176,7 @@ function LoginContent() {
         >
           <Shield className="w-4 h-4 text-rose-600" />
           <span className="text-xs font-black tracking-widest text-rose-600 uppercase">
-            {role}
+            {roleParam ? `${roleParam} Portal` : "Maya ERP Access"}
           </span>
         </motion.div>
 

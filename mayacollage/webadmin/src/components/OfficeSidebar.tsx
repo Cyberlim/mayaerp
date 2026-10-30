@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 import { 
   LayoutDashboard, 
   UserPlus, 
@@ -19,16 +20,36 @@ import {
   Mail,
   Settings,
   FileText,
-  Beaker
+  Beaker,
+  User
 } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function OfficeSidebar() {
   const pathname = usePathname();
+  const [userProfile, setUserProfile] = useState<{name: string, role: string, photo: string, employeeId?: string} | null>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(res => res.json())
+      .then(data => {
+        if (data && (data.firstName || data.name)) {
+          const fullName = data.name || `${data.firstName || ''} ${data.lastName || ''}`.trim() || 'Office Staff';
+          setUserProfile({
+            name: fullName,
+            role: data.role || 'Office',
+            employeeId: data.employeeId || '',
+            photo: data.profilePhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=3B82F6&color=fff&bold=true`
+          });
+        }
+      })
+      .catch(err => console.error(err));
+  }, []);
 
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
+      localStorage.removeItem('mayaerp_user');
       window.location.href = '/login?role=Office';
     } catch (error) {
       console.error('Logout error:', error);
@@ -94,19 +115,27 @@ export default function OfficeSidebar() {
       <div className="px-4 pb-6 mt-auto flex flex-col gap-4">
 
 
-        {/* Need Help */}
-        <div className="flex items-start gap-3 p-2 group cursor-pointer">
-          <HeadphonesIcon className="w-5 h-5 text-slate-400 group-hover:text-slate-600 mt-0.5" />
-          <div>
-            <h5 className="text-xs font-bold text-slate-800 group-hover:text-blue-600 transition-colors">Need Help?</h5>
-            <p className="text-[10px] text-slate-500 leading-tight mt-0.5">Visit our help center or contact support.</p>
+        {/* User Profile Card */}
+        <div className="flex items-center gap-3 p-2.5 bg-slate-50 border border-slate-100 rounded-xl">
+          <img 
+            src={userProfile?.photo || "https://ui-avatars.com/api/?name=Office+Staff&background=3B82F6&color=fff&bold=true"} 
+            alt="Profile" 
+            className="w-9 h-9 rounded-full object-cover shrink-0 border border-slate-200"
+          />
+          <div className="flex-1 min-w-0">
+            <h5 className="text-xs font-bold text-slate-800 truncate">
+              {userProfile?.name || "Office In-Charge"}
+            </h5>
+            <p className="text-[10px] font-semibold text-blue-600 truncate">
+              {userProfile?.role || "Office"} {userProfile?.employeeId ? `• ${userProfile.employeeId}` : ''}
+            </p>
           </div>
         </div>
 
-        {/* Logout (Small at bottom) */}
+        {/* Logout */}
         <button 
           onClick={handleLogout}
-          className="flex items-center gap-2 text-rose-500 hover:text-rose-600 text-xs font-bold mt-2 pl-2"
+          className="flex items-center justify-center gap-2 w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold transition-colors"
         >
           <LogOut size={14} strokeWidth={2.5} />
           Sign Out
