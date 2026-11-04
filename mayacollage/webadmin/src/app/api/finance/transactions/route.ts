@@ -157,41 +157,106 @@ export async function POST(request: Request) {
       feesObj.years = [];
     }
 
-    let yearItem = feesObj.years.find((y: any) => y.year === yrNum);
-    if (!yearItem) {
-      yearItem = {
+    // Ensure the target year exists
+    if (!feesObj.years.find((y: any) => y.year === yrNum)) {
+      feesObj.years.push({
         year: yrNum,
         tuition: { total: 0, paid: 0 },
-        exam: { total: 0, paid: 0 },
+        exam:    { total: 0, paid: 0 },
         transport: { total: 0, paid: 0 },
-        other: { total: 0, paid: 0 }
-      };
-      feesObj.years.push(yearItem);
-    }
-
-    if (Array.isArray(yearItem.components) && yearItem.components.length > 0) {
-      const targetCat = (categoryName || catCode).toLowerCase().replace(/[^a-z0-9]/g, '');
-      const matchedComp = yearItem.components.find((c: any) => {
-        const cLower = (c.category || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        return cLower === targetCat || cLower.includes(targetCat) || targetCat.includes(cLower);
+        other:   { total: 0, paid: 0 }
       });
-      if (matchedComp) {
-        matchedComp.paid = (Number(matchedComp.paid) || 0) + payNum;
+    }
+
+    // Sort years ascending so distribution flows Year 1 → Year 2 → Year 3 …
+    feesObj.years.sort((a: any, b: any) => a.year - b.year);
+
+    // ─── Sequential Distribution ────────────────────────────────────────────
+    // The payment starts at the specified year/component and fills each
+    // component's remaining due in order. Any excess automatically flows to
+    // the next component / next year instead of being over-credited to one
+    // slot. This fixes the bug where a full-balance payment (e.g. ₹1,18,290)
+    // was dumped entirely into Year 1 Tuition while other slots stayed at ₹0.
+    // ─────────────────────────────────────────────────────────────────────────
+    let remaining = payNum;
+    const normalizedCat = (categoryName || catCode).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const startYearIdx = feesObj.years.findIndex((y: any) => y.year === yrNum);
+
+    for (let yi = startYearIdx; yi < feesObj.years.length && remaining > 0; yi++) {
+      const yr = feesObj.years[yi];
+
+      if (Array.isArray(yr.components) && yr.components.length > 0) {
+        // ── Component-based structure ────────────────────────────────────────
+        // For the starting year begin at the specified component; for
+        // subsequent years start at component index 0.
+        let startCI = 0;
+        if (yi === startYearIdx) {
+          const idx = yr.components.findIndex((c: any) => {
+            const cNorm = (c.category || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            return cNorm === normalizedCat || cNorm.includes(normalizedCat) || normalizedCat.includes(cNorm);
+          });
+          if (idx >= 0) startCI = idx;
+        }
+
+        for (let ci = startCI; ci < yr.components.length && remaining > 0; ci++) {
+          const comp = yr.components[ci];
+          const compDue = Math.max(0, (Number(comp.amount) || 0) - (Number(comp.paid) || 0));
+          if (compDue > 0) {
+            const toApply = Math.min(remaining, compDue);
+            comp.paid = (Number(comp.paid) || 0) + toApply;
+            remaining -= toApply;
+          }
+        }
+      } else {
+        // ── Legacy flat structure (tuition / exam / transport / other) ───────
+        // For the starting year try the specified category first, then the rest.
+        const standardCats = ['tuition', 'exam', 'transport', 'other'];
+        const orderedCats = yi === startYearIdx
+          ? [catCode, ...standardCats.filter(c => c !== catCode)]
+          : standardCats;
+
+        for (const cat of orderedCats) {
+          if (remaining <= 0) break;
+          if (!yr[cat]) {
+            // Only create the slot when it is the directly targeted category
+            if (yi === startYearIdx && cat === catCode) {
+              yr[cat] = { total: 0, paid: 0 };
+            } else {
+              continue;
+            }
+          }
+          const catDue = Math.max(0, (Number(yr[cat].total) || 0) - (Number(yr[cat].paid) || 0));
+          if (catDue > 0) {
+            const toApply = Math.min(remaining, catDue);
+            yr[cat].paid = (Number(yr[cat].paid) || 0) + toApply;
+            remaining -= toApply;
+          }
+        }
       }
     }
 
-    if (['tuition', 'exam', 'transport', 'other'].includes(catCode)) {
-      if (!yearItem[catCode]) yearItem[catCode] = { total: 0, paid: 0 };
-      yearItem[catCode].paid = (Number(yearItem[catCode].paid) || 0) + payNum;
-      if ((Number(yearItem[catCode].total) || 0) < yearItem[catCode].paid) {
-        yearItem[catCode].total = yearItem[catCode].paid;
-      }
-    } else {
-      // Custom category
-      if (!yearItem.other) yearItem.other = { total: 0, paid: 0 };
-      yearItem.other.paid = (Number(yearItem.other.paid) || 0) + payNum;
-      if ((Number(yearItem.other.total) || 0) < yearItem.other.paid) {
-        yearItem.other.total = yearItem.other.paid;
+    // If any amount still remains after filling all defined dues (edge case:
+    // payment slightly exceeds structure, e.g. rounding or unconfigured years),
+    // credit the remainder to the originally targeted year/category so the
+    // payment is never silently lost.
+    if (remaining > 0) {
+      const targetYr = feesObj.years.find((y: any) => y.year === yrNum);
+      if (targetYr) {
+        if (Array.isArray(targetYr.components) && targetYr.components.length > 0) {
+          const comp =
+            targetYr.components.find((c: any) => {
+              const cNorm = (c.category || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              return cNorm === normalizedCat || cNorm.includes(normalizedCat) || normalizedCat.includes(cNorm);
+            }) || targetYr.components[0];
+          if (comp) comp.paid = (Number(comp.paid) || 0) + remaining;
+        } else {
+          const fallbackCat = ['tuition', 'exam', 'transport', 'other'].includes(catCode) ? catCode : 'other';
+          if (!targetYr[fallbackCat]) targetYr[fallbackCat] = { total: 0, paid: 0 };
+          targetYr[fallbackCat].paid = (Number(targetYr[fallbackCat].paid) || 0) + remaining;
+          if ((Number(targetYr[fallbackCat].total) || 0) < targetYr[fallbackCat].paid) {
+            targetYr[fallbackCat].total = targetYr[fallbackCat].paid;
+          }
+        }
       }
     }
 

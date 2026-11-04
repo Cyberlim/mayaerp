@@ -1094,13 +1094,13 @@ export default function FinanceDashboard() {
   };
 
   // Open Edit Fee Structure & Collect Fee Modal (Sub-10ms Instant Open + SWR Cache + Skeleton Fallback)
-  const handleOpenAddFeeModal = async (student?: any) => {
+  const handleOpenAddFeeModal = async (student?: any, initialTab: "pay" | "structure" = "pay") => {
     let target = student;
     if (!target && students.length > 0) {
       target = students[0];
     }
     setSelectedStudentForFee(target);
-    setCollectFeeModalTab("pay");
+    setCollectFeeModalTab(initialTab);
     setIsAddFeeModalOpen(true);
 
     if (target) {
@@ -2813,7 +2813,19 @@ export default function FinanceDashboard() {
                       <button
                         onClick={() => {
                           setIsStatementModalOpen(false);
-                          handleOpenAddFeeModal(selectedStudentForStatement);
+                          handleOpenAddFeeModal(selectedStudentForStatement, "structure");
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs"
+                        title="Edit academic years, discounts and fee components"
+                      >
+                        <Settings className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Edit Fee Structure</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setIsStatementModalOpen(false);
+                          handleOpenAddFeeModal(selectedStudentForStatement, "pay");
                         }}
                         className="inline-flex items-center gap-1 px-3 py-1.5 bg-[#00875A] hover:bg-[#00704A] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs"
                       >
@@ -3152,7 +3164,19 @@ export default function FinanceDashboard() {
                       type="button"
                       onClick={() => {
                         setIsStatementModalOpen(false);
-                        handleOpenAddFeeModal(selectedStudentForStatement);
+                        handleOpenAddFeeModal(selectedStudentForStatement, "structure");
+                      }}
+                      className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs inline-flex items-center gap-1.5"
+                    >
+                      <Settings className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Edit Fee Structure</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsStatementModalOpen(false);
+                        handleOpenAddFeeModal(selectedStudentForStatement, "pay");
                       }}
                       className="px-4 py-2 bg-[#00875A] hover:bg-[#00704A] text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-2xs inline-flex items-center gap-1.5"
                     >
