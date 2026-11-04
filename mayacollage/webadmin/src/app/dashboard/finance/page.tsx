@@ -724,21 +724,24 @@ export default function FinanceDashboard() {
     return { isConfigured, gross, discount, total, paid, balance, status, courseBaseFee, courseObj, studentTxns };
   };
 
-  // Helper to extract student's starting academic year (e.g. 2023, 2024, 2025)
+  // Helper to extract student's starting academic / batch year (e.g. 2023, 2024, 2025)
   const getStudentStartYear = (s: any): string => {
+    // 1. Explicit batch takes highest priority (e.g. "2023", "2024")
+    if (s.batch) {
+      const m = String(s.batch).match(/\b(20\d{2})\b/);
+      if (m) return m[1];
+    }
+    // 2. Admission year (entry year of student)
     if (s.admissionYear || s.admission_year) {
       const m = String(s.admissionYear || s.admission_year).match(/\b(20\d{2})\b/);
       if (m) return m[1];
     }
+    // 3. Session year start (e.g. "2023-2026" -> "2023")
     if (s.sessionYear || s.session_year) {
       const m = String(s.sessionYear || s.session_year).match(/^\s*(20\d{2})/);
       if (m) return m[1];
     }
-    if (s.batch) {
-      const m = String(s.batch).match(/^\s*(20\d{2})/);
-      if (m) return m[1];
-    }
-    const any = String(s.sessionYear || s.session_year || s.batch || s.admissionYear || s.admission_year || "").match(/(20\d{2})/);
+    const any = String(s.batch || s.admissionYear || s.admission_year || s.sessionYear || s.session_year || "").match(/\b(20\d{2})\b/);
     return any ? any[1] : "";
   };
 
@@ -784,10 +787,14 @@ export default function FinanceDashboard() {
         } else {
           const qYear = selectedYear.trim();
           const startYr = getStudentStartYear(s);
-          const sy = String(s.sessionYear || s.session_year || "").trim();
-          const ay = String(s.admissionYear || s.admission_year || "").trim();
-          const bt = String(s.batch || "").trim();
-          matchesYear = startYr === qYear || sy.includes(qYear) || ay.includes(qYear) || bt.includes(qYear);
+          if (startYr === qYear) {
+            matchesYear = true;
+          } else {
+            const bt = String(s.batch || "").trim();
+            const ay = String(s.admissionYear || s.admission_year || "").trim();
+            const sy = String(s.sessionYear || s.session_year || "").trim();
+            matchesYear = bt === qYear || ay.startsWith(qYear) || sy.startsWith(qYear);
+          }
         }
       }
 
