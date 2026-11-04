@@ -768,8 +768,9 @@ export default function FinanceDashboard() {
     return students.filter(s => {
       const summary = getStudentFeeSummary(s);
       const fName = s.firstName || s.first_name || "";
+      const mName = s.middleName || s.middle_name || "";
       const lName = s.lastName || s.last_name || "";
-      const name = `${fName} ${lName}`.toLowerCase();
+      const name = (s.name || [fName, mName, lName].filter(Boolean).join(" ")).toLowerCase();
       const enroll = (s.enrollmentNumber || s.enrollment_number || "").toLowerCase();
       const adm = (s.admissionNumber || s.admission_number || "").toLowerCase();
       const code = (s.studentId || s.student_id || "").toLowerCase();
@@ -2117,8 +2118,9 @@ export default function FinanceDashboard() {
                           const isNotPaid = summary.paid === 0;
 
                           const fName = s.firstName || s.first_name || "";
+                          const mName = s.middleName || s.middle_name || "";
                           const lName = s.lastName || s.last_name || "";
-                          const fullName = (s.name || `${fName} ${lName}`).trim() || "Student";
+                          const fullName = (s.name || [fName, mName, lName].filter(Boolean).join(" ")).trim() || "Student";
                           const fatherName = (s.fatherName || s.father_name || s.documents?.fatherName || "").trim();
                           const roll = s.enrollmentNumber || s.enrollment_number || s.admissionNumber || s.admission_number || s.studentId || s.student_id || "N/A";
                           const courseCode = summary.courseObj?.code || s.courseCode || s.course_code || "COURSE";
@@ -2854,8 +2856,9 @@ export default function FinanceDashboard() {
                   {(() => {
                     const stu = studentStatementData?.student || selectedStudentForStatement || {};
                     const fName = stu.firstName || stu.first_name || "";
+                    const mName = stu.middleName || stu.middle_name || "";
                     const lName = stu.lastName || stu.last_name || "";
-                    const fullName = (stu.name || `${fName} ${lName}`).trim() || "Student";
+                    const fullName = (stu.name || [fName, mName, lName].filter(Boolean).join(" ")).trim() || "Student";
                     const roll = stu.enrollmentNumber || stu.enrollment_number || stu.admissionNumber || stu.admission_number || stu.studentId || stu.student_id || "N/A";
                     const fatherName = (stu.fatherName || stu.father_name || stu.documents?.fatherName || "").trim();
                     const courseName = stu.selectedProgram?.name || stu.courseName || stu.course_name || stu.courseCode || "Course";
@@ -3219,8 +3222,9 @@ export default function FinanceDashboard() {
               {(() => {
                 const activeStudent = selectedStudentForFee || students.find(s => (s._id || s.id) === feeForm.studentId);
                 const fName = activeStudent?.firstName || activeStudent?.first_name || "";
+                const mName = activeStudent?.middleName || activeStudent?.middle_name || "";
                 const lName = activeStudent?.lastName || activeStudent?.last_name || "";
-                const fullName = (activeStudent?.name || `${fName} ${lName}`).trim() || "Student";
+                const fullName = (activeStudent?.name || [fName, mName, lName].filter(Boolean).join(" ")).trim() || "Student";
                 const rollNo = activeStudent?.enrollmentNumber || activeStudent?.admissionNumber || activeStudent?.studentId || "N/A";
 
                 // Course and Branch details

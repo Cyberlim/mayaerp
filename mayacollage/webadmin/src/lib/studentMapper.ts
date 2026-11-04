@@ -45,6 +45,7 @@ export function mapPgStudent(row: any) {
       firstName: row.first_name || '',
       middleName: cleanMiddleName,
       lastName: cleanLastName,
+      name: [row.first_name, cleanMiddleName, cleanLastName].filter(Boolean).join(' ').trim(),
       fatherName: cleanFatherName,
       motherName: cleanMotherName,
       casteCategory: row.caste_category || documents.casteCategory || '',
