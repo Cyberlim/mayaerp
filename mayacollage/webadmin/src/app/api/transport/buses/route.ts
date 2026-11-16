@@ -14,7 +14,11 @@ export async function GET(request: Request) {
       const cached = await getCache(cacheKey);
       if (cached) {
         return NextResponse.json(cached, {
-          headers: { "X-Cache-Source": "Upstash-Redis", "X-Database": "Neon-PostgreSQL" }
+          headers: {
+            "X-Cache-Source": "Upstash-Redis",
+            "X-Database": "Neon-PostgreSQL",
+            "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate"
+          }
         });
       }
     }
@@ -126,10 +130,20 @@ export async function GET(request: Request) {
     await setCache(cacheKey, buses, DEFAULT_CACHE_TTL);
 
     return NextResponse.json(buses, {
-      headers: { "X-Cache-Source": "Neon-PostgreSQL-Live", "X-Database": "Neon-PostgreSQL" }
+      headers: {
+        "X-Cache-Source": "Neon-PostgreSQL-Live",
+        "X-Database": "Neon-PostgreSQL",
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate"
+      }
     });
   } catch (error: any) {
     console.error("Transport GET Buses Error (PostgreSQL):", error);
-    return NextResponse.json({ message: "Error fetching buses from PostgreSQL", error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { message: "Error fetching buses from PostgreSQL", error: error.message },
+      {
+        status: 500,
+        headers: { "Cache-Control": "no-store, no-cache, must-revalidate" }
+      }
+    );
   }
 }

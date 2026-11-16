@@ -273,13 +273,14 @@ export default function TransportDashboard() {
     return [];
   };
 
-  const fetchBuses = async () => {
+  const fetchBuses = async (bustCache = false) => {
     try {
       setLoading(true);
-      const res = await fetch("/api/transport/buses");
+      const url = bustCache ? `/api/transport/buses?bust=true&t=${Date.now()}` : `/api/transport/buses?t=${Date.now()}`;
+      const res = await fetch(url, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        setBuses(data);
+        setBuses(Array.isArray(data) ? data : []);
       } else {
         showToast('error', 'Failed to fetch transport fleet records');
       }
@@ -748,7 +749,7 @@ export default function TransportDashboard() {
             </button>
 
             <button 
-              onClick={fetchBuses}
+              onClick={() => fetchBuses(true)}
               disabled={actionLoading}
               className="p-2.5 bg-white/15 hover:bg-white/25 active:scale-95 text-white border border-white/20 rounded-2xl transition-all shadow-sm"
               title="Refresh Fleet Records"
