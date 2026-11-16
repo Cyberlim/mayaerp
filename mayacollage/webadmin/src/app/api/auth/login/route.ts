@@ -137,8 +137,20 @@ export async function POST(request: Request) {
       );
     }
 
-    // Password verification
-    let isMatch = await bcrypt.compare(password, user.password);
+    // Password verification: safely handle null / non-string stored passwords
+    if (!user.password || typeof user.password !== 'string') {
+      return NextResponse.json(
+        { error: 'Invalid credentials. Password not configured.' },
+        { status: 401 }
+      );
+    }
+
+    let isMatch = false;
+    try {
+      if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$') || user.password.startsWith('$2y$')) {
+        isMatch = await bcrypt.compare(password, user.password);
+      }
+    } catch (_) {}
 
     // Fallback for plaintext passwords
     if (!isMatch && password === user.password) {
@@ -146,7 +158,9 @@ export async function POST(request: Request) {
       const salt = await bcrypt.genSalt(10);
       const hashed = await bcrypt.hash(password, salt);
       try {
-        await User.findByIdAndUpdate(user._id, { password: hashed });
+        if (user._id) {
+          await User.findByIdAndUpdate(user._id, { password: hashed });
+        }
         await pgQuery('UPDATE users SET password = $2 WHERE email = $1', [user.email, hashed]);
       } catch (_) {}
     }
@@ -217,4 +231,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

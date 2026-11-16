@@ -112,9 +112,9 @@ export async function POST(req: Request) {
         const yrNum = Number(targetYear) || 1;
         let feesObj = typeof stu.fees === 'string' ? JSON.parse(stu.fees) : (stu.fees || {});
         if (feesObj && Array.isArray(feesObj.years)) {
-          const yrObj = feesObj.years.find(y => y.year === yrNum);
+          const yrObj = feesObj.years.find((y: any) => y.year === yrNum);
           if (yrObj && Array.isArray(yrObj.components)) {
-            const comp = yrObj.components.find(c => (c.category || '').toLowerCase().includes('transport'));
+            const comp = yrObj.components.find((c: any) => (c.category || '').toLowerCase().includes('transport'));
             if (comp) comp.paid = totalTransportPaid;
           }
         }
@@ -122,10 +122,10 @@ export async function POST(req: Request) {
         let totalFee = 0;
         let paidFee = 0;
         if (feesObj && Array.isArray(feesObj.years)) {
-          feesObj.years.forEach(y => {
+          feesObj.years.forEach((y: any) => {
             let yrGross = 0;
             let yrPaid = 0;
-            (y.components || []).forEach(c => {
+            (y.components || []).forEach((c: any) => {
               yrGross += Number(c.amount) || 0;
               yrPaid += Number(c.paid) || 0;
             });
