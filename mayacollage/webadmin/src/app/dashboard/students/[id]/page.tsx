@@ -4216,6 +4216,32 @@ export default function StudentDetailScreen() {
         )}
       </AnimatePresence>
 
+            {/* Print Stylesheet for Fee Structure Report */}
+      <style jsx global>{`
+        @media print {
+          body {
+            background: white !important;
+            overflow: visible !important;
+          }
+          /* Hide all screen elements when printing the report modal */
+          body > *:not(.fixed),
+          .print\\:hidden {
+            display: none !important;
+          }
+          #fee-structure-printable {
+            display: block !important;
+            overflow: visible !important;
+            height: auto !important;
+            max-height: none !important;
+            width: 100% !important;
+          }
+          .page-break-inside-avoid {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+        }
+      `}</style>
+
       {/* Institutional Fee Structure Report Modal */}
       <AnimatePresence>
         {isFeeReportModalOpen && (
@@ -4224,7 +4250,7 @@ export default function StudentDetailScreen() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl max-w-4xl w-full shadow-2xl border border-slate-100 flex flex-col my-auto max-h-[90vh] overflow-hidden"
+              className="bg-white rounded-3xl max-w-4xl w-full shadow-2xl border border-slate-100 flex flex-col my-auto max-h-[90vh] overflow-hidden print:max-h-none print:h-auto print:max-w-none print:w-full print:shadow-none print:border-none print:rounded-none print:overflow-visible print:block"
             >
               <div className="px-6 sm:px-8 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0 sticky top-0 z-10 print:hidden">
                 <div className="flex items-center gap-3">
@@ -4257,7 +4283,7 @@ export default function StudentDetailScreen() {
               </div>
 
               {/* Printable Document Body */}
-              <div className="p-6 sm:p-8 space-y-6 text-slate-800 bg-white overflow-y-auto flex-1 overscroll-contain" id="fee-structure-printable">
+              <div className="p-6 sm:p-8 space-y-6 text-slate-800 bg-white overflow-y-auto flex-1 overscroll-contain print:overflow-visible print:h-auto print:max-h-none print:p-0 print:block" id="fee-structure-printable">
                 {/* College Official Letterhead */}
                 <div className="border-b-2 border-slate-900 pb-4 flex justify-between items-start">
                   <div>
@@ -4357,7 +4383,7 @@ export default function StudentDetailScreen() {
                     const allComps = getYearComponents(fy);
 
                     return (
-                      <div key={fy.year} className="border border-slate-200 rounded-2xl overflow-hidden">
+                      <div key={fy.year} className="border border-slate-200 rounded-2xl overflow-hidden print:border-slate-300 print:break-inside-avoid page-break-inside-avoid">
                         <div className="bg-slate-100 px-4 py-2 flex justify-between items-center text-xs font-black">
                           <span className="text-slate-900">Academic Year {fy.year}</span>
                           <span className="text-slate-600">
@@ -4417,7 +4443,7 @@ export default function StudentDetailScreen() {
 
                 {/* Campus Transport Ledger if assigned */}
                 {assignedBus && (
-                  <div className="border border-amber-200 rounded-2xl overflow-hidden">
+                  <div className="border border-amber-200 rounded-2xl overflow-hidden print:border-slate-300 print:break-inside-avoid page-break-inside-avoid">
                     <div className="bg-amber-50 px-4 py-2 flex justify-between items-center text-xs font-black">
                       <span className="text-amber-900">
                         Campus Transport Route: {assignedBus.bus?.busNo} ({assignedBus.assignment?.stopName})
