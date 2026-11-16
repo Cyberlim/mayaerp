@@ -106,7 +106,8 @@ export async function GET(request: Request) {
           fare: Number(st.fare) || 0,
           paymentStatus: st.paymentStatus || "Pending",
           paymentDate: st.paymentDate || null,
-          transactionId: st.transactionId || null
+          transactionId: st.transactionId || null,
+          monthRecords: st.monthRecords || {}
         };
       });
 

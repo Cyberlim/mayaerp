@@ -247,8 +247,24 @@ export async function POST(request: Request) {
             targetYr.components.find((c: any) => {
               const cNorm = (c.category || '').toLowerCase().replace(/[^a-z0-9]/g, '');
               return cNorm === normalizedCat || cNorm.includes(normalizedCat) || normalizedCat.includes(cNorm);
-            }) || targetYr.components[0];
-          if (comp) comp.paid = (Number(comp.paid) || 0) + remaining;
+            });
+          if (comp) {
+            comp.paid = (Number(comp.paid) || 0) + remaining;
+            if ((Number(comp.amount) || 0) < comp.paid) {
+              comp.amount = comp.paid;
+            }
+          } else {
+            // Extra component (e.g. Tie Fee, College T-Shirt, Bag, Blazer, Fine)
+            // Automatically append it to components so it visibly renders in the fee breakdown cards!
+            const newCompName = categoryName || (catCode.charAt(0).toUpperCase() + catCode.slice(1));
+            targetYr.components.push({
+              title: newCompName,
+              category: catCode,
+              amount: remaining,
+              paid: remaining,
+              frequency: 'One Time'
+            });
+          }
         } else {
           const fallbackCat = ['tuition', 'exam', 'transport', 'other'].includes(catCode) ? catCode : 'other';
           if (!targetYr[fallbackCat]) targetYr[fallbackCat] = { total: 0, paid: 0 };

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { query as pgQuery } from "@/lib/postgres";
 import { delCache, delCachePattern } from "@/lib/redis";
 
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { busId, studentId, markPaid, paymentMode = 'Cash' } = body;
+    const { busId, studentId, markPaid, paymentMode = 'Cash', month, year, status, amount, customFare } = body;
 
     if (!busId || !studentId) {
       return NextResponse.json({ message: "Bus ID and Student ID are required" }, { status: 400 });
@@ -24,6 +24,157 @@ export async function POST(req: Request) {
 
     if (studentIdx === -1) {
       return NextResponse.json({ message: "Student is not assigned to this bus" }, { status: 404 });
+    }
+
+    const assignment = currentStudents[studentIdx];
+    const defaultMonthlyFare = Number(customFare || assignment.fare) || 0;
+
+    // ─── IF MONTH-WISE UPDATE (Full Paid, Partial, Absent, Due) ───────────────
+    if (month) {
+      const targetYear = String(year || 1);
+
+      let resolvedStatus = 'Due';
+      let paidAmount = 0;
+
+      if (status) {
+        resolvedStatus = status;
+        if (status === 'Paid') {
+          paidAmount = defaultMonthlyFare;
+        } else if (status === 'Partial') {
+          paidAmount = Math.max(0, Number(amount) || 0);
+        } else {
+          paidAmount = 0;
+        }
+      } else if (markPaid !== undefined) {
+        if (markPaid) {
+          resolvedStatus = 'Paid';
+          paidAmount = defaultMonthlyFare;
+        } else {
+          resolvedStatus = 'Due';
+          paidAmount = 0;
+        }
+      }
+
+      if (!assignment.monthRecords || typeof assignment.monthRecords !== 'object') {
+        assignment.monthRecords = {};
+      }
+      if (!assignment.monthRecords[targetYear]) {
+        assignment.monthRecords[targetYear] = {};
+      }
+
+      assignment.monthRecords[targetYear][month] = {
+        status: resolvedStatus,
+        paid: resolvedStatus === 'Paid' || (resolvedStatus === 'Partial' && paidAmount > 0),
+        amount: resolvedStatus === 'Partial' ? paidAmount : (resolvedStatus === 'Paid' ? defaultMonthlyFare : 0),
+        paymentDate: (resolvedStatus === 'Paid' || resolvedStatus === 'Partial') ? new Date().toISOString() : null,
+        updatedAt: new Date().toISOString()
+      };
+
+      const academicMonths = [
+        "July", "August", "September", "October", "November", "December",
+        "January", "February", "March", "April", "May", "June"
+      ];
+
+      let totalTransportPaid = 0;
+      const yrRecs = assignment.monthRecords[targetYear] || {};
+      academicMonths.forEach(m => {
+        const rec = yrRecs[m];
+        if (rec) {
+          if (rec.status === 'Paid') {
+            totalTransportPaid += defaultMonthlyFare;
+          } else if (rec.status === 'Partial') {
+            totalTransportPaid += Number(rec.amount) || 0;
+          } else if (rec.paid && !rec.status) {
+            totalTransportPaid += defaultMonthlyFare;
+          }
+        }
+      });
+
+      const allMonthsCleared = academicMonths.every(m => {
+        const rec = yrRecs[m];
+        return rec && (rec.status === 'Paid' || rec.status === 'Absent');
+      });
+
+      assignment.paymentStatus = allMonthsCleared ? 'Paid' : (totalTransportPaid > 0 ? 'Partial' : 'Pending');
+      if (allMonthsCleared && !assignment.paymentDate) assignment.paymentDate = new Date().toISOString();
+
+      await pgQuery(`
+        UPDATE buses SET
+          students = $2,
+          updated_at = NOW()
+        WHERE id = $1
+      `, [busId, JSON.stringify(currentStudents)]);
+
+      // Update student table
+      const stuRes = await pgQuery(`SELECT * FROM students WHERE id = $1 LIMIT 1`, [studentId]);
+      if (stuRes.rows.length > 0) {
+        const stu = stuRes.rows[0];
+        const yrNum = Number(targetYear) || 1;
+        let feesObj = typeof stu.fees === 'string' ? JSON.parse(stu.fees) : (stu.fees || {});
+        if (feesObj && Array.isArray(feesObj.years)) {
+          const yrObj = feesObj.years.find(y => y.year === yrNum);
+          if (yrObj && Array.isArray(yrObj.components)) {
+            const comp = yrObj.components.find(c => (c.category || '').toLowerCase().includes('transport'));
+            if (comp) comp.paid = totalTransportPaid;
+          }
+        }
+
+        let totalFee = 0;
+        let paidFee = 0;
+        if (feesObj && Array.isArray(feesObj.years)) {
+          feesObj.years.forEach(y => {
+            let yrGross = 0;
+            let yrPaid = 0;
+            (y.components || []).forEach(c => {
+              yrGross += Number(c.amount) || 0;
+              yrPaid += Number(c.paid) || 0;
+            });
+            const disc = Number(y.discount) || 0;
+            totalFee += Math.max(0, yrGross - disc);
+            paidFee += yrPaid;
+          });
+        }
+
+        const feeBalance = Math.max(0, totalFee - paidFee);
+        const feeStatus = totalFee > 0 ? (paidFee >= totalFee ? 'paid' : paidFee > 0 ? 'partial' : 'unpaid') : 'unpaid';
+
+        await pgQuery(`
+          UPDATE students SET
+            fees = $2,
+            transport_paid = $3,
+            total_fee = $4,
+            paid_fee = $5,
+            fee_balance = $6,
+            fee_status = $7,
+            updated_at = NOW()
+          WHERE id = $1
+        `, [
+          studentId,
+          JSON.stringify(feesObj),
+          totalTransportPaid,
+          totalFee,
+          paidFee,
+          feeBalance,
+          feeStatus
+        ]);
+      }
+
+      await Promise.all([
+        delCachePattern("transport:*"),
+        delCache(`student:${studentId}`),
+        delCachePattern("students:*"),
+        delCache(`fee:student-account:${studentId}`),
+        delCache("finance:all-data")
+      ]);
+
+      return NextResponse.json({
+        success: true,
+        message: `Transport fee for ${month} updated to ${resolvedStatus}!`,
+        month,
+        status: resolvedStatus,
+        monthRecord: assignment.monthRecords[targetYear][month],
+        assignment
+      }, { status: 200 });
     }
 
     const willBePaid = Boolean(markPaid);
