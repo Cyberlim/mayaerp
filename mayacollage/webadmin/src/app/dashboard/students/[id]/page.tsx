@@ -4298,7 +4298,7 @@ export default function StudentDetailScreen() {
                       MAYA GROUP OF INSTITUTIONS
                     </h1>
                     <p className="text-xs font-bold text-slate-600 mt-0.5">
-                      Campus: NH-72, Chakrata Road, Selaqui, Dehradun, Uttarakhand
+                      Campus: Mendu Road, Near Police Line, Hathras (U.P.)
                     </p>
                     <p className="text-xs font-semibold text-slate-500">
                       Office of Finance & Accounts • Institutional Fee Dossier

@@ -230,7 +230,7 @@ export default function ReceiptModal({ isOpen, onClose, receiptData }: ReceiptMo
             </div>
 
             <p className="text-[11px] text-slate-500 max-w-lg mx-auto">
-              Campus Road, Education Hub • Affiliated to State Technical University & AICTE Approved
+              Mendu Road, Near Police Line, Hathras (U.P.) • Phone: +91 9058479966, 9528077808
             </p>
 
             <div className="mt-3 inline-block px-4 py-1 rounded-full bg-slate-100 text-slate-800 border border-slate-300 text-xs font-black tracking-widest uppercase">
