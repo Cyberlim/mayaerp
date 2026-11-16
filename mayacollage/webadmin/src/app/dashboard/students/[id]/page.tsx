@@ -2992,43 +2992,184 @@ export default function StudentDetailScreen() {
                   </div>
                 )}
 
-                {/* CAMPUS TRANSPORT ROUTE DOSSIER */}
-                {assignedBus && (
-                  <div className="bg-amber-50/70 rounded-3xl p-6 border border-amber-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3.5 bg-amber-600 text-white rounded-2xl shadow-md shadow-amber-600/20">
-                        <Bus className="w-6 h-6" />
+                {/* CAMPUS TRANSPORT ROUTE DOSSIER: SEPARATE MONTH-WISE & YEAR-WISE */}
+                {assignedBus && (() => {
+                  const assignment = assignedBus.assignment || {};
+                  const monthlyRate = Number(assignment.fare) || 0;
+                  const monthRecords = assignment.monthRecords || {};
+                  const currentCourseYear = Number(studentData?.courseYear) || 1;
+
+                  const academicMonths = [
+                    "July", "August", "September", "October", "November", "December",
+                    "January", "February", "March", "April", "May", "June"
+                  ];
+
+                  const activeTransportYear = currentCourseYear;
+                  const yrRecords = monthRecords[String(activeTransportYear)] || {};
+                  const paidCount = academicMonths.filter(m => yrRecords[m]?.paid).length;
+                  const totalPaidForYear = paidCount * monthlyRate;
+                  const annualTransportAssessed = academicMonths.length * monthlyRate;
+                  const pendingDue = Math.max(0, annualTransportAssessed - totalPaidForYear);
+
+                  const handleToggleMonth = async (monthName: string, currentlyPaid: boolean) => {
+                    const actionName = currentlyPaid ? "MARK AS UNPAID" : "MARK AS PAID";
+                    if (!confirm(`Confirm ${actionName} for ${monthName} (${formatCurrency(monthlyRate)}) transport fee?`)) return;
+
+                    try {
+                      const res = await fetch("/api/transport/month-payment", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          busId: assignedBus.bus?.id || assignedBus.bus?._id,
+                          studentId: studentData?.id || studentData?._id,
+                          month: monthName,
+                          year: activeTransportYear,
+                          markPaid: !currentlyPaid,
+                          customFare: monthlyRate
+                        })
+                      });
+                      if (res.ok) {
+                        const data = await res.json();
+                        setAssignedBus((prev: any) => {
+                          if (!prev) return prev;
+                          return {
+                            ...prev,
+                            assignment: {
+                              ...prev.assignment,
+                              monthRecords: data.assignment?.monthRecords || prev.assignment?.monthRecords
+                            }
+                          };
+                        });
+                        alert(`${monthName} transport fee updated!`);
+                      } else {
+                        alert("Failed to update month transport fee.");
+                      }
+                    } catch (err: any) {
+                      alert(err.message || "Network error updating month fee.");
+                    }
+                  };
+
+                  return (
+                    <div className="bg-gradient-to-br from-amber-50/90 via-orange-50/50 to-white rounded-3xl p-6 border-2 border-amber-200/90 shadow-lg shadow-amber-900/5 space-y-5">
+                      {/* Top Header Card */}
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-amber-200/60">
+                        <div className="flex items-center gap-4">
+                          <div className="p-4 bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-2xl shadow-md shadow-amber-600/25">
+                            <Bus className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="text-lg font-black text-slate-900">
+                                {assignedBus.bus?.busNo}
+                              </h4>
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300">
+                                Campus Transport Commuter
+                              </span>
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 border border-blue-200">
+                                Independent Transport Ledger
+                              </span>
+                            </div>
+                            <p className="text-xs font-semibold text-slate-600 mt-1">
+                              Route: <strong className="text-slate-900">{assignedBus.bus?.routeName}</strong> • Pickup Stop: <strong className="text-amber-700">{assignment.stopName}</strong>
+                            </p>
+                            <p className="text-xs font-bold text-slate-500 mt-0.5">
+                              Monthly Stop Fare: <strong className="text-amber-800 text-sm font-black">{formatCurrency(monthlyRate)} / month</strong>
+                              <span className="text-slate-400 font-medium ml-2">(Kept separate from academic tuition fees)</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <Link href="/dashboard/transport">
+                            <button className="px-4 py-2.5 bg-white hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-2xl text-xs font-black transition-all flex items-center gap-1.5 shadow-sm cursor-pointer">
+                              <span>Central Transport Hub</span>
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </button>
+                          </Link>
+                        </div>
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-base font-black text-slate-900">
-                            {assignedBus.bus?.busNo}
-                          </h4>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                            assignedBus.assignment?.paymentStatus === 'Paid' 
-                              ? 'bg-emerald-100 text-emerald-800' 
-                              : 'bg-rose-100 text-rose-700'
-                          }`}>
-                            {assignedBus.assignment?.paymentStatus === 'Paid' ? '✓ Transport Fee Paid' : '✗ Transport Fee Due'}
+
+                      {/* Year Breakdown KPI Bar */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white/80 p-4 rounded-2xl border border-amber-100">
+                        <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Academic Year</p>
+                          <p className="text-sm font-black text-slate-800 mt-0.5">Year {activeTransportYear}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Monthly Fare</p>
+                          <p className="text-sm font-black text-amber-700 mt-0.5">{formatCurrency(monthlyRate)} / mo</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Months Paid</p>
+                          <p className="text-sm font-black text-emerald-600 mt-0.5">
+                            {paidCount} / {academicMonths.length} Months ({formatCurrency(totalPaidForYear)})
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Pending Dues</p>
+                          <p className={`text-sm font-black mt-0.5 ${pendingDue > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            {formatCurrency(pendingDue)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Month-Wise Payment Matrix */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h5 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                            <span>Month-Wise Transport Fee Matrix (Year {activeTransportYear})</span>
+                            <span className="text-[10px] font-semibold text-slate-400 normal-case">(Click any month to collect or toggle status)</span>
+                          </h5>
+                          <span className="text-xs font-bold text-amber-800">
+                            Rate: {formatCurrency(monthlyRate)} / month
                           </span>
                         </div>
-                        <p className="text-xs font-semibold text-slate-600 mt-0.5">
-                          Route: <strong className="text-slate-800">{assignedBus.bus?.routeName}</strong> • Pickup Stop: <strong className="text-amber-800">{assignedBus.assignment?.stopName}</strong>
-                        </p>
-                        <p className="text-[11px] font-bold text-slate-500 mt-0.5">
-                          Assessed Transport Fare: <strong className="text-slate-800">{formatCurrency(assignedBus.assignment?.fare || 0)}</strong>
-                        </p>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                          {academicMonths.map((m, idx) => {
+                            const rec = yrRecords[m];
+                            const isMonthPaid = Boolean(rec?.paid);
+
+                            return (
+                              <div
+                                key={m}
+                                onClick={() => handleToggleMonth(m, isMonthPaid)}
+                                className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between select-none relative ${
+                                  isMonthPaid 
+                                    ? 'bg-emerald-500/10 border-emerald-400/90 text-emerald-900 shadow-sm hover:border-emerald-500 hover:shadow-md' 
+                                    : 'bg-white border-slate-200/90 hover:border-amber-400 text-slate-700 hover:shadow-md'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                    M{idx + 1}
+                                  </span>
+                                  <span className={`w-2 h-2 rounded-full ${isMonthPaid ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                                </div>
+
+                                <div>
+                                  <p className="font-black text-xs text-slate-900">{m}</p>
+                                  <p className={`text-xs font-bold mt-0.5 ${isMonthPaid ? 'text-emerald-700' : 'text-slate-600'}`}>
+                                    {formatCurrency(monthlyRate)}
+                                  </p>
+                                </div>
+
+                                <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
+                                  <span className={`text-[10px] font-black uppercase ${isMonthPaid ? 'text-emerald-700' : 'text-rose-600'}`}>
+                                    {isMonthPaid ? '✓ Paid' : '○ Due'}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-slate-400">
+                                    {isMonthPaid ? 'Revert' : 'Pay'}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
-
-                    <Link href="/dashboard/transport">
-                      <button className="px-4 py-2.5 bg-white hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-2xl text-xs font-black transition-all flex items-center gap-1.5 shadow-sm">
-                        <span>Manage in Transport Hub</span>
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </button>
-                    </Link>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* RECENT FEE TRANSACTIONS FOR THIS STUDENT */}
                 {transactions.length > 0 && (

@@ -53,6 +53,7 @@ interface AssignedStudent {
   paymentStatus: 'Paid' | 'Pending';
   paymentDate?: string;
   transactionId?: string;
+  monthRecords?: Record<string, Record<string, { paid: boolean; paymentDate?: string; amount?: number }>>;
 }
 
 interface BusFleet {
