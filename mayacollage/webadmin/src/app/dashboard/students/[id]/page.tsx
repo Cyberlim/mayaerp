@@ -4216,31 +4216,7 @@ export default function StudentDetailScreen() {
         )}
       </AnimatePresence>
 
-            {/* Print Stylesheet for Fee Structure Report */}
-      <style jsx global>{`
-        @media print {
-          body {
-            background: white !important;
-            overflow: visible !important;
-          }
-          /* Hide all screen elements when printing the report modal */
-          body > *:not(.fixed),
-          .print\\:hidden {
-            display: none !important;
-          }
-          #fee-structure-printable {
-            display: block !important;
-            overflow: visible !important;
-            height: auto !important;
-            max-height: none !important;
-            width: 100% !important;
-          }
-          .page-break-inside-avoid {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
-        }
-      `}</style>
+            
 
       {/* Institutional Fee Structure Report Modal */}
       <AnimatePresence>
@@ -4268,7 +4244,54 @@ export default function StudentDetailScreen() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => window.print()}
+                    onClick={() => {
+                      const printContent = document.getElementById("fee-structure-printable");
+                      if (!printContent) return;
+                      const win = window.open("", "_blank");
+                      if (!win) {
+                        window.print();
+                        return;
+                      }
+                      win.document.write(`
+                        <!DOCTYPE html>
+                        <html>
+                          <head>
+                            <title>Maya Group of Institutions - Fee Structure Report</title>
+                            <meta charset="utf-8" />
+                            <meta name="viewport" content="width=device-width, initial-scale=1" />
+                            <script src="https://cdn.tailwindcss.com"></script>
+                            <style>
+                              @page {
+                                size: A4 portrait;
+                                margin: 12mm 15mm 12mm 15mm;
+                              }
+                              body {
+                                -webkit-print-color-adjust: exact !important;
+                                print-color-adjust: exact !important;
+                                background-color: #ffffff !important;
+                                font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                              }
+                              .page-break-avoid {
+                                break-inside: avoid !important;
+                                page-break-inside: avoid !important;
+                              }
+                            </style>
+                          </head>
+                          <body class="p-4 bg-white text-slate-800">
+                            ${printContent.innerHTML}
+                            <script>
+                              window.onload = function() {
+                                setTimeout(function() {
+                                  window.print();
+                                  window.close();
+                                }, 350);
+                              };
+                            </script>
+                          </body>
+                        </html>
+                      `);
+                      win.document.close();
+                    }}`
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Printer className="w-4 h-4" /> Print / Save PDF
