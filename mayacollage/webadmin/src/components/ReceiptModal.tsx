@@ -49,7 +49,36 @@ export default function ReceiptModal({ isOpen, onClose, receiptData }: ReceiptMo
   const amount = Number(receiptData.amount) || 0;
 
   const handlePrint = () => {
-    window.print();
+    const printContent = printRef.current;
+    if (!printContent) {
+      window.print();
+      return;
+    }
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      window.print();
+      return;
+    }
+    doc.open();
+    doc.write('<!DOCTYPE html><html><head><title>Payment Receipt - ' + receiptNo + '</title><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><script src="https://cdn.tailwindcss.com"></script><style>@page { size: auto; margin: 10mm; } html, body { background: #fff !important; color: #000 !important; margin: 0; padding: 16px; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; } * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } .print\\:hidden { display: none !important; }</style></head><body>' + printContent.innerHTML + '</body></html>');
+    doc.close();
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      setTimeout(() => {
+        if (document.body.contains(iframe)) {
+          document.body.removeChild(iframe);
+        }
+      }, 2000);
+    }, 400);
   };
 
   const handleCopy = () => {

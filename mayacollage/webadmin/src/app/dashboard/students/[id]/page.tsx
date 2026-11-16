@@ -4219,74 +4219,7 @@ export default function StudentDetailScreen() {
             
 
       
-      {/* Comprehensive Multi-Page Print Styles */}
-      <style jsx global>{`
-        @media print {
-          @page {
-            size: A4 portrait;
-            margin: 10mm 12mm 10mm 12mm;
-          }
-          html, body {
-            background: #ffffff !important;
-            color: #000000 !important;
-            height: auto !important;
-            min-height: 100% !important;
-            overflow: visible !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          /* Hide all screen elements except the printable fee report when printing */
-          body > *:not(#__next),
-          header,
-          aside,
-          nav,
-          .print\\:hidden {
-            display: none !important;
-          }
-          /* Break the fixed modal out into full flow document */
-          .fixed.inset-0 {
-            position: static !important;
-            inset: auto !important;
-            background: transparent !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            overflow: visible !important;
-            height: auto !important;
-            max-height: none !important;
-            display: block !important;
-            width: 100% !important;
-          }
-          .fixed.inset-0 > div,
-          .fixed.inset-0 > div > div {
-            max-height: none !important;
-            height: auto !important;
-            overflow: visible !important;
-            box-shadow: none !important;
-            border: none !important;
-            border-radius: 0 !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            display: block !important;
-          }
-          #fee-structure-printable {
-            overflow: visible !important;
-            overflow-y: visible !important;
-            height: auto !important;
-            max-height: none !important;
-            flex: none !important;
-            padding: 0 !important;
-            display: block !important;
-            width: 100% !important;
-          }
-          .page-break-inside-avoid,
-          [class*="rounded-2xl"] {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
-        }
-      `}</style>
+      
 
       {/* Institutional Fee Structure Report Modal */}
       <AnimatePresence>
@@ -4314,7 +4247,35 @@ export default function StudentDetailScreen() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => window.print()}
+                    onClick={() => {
+                      const printContent = document.getElementById("fee-structure-printable");
+                      if (!printContent) return;
+                      const iframe = document.createElement("iframe");
+                      iframe.style.position = "fixed";
+                      iframe.style.right = "0";
+                      iframe.style.bottom = "0";
+                      iframe.style.width = "0";
+                      iframe.style.height = "0";
+                      iframe.style.border = "0";
+                      document.body.appendChild(iframe);
+                      const doc = iframe.contentWindow?.document;
+                      if (!doc) return;
+                      doc.open();
+                      const sanitizedHtml = printContent.innerHTML
+                        .replace(/overflow-y-auto/g, 'overflow-visible')
+                        .replace(/flex-1/g, '');
+                      doc.write('<!DOCTYPE html><html><head><title>Maya Group of Institutions - Fee Structure Report</title><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><script src="https://cdn.tailwindcss.com"></script><style>@page { size: A4 portrait; margin: 12mm 15mm 12mm 15mm; } html, body { height: auto !important; min-height: 100% !important; overflow: visible !important; background-color: #ffffff !important; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; } * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } .page-break-inside-avoid { break-inside: avoid !important; page-break-inside: avoid !important; } table { page-break-inside: auto; } tr { page-break-inside: avoid; page-break-after: auto; }</style></head><body class="p-6 bg-white text-slate-800">' + sanitizedHtml + '</body></html>');
+                      doc.close();
+                      setTimeout(() => {
+                        iframe.contentWindow?.focus();
+                        iframe.contentWindow?.print();
+                        setTimeout(() => {
+                          if (document.body.contains(iframe)) {
+                            document.body.removeChild(iframe);
+                          }
+                        }, 2000);
+                      }, 500);
+                    }}
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Printer className="w-4 h-4" /> Print / Save PDF
