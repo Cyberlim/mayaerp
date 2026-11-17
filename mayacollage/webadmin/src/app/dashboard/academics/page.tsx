@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  Building2, 
+  Building2,
+  Edit, 
   BookOpen, 
   Users, 
   Plus, 
@@ -414,9 +415,21 @@ export default function AcademicManagement() {
                       >
                         <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-white to-transparent"></div>
                         <Icon className="w-16 h-16 text-white/40 transform group-hover:scale-110 group-hover:rotate-6 transition-all duration-500" />
-                        <span className="absolute top-3 right-3 px-2.5 py-1 bg-black/20 backdrop-blur-md rounded-full text-white text-[10px] font-black uppercase tracking-wider">
-                          {branch.code}
-                        </span>
+                        <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/academics/branches/${branch._id || branch.id}/edit`);
+                            }}
+                            title="Edit Branch"
+                            className="p-1.5 bg-black/30 hover:bg-black/50 text-white rounded-full backdrop-blur-md transition-all shadow-sm hover:scale-110 cursor-pointer"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="px-2.5 py-1 bg-black/20 backdrop-blur-md rounded-full text-white text-[10px] font-black uppercase tracking-wider">
+                            {branch.code}
+                          </span>
+                        </div>
                       </div>
                       
                       <div className="p-6 relative flex-1 flex flex-col">
@@ -496,9 +509,21 @@ export default function AcademicManagement() {
                           >
                             {course.code}
                           </span>
-                          <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-[11px] font-black">
-                            {course.duration || 4} Years • {course.totalSemesters || 8} Sems
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/academics/courses/${course._id || course.id}/edit`);
+                              }}
+                              title="Edit Course"
+                              className="p-1.5 bg-slate-100 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 rounded-full transition-all shadow-xs hover:scale-110 cursor-pointer"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-[11px] font-black">
+                              {course.duration || 4} Years • {course.totalSemesters || 8} Sems
+                            </span>
+                          </div>
                         </div>
 
                         {/* Title & Branch */}

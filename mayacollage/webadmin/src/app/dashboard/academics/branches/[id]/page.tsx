@@ -281,8 +281,15 @@ export default function BranchDetail() {
               </span>
 
               <button 
+                onClick={() => router.push(`/academics/branches/${branch._id || branch.id}/edit`)}
+                className="flex items-center gap-2 px-5 py-3 bg-white/10 hover:bg-white/20 text-white font-black rounded-2xl backdrop-blur-md border border-white/20 transition-all text-sm cursor-pointer"
+              >
+                <Edit className="w-4 h-4" />
+                Edit Branch
+              </button>
+              <button 
                 onClick={() => router.push(`/academics/courses/new?branchId=${branch._id || branch.id}`)}
-                className="flex items-center gap-2 px-6 py-3 bg-white text-slate-900 font-black rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.3)] hover:scale-105 transition-all text-sm"
+                className="flex items-center gap-2 px-6 py-3 bg-white text-slate-900 font-black rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.3)] hover:scale-105 transition-all text-sm cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 Deploy Course
