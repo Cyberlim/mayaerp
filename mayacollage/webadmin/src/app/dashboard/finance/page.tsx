@@ -3561,11 +3561,41 @@ export default function FinanceDashboard() {
                               <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 pl-1">
                                 Fee Category (From Course Structure)
                               </label>
-                              {currentSelectedCat?.defaultAmount ? (
-                                <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
-                                  Rate: ₹{currentSelectedCat.defaultAmount.toLocaleString('en-IN')}
-                                </span>
-                              ) : null}
+                              <div className="flex items-center gap-1.5">
+                                {currentSelectedCat?.defaultAmount ? (
+                                  <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                                    Rate: ₹{currentSelectedCat.defaultAmount.toLocaleString('en-IN')}
+                                  </span>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const catToEdit = categories.find((c: any) => c.code === feeForm.category || c.name.toLowerCase() === (feeForm.categoryName || "").toLowerCase()) || {
+                                      name: feeForm.categoryName || "Fee Component",
+                                      code: feeForm.category || "custom_fee",
+                                      type: currentSelectedCat?.type || "Kit/Uniform",
+                                      defaultAmount: currentSelectedCat?.defaultAmount || 0,
+                                      frequency: "One-Time"
+                                    };
+                                    setEditingCategory(catToEdit);
+                                    setCategoryForm({
+                                      name: catToEdit.name || feeForm.categoryName || "",
+                                      code: catToEdit.code || feeForm.category || "",
+                                      type: catToEdit.type || "Kit/Uniform",
+                                      defaultAmount: String(catToEdit.defaultAmount || ""),
+                                      frequency: catToEdit.frequency || "One-Time",
+                                      isMandatory: Boolean(catToEdit.isMandatory),
+                                      description: catToEdit.description || ""
+                                    });
+                                    setIsCategoryModalOpen(true);
+                                  }}
+                                  title="Edit this fee category rate"
+                                  className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                                >
+                                  <Edit3 className="w-3 h-3 text-amber-700" />
+                                  Edit
+                                </button>
+                              </div>
                             </div>
                             <select
                               value={feeForm.category}
