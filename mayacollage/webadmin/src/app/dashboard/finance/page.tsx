@@ -1593,18 +1593,58 @@ export default function FinanceDashboard() {
     setIsSubmittingCategory(true);
     try {
       const isEdit = Boolean(editingCategory);
+      const catId = editingCategory?._id || editingCategory?.id;
+      const catCode = editingCategory?.code || categoryForm.code || categoryForm.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+
+      const payload = isEdit
+        ? {
+            ...categoryForm,
+            id: catId,
+            code: catCode
+          }
+        : {
+            ...categoryForm,
+            code: catCode
+          };
+
       const res = await fetch("/api/finance/categories", {
         method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(isEdit ? { id: editingCategory._id || editingCategory.id, ...categoryForm } : categoryForm)
+        body: JSON.stringify(payload)
       });
 
       const data = await res.json();
-      if (res.ok) {
+      if (res.ok && data.category) {
         showToast(`Category ${isEdit ? "updated" : "created"} successfully!`);
         setIsCategoryModalOpen(false);
         setEditingCategory(null);
-        fetchData();
+
+        // Optimistically update local categories state immediately so list updates without lag
+        setCategories(prev => {
+          const updated = data.category;
+          const idx = prev.findIndex(c => 
+            (updated.id && (c.id === updated.id || c._id === updated.id)) || 
+            (updated.code && c.code === updated.code) ||
+            (c.name && updated.name && c.name.toLowerCase() === updated.name.toLowerCase())
+          );
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...updated };
+            return next;
+          }
+          return [...prev, updated];
+        });
+
+        // Also update feeForm amount if this category is currently selected in collect fee modal
+        if (feeForm.category === catCode || (feeForm.categoryName && feeForm.categoryName.toLowerCase() === data.category.name.toLowerCase())) {
+          setFeeForm(prev => ({
+            ...prev,
+            amount: String(data.category.defaultAmount || prev.amount)
+          }));
+        }
+
+        // Force cache bust to refresh all finance bundle and category data across components
+        fetchData(false, true);
       } else {
         alert(data.error || "Failed to save category");
       }
@@ -3570,9 +3610,13 @@ export default function FinanceDashboard() {
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const catToEdit = categories.find((c: any) => c.code === feeForm.category || c.name.toLowerCase() === (feeForm.categoryName || "").toLowerCase()) || {
-                                      name: feeForm.categoryName || "Fee Component",
-                                      code: feeForm.category || "custom_fee",
+                                    const catToEdit = categories.find((c: any) => 
+                                      (feeForm.category && c.code === feeForm.category) || 
+                                      (feeForm.categoryName && c.name?.toLowerCase() === feeForm.categoryName.toLowerCase())
+                                    ) || {
+                                      id: currentSelectedCat?.code ? `cat_${currentSelectedCat.code}` : undefined,
+                                      name: currentSelectedCat?.name || feeForm.categoryName || "Fee Component",
+                                      code: currentSelectedCat?.code || feeForm.category || "custom_fee",
                                       type: currentSelectedCat?.type || "Kit/Uniform",
                                       defaultAmount: currentSelectedCat?.defaultAmount || 0,
                                       frequency: "One-Time"
