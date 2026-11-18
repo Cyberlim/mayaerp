@@ -314,6 +314,9 @@ export default function FinanceDashboard() {
   const [editFeeYears, setEditFeeYears] = useState<any[]>([]);
   const [isSavingFeeEdit, setIsSavingFeeEdit] = useState(false);
   const [isLoadingFeeStructure, setIsLoadingFeeStructure] = useState(false);
+  const [feeCategorySearch, setFeeCategorySearch] = useState("");
+  const [isFeeCatDropdownOpen, setIsFeeCatDropdownOpen] = useState(false);
+  const feeCatDropdownRef = useRef<HTMLDivElement>(null);
   const [feeForm, setFeeForm] = useState({
     studentId: "",
     year: 1,
@@ -1138,6 +1141,8 @@ export default function FinanceDashboard() {
       const initialCatCode = initialCatName.toLowerCase().replace(/[^a-z0-9]/g, '_');
       const initialCatAmt = firstComp?.amount ? String(firstComp.amount) : (initialDue > 0 ? String(initialDue) : "");
 
+      setFeeCategorySearch("");
+      setIsFeeCatDropdownOpen(false);
       setFeeForm({
         studentId,
         year: initialYear,
@@ -1146,7 +1151,7 @@ export default function FinanceDashboard() {
         amount: initialCatAmt,
         paymentMethod: "Cash",
         receiptNumber: "",
-        transactionId: `TXN-${Date.now().toString().slice(-6)}`,
+        transactionId: "",
         paymentDate: new Date().toISOString().split("T")[0],
         semester: (initialYear * 2) - 1,
         notes: ""
@@ -1584,6 +1589,21 @@ export default function FinanceDashboard() {
       alert("Error deleting receipt.");
     }
   };
+
+  // Close fee category dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (feeCatDropdownRef.current && !feeCatDropdownRef.current.contains(event.target as Node)) {
+        setIsFeeCatDropdownOpen(false);
+      }
+    }
+    if (isFeeCatDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isFeeCatDropdownOpen]);
 
   // Submit Category
   const handleSubmitCategory = async (e: React.FormEvent) => {
@@ -3641,74 +3661,197 @@ export default function FinanceDashboard() {
                                 </button>
                               </div>
                             </div>
-                            <select
-                              value={feeForm.category}
-                              onChange={e => {
-                                const code = e.target.value;
-                                const matched = allAvailableCategories.find(c => c.code === code);
-                                const catName = matched?.name || code;
-                                let autoAmt = feeForm.amount;
-                                if (matched?.due && matched.due > 0) {
-                                  autoAmt = String(matched.due);
-                                } else if (matched?.defaultAmount && matched.defaultAmount > 0) {
-                                  autoAmt = String(matched.defaultAmount);
-                                }
-                                setFeeForm(prev => ({
-                                  ...prev,
-                                  category: code,
-                                  categoryName: catName,
-                                  amount: autoAmt
-                                }));
-                              }}
-                              className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                            >
-                              {courseConfiguredComps.length > 0 && (
-                                <optgroup label={`⭐ Enrolled Course Fee Breakdown (${courseName} - Year ${feeForm.year})`}>
-                                  {courseConfiguredComps.map((cc: any) => (
-                                    <option key={`cc_${cc.code}`} value={cc.code}>
-                                      {cc.name} — Added Price: ₹{cc.rate.toLocaleString('en-IN')} {cc.due > 0 ? `(Pending Due: ₹${cc.due.toLocaleString('en-IN')})` : ''}
-                                    </option>
-                                  ))}
-                                </optgroup>
+
+                            {/* Searchable Fee Category Dropdown */}
+                            <div ref={feeCatDropdownRef} className="relative">
+                              <div
+                                onClick={() => setIsFeeCatDropdownOpen(!isFeeCatDropdownOpen)}
+                                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs flex justify-between items-center cursor-pointer hover:border-emerald-500 transition-colors"
+                              >
+                                <span className="truncate">
+                                  {currentSelectedCat ? (
+                                    <>
+                                      {currentSelectedCat.name}{" "}
+                                      <span className="text-slate-500 font-semibold">
+                                        — {currentSelectedCat.defaultAmount ? `₹${currentSelectedCat.defaultAmount.toLocaleString('en-IN')}` : 'Rate on file'}
+                                        {currentSelectedCat.due && currentSelectedCat.due > 0 ? ` (Due: ₹${currentSelectedCat.due.toLocaleString('en-IN')})` : ''}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    feeForm.categoryName || "Select Fee Category"
+                                  )}
+                                </span>
+                                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isFeeCatDropdownOpen ? "rotate-180" : ""}`} />
+                              </div>
+
+                              {isFeeCatDropdownOpen && (
+                                <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                                  {/* Search Bar inside Dropdown */}
+                                  <div className="p-2 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+                                    <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />
+                                    <input
+                                      type="text"
+                                      autoFocus
+                                      placeholder="Search fee category (e.g. Tuition, Uniform, Tie)..."
+                                      value={feeCategorySearch}
+                                      onChange={e => setFeeCategorySearch(e.target.value)}
+                                      className="w-full bg-transparent text-xs font-bold text-slate-800 outline-none placeholder:text-slate-400"
+                                      onClick={e => e.stopPropagation()}
+                                    />
+                                    {feeCategorySearch && (
+                                      <button
+                                        type="button"
+                                        onClick={e => {
+                                          e.stopPropagation();
+                                          setFeeCategorySearch("");
+                                        }}
+                                        className="p-1 text-slate-400 hover:text-slate-600"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {/* Filtered Category Options */}
+                                  <div className="max-h-60 overflow-y-auto p-1.5 space-y-1">
+                                    {/* 1. Enrolled Course Breakdown */}
+                                    {courseConfiguredComps.filter((cc: any) =>
+                                      !feeCategorySearch || cc.name.toLowerCase().includes(feeCategorySearch.toLowerCase())
+                                    ).length > 0 && (
+                                      <div className="mb-2">
+                                        <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-50/70 rounded-md">
+                                          ⭐ Enrolled Course Fee Breakdown ({courseName} - Year {feeForm.year})
+                                        </div>
+                                        {courseConfiguredComps
+                                          .filter((cc: any) => !feeCategorySearch || cc.name.toLowerCase().includes(feeCategorySearch.toLowerCase()))
+                                          .map((cc: any) => {
+                                            const isSelected = feeForm.category === cc.code;
+                                            return (
+                                              <button
+                                                key={`cat_opt_${cc.code}`}
+                                                type="button"
+                                                onClick={() => {
+                                                  let autoAmt = feeForm.amount;
+                                                  if (cc.due > 0) autoAmt = String(cc.due);
+                                                  else if (cc.rate > 0) autoAmt = String(cc.rate);
+                                                  setFeeForm(prev => ({
+                                                    ...prev,
+                                                    category: cc.code,
+                                                    categoryName: cc.name,
+                                                    amount: autoAmt
+                                                  }));
+                                                  setIsFeeCatDropdownOpen(false);
+                                                }}
+                                                className={`w-full px-2.5 py-2 rounded-xl text-left text-xs font-bold flex justify-between items-center transition-colors ${
+                                                  isSelected ? "bg-indigo-600 text-white" : "hover:bg-indigo-50/70 text-slate-800"
+                                                }`}
+                                              >
+                                                <span className="truncate">{cc.name}</span>
+                                                <span className={`text-[10px] font-bold ${isSelected ? "text-indigo-100" : "text-indigo-600"}`}>
+                                                  Added: ₹{cc.rate.toLocaleString('en-IN')} {cc.due > 0 ? `(Due: ₹${cc.due.toLocaleString('en-IN')})` : ''}
+                                                </span>
+                                              </button>
+                                            );
+                                          })}
+                                      </div>
+                                    )}
+
+                                    {/* 2. Grouped General Categories */}
+                                    {[
+                                      { label: "Academic Program & Course Fees", type: "Academic" },
+                                      { label: "Kit, Uniform & Course Material", type: "Kit/Uniform" },
+                                      { label: "Facilities, Labs & Transport", type: "Facility/Lab" },
+                                      { label: "Fines & Penalties", type: "Fine/Penalty" }
+                                    ].map(grp => {
+                                      const matched = allAvailableCategories.filter(c =>
+                                        c.type === grp.type && (!feeCategorySearch || c.name.toLowerCase().includes(feeCategorySearch.toLowerCase()))
+                                      );
+                                      if (matched.length === 0) return null;
+                                      return (
+                                        <div key={grp.type} className="mb-1.5">
+                                          <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                            {grp.label}
+                                          </div>
+                                          {matched.map(cat => {
+                                            const isSelected = feeForm.category === cat.code;
+                                            return (
+                                              <button
+                                                key={`cat_opt_${cat.code}`}
+                                                type="button"
+                                                onClick={() => {
+                                                  let autoAmt = feeForm.amount;
+                                                  if (cat.due && cat.due > 0) autoAmt = String(cat.due);
+                                                  else if (cat.defaultAmount && cat.defaultAmount > 0) autoAmt = String(cat.defaultAmount);
+                                                  setFeeForm(prev => ({
+                                                    ...prev,
+                                                    category: cat.code,
+                                                    categoryName: cat.name,
+                                                    amount: autoAmt
+                                                  }));
+                                                  setIsFeeCatDropdownOpen(false);
+                                                }}
+                                                className={`w-full px-2.5 py-1.5 rounded-xl text-left text-xs font-bold flex justify-between items-center transition-colors ${
+                                                  isSelected ? "bg-emerald-600 text-white" : "hover:bg-slate-100 text-slate-800"
+                                                }`}
+                                              >
+                                                <span className="truncate">{cat.name}</span>
+                                                <span className={`text-[10px] font-bold ${isSelected ? "text-emerald-100" : "text-slate-500"}`}>
+                                                  {cat.defaultAmount ? `₹${cat.defaultAmount.toLocaleString('en-IN')}` : ''}
+                                                  {cat.due && cat.due > 0 ? ` (Due: ₹${cat.due.toLocaleString('en-IN')})` : ''}
+                                                </span>
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      );
+                                    })}
+
+                                    {/* 3. Other remaining categories */}
+                                    {allAvailableCategories.filter(c =>
+                                      !['Academic', 'Kit/Uniform', 'Facility/Lab', 'Fine/Penalty'].includes(c.type) &&
+                                      (!feeCategorySearch || c.name.toLowerCase().includes(feeCategorySearch.toLowerCase()))
+                                    ).length > 0 && (
+                                      <div className="mb-1.5">
+                                        <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                          Other Categories
+                                        </div>
+                                        {allAvailableCategories
+                                          .filter(c => !['Academic', 'Kit/Uniform', 'Facility/Lab', 'Fine/Penalty'].includes(c.type) && (!feeCategorySearch || c.name.toLowerCase().includes(feeCategorySearch.toLowerCase())))
+                                          .map(cat => {
+                                            const isSelected = feeForm.category === cat.code;
+                                            return (
+                                              <button
+                                                key={`cat_opt_${cat.code}`}
+                                                type="button"
+                                                onClick={() => {
+                                                  let autoAmt = feeForm.amount;
+                                                  if (cat.due && cat.due > 0) autoAmt = String(cat.due);
+                                                  else if (cat.defaultAmount && cat.defaultAmount > 0) autoAmt = String(cat.defaultAmount);
+                                                  setFeeForm(prev => ({
+                                                    ...prev,
+                                                    category: cat.code,
+                                                    categoryName: cat.name,
+                                                    amount: autoAmt
+                                                  }));
+                                                  setIsFeeCatDropdownOpen(false);
+                                                }}
+                                                className={`w-full px-2.5 py-1.5 rounded-xl text-left text-xs font-bold flex justify-between items-center transition-colors ${
+                                                  isSelected ? "bg-emerald-600 text-white" : "hover:bg-slate-100 text-slate-800"
+                                                }`}
+                                              >
+                                                <span className="truncate">{cat.name}</span>
+                                                <span className={`text-[10px] font-bold ${isSelected ? "text-emerald-100" : "text-slate-500"}`}>
+                                                  {cat.defaultAmount ? `₹${cat.defaultAmount.toLocaleString('en-IN')}` : ''}
+                                                </span>
+                                              </button>
+                                            );
+                                          })}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
                               )}
-                              <optgroup label="Academic Program & Course Fees">
-                                {allAvailableCategories.filter(c => c.type === 'Academic').map(cat => (
-                                  <option key={cat.code} value={cat.code}>
-                                    {cat.name} {cat.defaultAmount ? `— ₹${cat.defaultAmount.toLocaleString('en-IN')}` : ''} {cat.due && cat.due > 0 ? `(Due: ₹${cat.due.toLocaleString('en-IN')})` : ''}
-                                  </option>
-                                ))}
-                              </optgroup>
-                              <optgroup label="Kit, Uniform & Course Material">
-                                {allAvailableCategories.filter(c => c.type === 'Kit/Uniform').map(cat => (
-                                  <option key={cat.code} value={cat.code}>
-                                    {cat.name} {cat.defaultAmount ? `— ₹${cat.defaultAmount.toLocaleString('en-IN')}` : ''} {cat.due && cat.due > 0 ? `(Due: ₹${cat.due.toLocaleString('en-IN')})` : ''}
-                                  </option>
-                                ))}
-                              </optgroup>
-                              <optgroup label="Facilities, Labs & Transport">
-                                {allAvailableCategories.filter(c => c.type === 'Facility/Lab').map(cat => (
-                                  <option key={cat.code} value={cat.code}>
-                                    {cat.name} {cat.defaultAmount ? `— ₹${cat.defaultAmount.toLocaleString('en-IN')}` : ''} {cat.due && cat.due > 0 ? `(Due: ₹${cat.due.toLocaleString('en-IN')})` : ''}
-                                  </option>
-                                ))}
-                              </optgroup>
-                              <optgroup label="Fines & Penalties">
-                                {allAvailableCategories.filter(c => c.type === 'Fine/Penalty').map(cat => (
-                                  <option key={cat.code} value={cat.code}>
-                                    {cat.name} {cat.defaultAmount ? `— ₹${cat.defaultAmount.toLocaleString('en-IN')}` : ''} {cat.due && cat.due > 0 ? `(Due: ₹${cat.due.toLocaleString('en-IN')})` : ''}
-                                  </option>
-                                ))}
-                              </optgroup>
-                              {allAvailableCategories.some(c => !['Academic', 'Kit/Uniform', 'Facility/Lab', 'Fine/Penalty'].includes(c.type)) && (
-                                <optgroup label="Other Categories">
-                                  {allAvailableCategories.filter(c => !['Academic', 'Kit/Uniform', 'Facility/Lab', 'Fine/Penalty'].includes(c.type)).map(cat => (
-                                    <option key={cat.code} value={cat.code}>
-                                      {cat.name} {cat.defaultAmount ? `— ₹${cat.defaultAmount.toLocaleString('en-IN')}` : ''}
-                                    </option>
-                                  ))}
-                                </optgroup>
-                              )}
-                            </select>
+                            </div>
                           </div>
                         </div>
 
@@ -3839,11 +3982,12 @@ export default function FinanceDashboard() {
 
                           <div>
                             <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 pl-1 block mb-1">
-                              Payment Date <span className="text-rose-500">*</span>
+                              Payment Date (DD/MM/YYYY or YYYY-MM-DD) <span className="text-rose-500">*</span>
                             </label>
                             <input
-                              type="date"
+                              type="text"
                               required
+                              placeholder="e.g. 18/11/2026 or 2026-11-18"
                               value={feeForm.paymentDate}
                               onChange={e => setFeeForm(prev => ({ ...prev, paymentDate: e.target.value }))}
                               className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none focus:ring-2 focus:ring-emerald-500/20"
@@ -3872,7 +4016,7 @@ export default function FinanceDashboard() {
                             </label>
                             <input
                               type="text"
-                              placeholder="e.g. UPI Ref / Bank TXN / Cheque #"
+                              placeholder="Leave blank or enter Cheque # / UPI Ref"
                               value={feeForm.transactionId}
                               onChange={e => setFeeForm(prev => ({ ...prev, transactionId: e.target.value }))}
                               className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 text-xs outline-none focus:ring-2 focus:ring-emerald-500/20 font-mono"
