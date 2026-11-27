@@ -388,6 +388,7 @@ export default function FinanceDashboard() {
     setTimeout(() => setToastMsg(""), 3500);
   };
 
+  
   const syncToLocalCache = (payload: any) => {
     if (typeof window === "undefined" || !payload) return;
     try {
@@ -539,6 +540,27 @@ export default function FinanceDashboard() {
     // 2. Fetch fresh from PostgreSQL & Redis backend
     fetchData(true);
   }, []);
+
+  // Check URL parameters to auto-open Collect Fee modal for a specific student
+  useEffect(() => {
+    if (typeof window === "undefined" || students.length === 0) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const targetStudentId = params.get("collectStudent") || params.get("studentId");
+      if (targetStudentId) {
+        const found = students.find(s => (s._id || s.id) === targetStudentId || s.enrollmentNumber === targetStudentId || s.admissionNumber === targetStudentId);
+        if (found) {
+          handleOpenAddFeeModal(found, "pay");
+          // Clean the query param from URL so refresh doesn't keep reopening
+          params.delete("collectStudent");
+          params.delete("studentId");
+          const qs = params.toString();
+          const cleanUrl = `${window.location.pathname}${qs ? `?${qs}` : ""}`;
+          window.history.replaceState(null, "", cleanUrl);
+        }
+      }
+    } catch (_) {}
+  }, [students.length]);
 
   // Restore scroll position once student rows have rendered
   useEffect(() => {
@@ -727,21 +749,52 @@ export default function FinanceDashboard() {
     return { isConfigured, gross, discount, total, paid, balance, status, courseBaseFee, courseObj, studentTxns };
   };
 
+  // Helper to extract student's full batch (e.g. "2023-2026", "2024-2028")
+  const getStudentBatch = (s: any): string => {
+    // 1. Direct full batch if matches YYYY-YYYY
+    if (s.batch && /^\d{4}\s*-\s*\d{4}$/.test(String(s.batch).trim())) {
+      return String(s.batch).trim().replace(/\s+/g, "");
+    }
+    // 2. Direct sessionYear if matches YYYY-YYYY
+    const sy = s.sessionYear || s.session_year;
+    if (sy && /^\d{4}\s*-\s*\d{4}$/.test(String(sy).trim())) {
+      return String(sy).trim().replace(/\s+/g, "");
+    }
+    // 3. Calculate from admission year and course duration
+    const startYr = getStudentStartYear(s);
+    if (startYr && /^\d{4}$/.test(startYr)) {
+      const startNum = parseInt(startYr, 10);
+      const sCourseId = typeof s.selectedProgram === "object" ? s.selectedProgram?._id : (s.selectedProgram || s.selected_program);
+      const cObj = courses.find((c: any) => (c._id || c.id) === sCourseId || c.code === s.courseCode || c.name === s.courseName);
+      let dur = Number(s.courseDuration || s.course_duration) || Number(cObj?.duration) || 0;
+      if (!dur) {
+        const cLower = (s.courseName || s.course_name || cObj?.name || "").toLowerCase();
+        if (cLower.includes("pharma") && !cLower.includes("d.pharma") && !cLower.includes("mpharma")) dur = 4;
+        else if (cLower.includes("b.tech") || cLower.includes("btech")) dur = 4;
+        else if (cLower.includes("bca") || cLower.includes("bba")) dur = 3;
+        else if (cLower.includes("mba") || cLower.includes("d.pharma") || cLower.includes("mpharma") || cLower.includes("b.ed") || cLower.includes("d.el.ed")) dur = 2;
+        else dur = 3;
+      }
+      return `${startNum}-${startNum + dur}`;
+    }
+    return s.batch || "";
+  };
+
   // Helper to extract student's starting academic / batch year (e.g. 2023, 2024, 2025)
   const getStudentStartYear = (s: any): string => {
-    // 1. Explicit batch takes highest priority (e.g. "2023", "2024")
-    if (s.batch) {
-      const m = String(s.batch).match(/\b(20\d{2})\b/);
-      if (m) return m[1];
-    }
-    // 2. Admission year (entry year of student)
+    // 1. Admission year (entry year of student)
     if (s.admissionYear || s.admission_year) {
       const m = String(s.admissionYear || s.admission_year).match(/\b(20\d{2})\b/);
       if (m) return m[1];
     }
-    // 3. Session year start (e.g. "2023-2026" -> "2023")
+    // 2. Session year start (e.g. "2023-2026" -> "2023")
     if (s.sessionYear || s.session_year) {
       const m = String(s.sessionYear || s.session_year).match(/^\s*(20\d{2})/);
+      if (m) return m[1];
+    }
+    // 3. Batch start (e.g. "2023-2026" or "2023")
+    if (s.batch) {
+      const m = String(s.batch).match(/\b(20\d{2})\b/);
       if (m) return m[1];
     }
     const any = String(s.batch || s.admissionYear || s.admission_year || s.sessionYear || s.session_year || "").match(/\b(20\d{2})\b/);
@@ -756,15 +809,102 @@ export default function FinanceDashboard() {
     return 1;
   };
 
-  // Unique list of start/batch years from loaded students
-  const uniqueStartYears = useMemo(() => {
-    const yearsSet = new Set<string>();
-    students.forEach((s: any) => {
-      const yr = getStudentStartYear(s);
-      if (yr) yearsSet.add(yr);
+  // Unique list of full batches (e.g. "2023-2026", "2024-2028") - dynamically scoped to selected course if chosen
+  const uniqueBatches = useMemo(() => {
+    const batchSet = new Set<string>();
+    const targetStudents = selectedCourse === "all" 
+      ? students 
+      : students.filter((s: any) => {
+          const sCourseId = typeof s.selectedProgram === "object" ? s.selectedProgram?._id : (s.selectedProgram || s.selected_program);
+          return sCourseId === selectedCourse;
+        });
+
+    targetStudents.forEach((s: any) => {
+      const b = getStudentBatch(s);
+      if (b) {
+        // Ensure we only show existing current batches (not future 2027+ start years)
+        const startYr = parseInt(b.slice(0, 4), 10);
+        if (startYr && startYr <= 2026) {
+          batchSet.add(b);
+        } else if (!startYr) {
+          batchSet.add(b);
+        }
+      }
     });
-    return Array.from(yearsSet).sort().reverse();
-  }, [students]);
+    return Array.from(batchSet).sort().reverse();
+  }, [students, courses, selectedCourse]);
+
+  // Selected course object to know duration and max semesters dynamically
+  const activeSelectedCourseObj = useMemo(() => {
+    if (selectedCourse === "all") return null;
+    return courses.find((c: any) => (c._id || c.id) === selectedCourse);
+  }, [courses, selectedCourse]);
+
+  const courseMaxYears = useMemo(() => {
+    if (!activeSelectedCourseObj) {
+      // Find the maximum duration among all loaded courses/students
+      const maxD = courses.reduce((acc: number, c: any) => {
+        const d = Number(c.duration) || Number(c.durationYears) || 0;
+        return d > acc ? d : acc;
+      }, 0);
+      return maxD > 0 ? maxD : 4;
+    }
+    return Number(activeSelectedCourseObj.duration) || Number(activeSelectedCourseObj.durationYears) || 4;
+  }, [activeSelectedCourseObj, courses]);
+
+  // Actual active study years present in current filtered course students (e.g. only 1st Year, 2nd Year, etc.)
+  const availableStudyYears = useMemo(() => {
+    const yearsSet = new Set<number>();
+    const targetStudents = selectedCourse === "all"
+      ? students
+      : students.filter((s: any) => {
+          const sCourseId = typeof s.selectedProgram === "object" ? s.selectedProgram?._id : (s.selectedProgram || s.selected_program);
+          return sCourseId === selectedCourse;
+        });
+
+    targetStudents.forEach((s: any) => {
+      const y = getStudentStudyYear(s);
+      if (y > 0 && y <= courseMaxYears) yearsSet.add(y);
+    });
+
+    // If students have recorded study years, only show those actual years; otherwise fallback up to courseMaxYears
+    if (yearsSet.size > 0) {
+      return Array.from(yearsSet).sort((a, b) => a - b);
+    }
+    return Array.from({ length: courseMaxYears }, (_, i) => i + 1);
+  }, [students, selectedCourse, courseMaxYears]);
+
+  const courseMaxSemesters = useMemo(() => {
+    if (!activeSelectedCourseObj) {
+      const maxS = courses.reduce((acc: number, c: any) => {
+        const s = Number(c.totalSemesters) || 0;
+        return s > acc ? s : acc;
+      }, 0);
+      return maxS > 0 ? maxS : 8;
+    }
+    return Number(activeSelectedCourseObj.totalSemesters) || (courseMaxYears * 2);
+  }, [activeSelectedCourseObj, courses, courseMaxYears]);
+
+  // Actual active semesters present in current filtered course students
+  const availableSemesters = useMemo(() => {
+    const semSet = new Set<number>();
+    const targetStudents = selectedCourse === "all"
+      ? students
+      : students.filter((s: any) => {
+          const sCourseId = typeof s.selectedProgram === "object" ? s.selectedProgram?._id : (s.selectedProgram || s.selected_program);
+          return sCourseId === selectedCourse;
+        });
+
+    targetStudents.forEach((s: any) => {
+      const sem = Number(s.selectedSemester || s.selected_semester);
+      if (sem > 0 && sem <= courseMaxSemesters) semSet.add(sem);
+    });
+
+    if (semSet.size > 0) {
+      return Array.from(semSet).sort((a, b) => a - b);
+    }
+    return Array.from({ length: courseMaxSemesters }, (_, i) => i + 1);
+  }, [students, selectedCourse, courseMaxSemesters]);
 
   // Filtered Students Roster
   const filteredStudents = useMemo(() => {
@@ -789,16 +929,20 @@ export default function FinanceDashboard() {
           const targetYr = Number(selectedYear.replace("year-", ""));
           matchesYear = getStudentStudyYear(s) === targetYr;
         } else {
-          const qYear = selectedYear.trim();
+          const qVal = selectedYear.trim();
+          const studentB = getStudentBatch(s);
           const startYr = getStudentStartYear(s);
-          if (startYr === qYear) {
-            matchesYear = true;
-          } else {
-            const bt = String(s.batch || "").trim();
-            const ay = String(s.admissionYear || s.admission_year || "").trim();
-            const sy = String(s.sessionYear || s.session_year || "").trim();
-            matchesYear = bt === qYear || ay.startsWith(qYear) || sy.startsWith(qYear);
-          }
+          const bt = String(s.batch || "").trim();
+          const ay = String(s.admissionYear || s.admission_year || "").trim();
+          const sy = String(s.sessionYear || s.session_year || "").trim();
+
+          matchesYear = 
+            studentB === qVal ||
+            bt === qVal ||
+            startYr === qVal ||
+            ay.startsWith(qVal) ||
+            sy === qVal ||
+            sy.startsWith(qVal);
         }
       }
 
@@ -1094,12 +1238,16 @@ export default function FinanceDashboard() {
         year: y.year || idx + 1,
         discount: Number(y.discount) || 0,
         discountReason: y.discountReason || "",
-        components: components.map((c: any) => ({
-          category: c.category || "Tuition Fee",
-          amount: Number(c.amount) || 0,
-          paid: Number(c.paid) || 0,
-          frequency: "Annual"
-        }))
+        components: components.map((c: any) => {
+          const amt = Number(c.amount) || 0;
+          const pd = Number(c.paid) || 0;
+          return {
+            category: c.category || "Tuition Fee",
+            amount: amt,
+            paid: amt > 0 ? Math.min(amt, pd) : pd,
+            frequency: "Annual"
+          };
+        })
       };
     });
   };
@@ -1139,7 +1287,6 @@ export default function FinanceDashboard() {
       const firstComp = yrTemplate?.components?.[0];
       const initialCatName = firstComp?.category || "Tuition Fee";
       const initialCatCode = initialCatName.toLowerCase().replace(/[^a-z0-9]/g, '_');
-      const initialCatAmt = firstComp?.amount ? String(firstComp.amount) : (initialDue > 0 ? String(initialDue) : "");
 
       setFeeCategorySearch("");
       setIsFeeCatDropdownOpen(false);
@@ -1148,7 +1295,7 @@ export default function FinanceDashboard() {
         year: initialYear,
         category: initialCatCode,
         categoryName: initialCatName,
-        amount: initialCatAmt,
+        amount: "",
         paymentMethod: "Cash",
         receiptNumber: "",
         transactionId: "",
@@ -1522,23 +1669,144 @@ export default function FinanceDashboard() {
 
         if (data.transaction) {
           const studentObj = selectedStudentForFee || students.find(s => (s._id || s.id) === feeForm.studentId);
+          const studentSummary = studentObj ? getStudentFeeSummary(studentObj) : null;
+          const studentBatch = studentObj ? getStudentBatch(studentObj) : "2023-2026";
+          const grandGross = studentSummary ? studentSummary.gross : paidAmount;
+          const grandPaid = (studentSummary ? studentSummary.paid : 0) + paidAmount;
+          const remainingBal = Math.max(0, grandGross - grandPaid);
+
+          // Build itemized breakdown matching ABESIT institutional table ONLY for the year being submitted
+          const receiptBreakdown: any[] = [];
+          let yearGrossTotal = 0;
+          let yearPaidTotal = 0;
+          
+          const submittingYearObj = editFeeYears.find(y => y.year === feeForm.year);
+          if (submittingYearObj && Array.isArray(submittingYearObj.components) && submittingYearObj.components.length > 0) {
+            let remainToAllocate = paidAmount;
+            submittingYearObj.components.forEach((c: any) => {
+              const cName = c.category || "Fee Item";
+              const baseDue = Number(c.amount) || 0;
+              const prevPaid = Number(c.paid) || 0;
+              const pendingDue = Math.max(0, baseDue - prevPaid);
+
+              // Deduct sequentially from pending dues in this year
+              const allocated = Math.min(remainToAllocate, pendingDue);
+              remainToAllocate = Math.max(0, remainToAllocate - allocated);
+              const newPaid = prevPaid + allocated;
+              const newBal = Math.max(0, baseDue - newPaid);
+
+              yearGrossTotal += baseDue;
+              yearPaidTotal += newPaid;
+
+              receiptBreakdown.push({
+                particulars: `${cName}`,
+                due: baseDue,
+                paid: newPaid,
+                balance: newBal,
+                dueDate: data.transaction.paymentDate
+              });
+            });
+
+            // If any leftover amount beyond year dues (e.g. advance payment)
+            if (remainToAllocate > 0 && receiptBreakdown.length > 0) {
+              receiptBreakdown[0].paid += remainToAllocate;
+              yearPaidTotal += remainToAllocate;
+            }
+          }
+
+          // Fallback if no specific components configured for this year
+          if (receiptBreakdown.length === 0) {
+            yearGrossTotal = grandGross;
+            yearPaidTotal = paidAmount;
+            receiptBreakdown.push({
+              particulars: `Academic & Program Fee (Year ${feeForm.year})`,
+              due: grandGross,
+              paid: paidAmount,
+              balance: Math.max(0, grandGross - paidAmount),
+              dueDate: data.transaction.paymentDate
+            });
+          }
+
+          const yearRemainingBal = Math.max(0, yearGrossTotal - yearPaidTotal);
+
+          // Collect previous transactions for this student strictly for the CURRENT academic year being submitted
+          const studentIdStr = String(feeForm.studentId);
+          const currentYearNum = Number(feeForm.year) || 1;
+          const currentYearPattern = `Year ${currentYearNum}`;
+
+          const studentPrevTxns = transactions
+            .filter(t => {
+              const tStudentId = String(t.studentId?._id || t.studentId?.id || t.studentId || t.student_id || "");
+              const isMatch = tStudentId === studentIdStr;
+              const isNotCurrent = !data.transaction.id || (t.id !== data.transaction.id && t._id !== data.transaction._id);
+              
+              // Only include payments that belong to this particular academic year
+              const tYear = Number(t.year) || (t.academicYear ? Number(String(t.academicYear).replace(/[^0-9]/g, '')) : 0);
+              const isSameYear = tYear === currentYearNum || String(t.academicYear).toLowerCase() === currentYearPattern.toLowerCase();
+
+              return isMatch && isNotCurrent && isSameYear;
+            })
+            .slice(0, 5)
+            .map((t, idx) => ({
+              sNo: idx + 2,
+              mode: t.paymentMethod || "Cash",
+              txnRef: t.transactionId || t.receiptNumber || "-",
+              date: t.paymentDate,
+              amount: Number(t.amount) || 0
+            }));
+
+          const allPaymentsList = [
+            {
+              sNo: 1,
+              mode: feeForm.paymentMethod || "Cash",
+              txnRef: data.transaction.transactionId || data.transaction.receiptNumber || "-",
+              date: data.transaction.paymentDate,
+              amount: paidAmount,
+              isCurrent: true
+            },
+            ...studentPrevTxns
+          ];
+
+          const mostRecentPriorTxn = transactions.find(t => {
+            const tStudentId = String(t.studentId?._id || t.studentId?.id || t.studentId || t.student_id || "");
+            const isMatch = tStudentId === studentIdStr;
+            const isNotCurrent = !data.transaction.id || (t.id !== data.transaction.id && t._id !== data.transaction._id);
+            const tYear = Number(t.year) || (t.academicYear ? Number(String(t.academicYear).replace(/[^0-9]/g, '')) : 0);
+            const isSameYear = tYear === currentYearNum || String(t.academicYear).toLowerCase() === currentYearPattern.toLowerCase();
+            return isMatch && isNotCurrent && isSameYear;
+          });
+
           setSelectedReceiptForModal({
             type: "student",
             receiptType: "Student Fee Receipt",
             receiptNumber: data.receiptNumber || data.transaction.receiptNumber || feeForm.receiptNumber?.trim() || `RCP-STU-${Date.now()}`,
             transactionId: data.transaction.transactionId,
             date: data.transaction.paymentDate,
+            lastSlipNumber: mostRecentPriorTxn?.receiptNumber || mostRecentPriorTxn?.receiptId || mostRecentPriorTxn?.transactionId || undefined,
+            lastSlipDate: mostRecentPriorTxn?.paymentDate || undefined,
             name: `${studentObj?.firstName || ""} ${studentObj?.lastName || ""}`.trim() || "Student",
+            fatherName: studentObj?.fatherName || studentObj?.guardianName || "",
+            address: studentObj?.address || studentObj?.permanentAddress || "Hathras (Uttar Pradesh)",
+            admissionNumber: studentObj?.admissionNumber || studentObj?.admission_number || "N/A",
+            enrollmentNumber: studentObj?.enrollmentNumber || studentObj?.rollNumber || studentObj?.roll_number || "N/A",
             idNumber: studentObj?.enrollmentNumber || studentObj?.admissionNumber || "N/A",
-            program: studentObj?.selectedProgram?.name || "Course",
+            program: studentObj?.selectedProgram?.name || studentObj?.courseName || "Course",
+            batch: studentBatch,
+            sessionYear: studentBatch,
             semester: data.transaction.semester || feeForm.semester,
             academicYear: `Year ${feeForm.year}`,
             category: feeForm.category,
             categoryName: catLabel,
             amount: Number(feeForm.amount),
+            totalDue: yearGrossTotal,
+            totalPaid: yearPaidTotal,
+            remainingDue: yearRemainingBal,
+            allDuesBalance: remainingBal,
             paymentMethod: feeForm.paymentMethod,
             collectedBy: "Accounts Office",
             notes: feeForm.notes,
+            breakdown: receiptBreakdown,
+            paymentsList: allPaymentsList,
             items: [
               {
                 description: `${catLabel} (Year ${feeForm.year}, Sem ${feeForm.semester})`,
@@ -2071,31 +2339,34 @@ export default function FinanceDashboard() {
                       <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
 
-                    {/* Year Filter Dropdown */}
+                    {/* Year / Batch Filter Dropdown */}
                     <div className="relative">
                       <select
                         value={selectedYear}
                         onChange={e => setSelectedYear(e.target.value)}
                         className="appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 focus:outline-none cursor-pointer shadow-xs hover:border-slate-300 transition-colors"
                       >
-                        <option value="all">All years</option>
-                        {selectedYear !== "all" && !uniqueStartYears.includes(selectedYear) && !["year-1", "year-2", "year-3", "year-4"].includes(selectedYear) && (
+                        <option value="all">
+                          {selectedCourse !== "all" ? `All ${activeSelectedCourseObj?.name || 'Course'} Batches` : "All batches & years"}
+                        </option>
+                        {selectedYear !== "all" && !uniqueBatches.includes(selectedYear) && !["year-1", "year-2", "year-3", "year-4"].includes(selectedYear) && (
                           <option value={selectedYear} hidden>
                             Batch {selectedYear}
                           </option>
                         )}
-                        {uniqueStartYears.length > 0 && (
-                          <optgroup label="Academic / Batch Year">
-                            {uniqueStartYears.map((yr: string) => (
-                              <option key={yr} value={yr}>Batch {yr}</option>
+                        {uniqueBatches.length > 0 && (
+                          <optgroup label={selectedCourse !== "all" ? `${activeSelectedCourseObj?.name || 'Course'} Batches` : "Academic Batches"}>
+                            {uniqueBatches.map((b: string) => (
+                              <option key={b} value={b}>Batch {b}</option>
                             ))}
                           </optgroup>
                         )}
                         <optgroup label="Course / Study Year">
-                          <option value="year-1">1st Year</option>
-                          <option value="year-2">2nd Year</option>
-                          <option value="year-3">3rd Year</option>
-                          <option value="year-4">4th Year</option>
+                          {availableStudyYears.map((yrNum) => (
+                            <option key={`yr_${yrNum}`} value={`year-${yrNum}`}>
+                              {yrNum === 1 ? "1st Year" : yrNum === 2 ? "2nd Year" : yrNum === 3 ? "3rd Year" : `${yrNum}th Year`}
+                            </option>
+                          ))}
                         </optgroup>
                       </select>
                       <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -2110,7 +2381,7 @@ export default function FinanceDashboard() {
                         className="appearance-none pl-8 pr-8 py-2 bg-white border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 focus:outline-none cursor-pointer shadow-xs hover:border-slate-300 transition-colors"
                       >
                         <option value="all">All semesters</option>
-                        {[1, 2, 3, 4, 5, 6, 7, 8].map((sm) => (
+                        {availableSemesters.map((sm) => (
                           <option key={sm} value={String(sm)}>Semester {sm}</option>
                         ))}
                       </select>
@@ -2210,7 +2481,7 @@ export default function FinanceDashboard() {
                                     </p>
                                   )}
                                   <p className="text-[10px] text-slate-400 font-medium truncate mt-0.5">
-                                    Roll: {roll} • {courseCode} • Sem {sem}{getStudentStartYear(s) ? ` • Batch ${getStudentStartYear(s)}` : ""}
+                                    Roll: {roll} • {courseCode} • Sem {sem}{getStudentBatch(s) ? ` • Batch ${getStudentBatch(s)}` : (getStudentStartYear(s) ? ` • Batch ${getStudentStartYear(s)}` : "")}
                                   </p>
                                 </div>
                               </div>
@@ -2635,7 +2906,32 @@ export default function FinanceDashboard() {
                               <td className="py-3 px-4 text-right">
                                 <button
                                   onClick={() => {
-                                    setSelectedReceiptForModal(r);
+                                    // When viewing from receipts list, build paymentsList for this student strictly for the same academic year
+                                    const sIdStr = String(r.studentId?._id || r.studentId?.id || r.studentId || r.student_id || "");
+                                    const rYearNum = Number(r.year) || (r.academicYear ? Number(String(r.academicYear).replace(/[^0-9]/g, '')) : 0);
+                                    const rYearPattern = `Year ${rYearNum}`;
+
+                                    const studentPriorTxns = transactions
+                                      .filter(t => {
+                                        const tSId = String(t.studentId?._id || t.studentId?.id || t.studentId || t.student_id || "");
+                                        const isSameStudent = tSId && tSId === sIdStr;
+                                        const tYear = Number(t.year) || (t.academicYear ? Number(String(t.academicYear).replace(/[^0-9]/g, '')) : 0);
+                                        const isSameYear = tYear === rYearNum || String(t.academicYear).toLowerCase() === rYearPattern.toLowerCase();
+                                        return isSameStudent && isSameYear;
+                                      })
+                                      .map((t, idx) => ({
+                                        sNo: idx + 1,
+                                        mode: t.paymentMethod || "Cash",
+                                        txnRef: t.transactionId || t.receiptNumber || "-",
+                                        date: t.paymentDate,
+                                        amount: Number(t.amount) || 0,
+                                        isCurrent: (t.id === r.id || t._id === r._id || t.receiptNumber === r.receiptNumber)
+                                      }));
+
+                                    setSelectedReceiptForModal({
+                                      ...r,
+                                      paymentsList: studentPriorTxns.length > 0 ? studentPriorTxns : undefined
+                                    });
                                     setIsReceiptModalOpen(true);
                                   }}
                                   className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold rounded-lg text-xs transition-colors cursor-pointer inline-flex items-center gap-1.5"
@@ -2810,25 +3106,34 @@ export default function FinanceDashboard() {
                         <p className="text-xs text-slate-400 font-medium mb-3">Duration: {c.duration || 4} Years</p>
                       </div>
 
-                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                         <div>
                           <p className="text-[10px] text-slate-400 font-medium uppercase">Tuition Fee</p>
                           <p className="text-base font-bold font-mono text-blue-600">{formatCurrency(c.tuitionFee)}</p>
                         </div>
-                        <button
-                          onClick={() => {
-                            setEditingCourse(c);
-                            setCourseFeeForm({
-                              tuitionFee: String(c.tuitionFee || 0),
-                              semesterFee: "",
-                              applyToStudents: true
-                            });
-                            setIsCourseFeeModalOpen(true);
-                          }}
-                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer"
-                        >
-                          Edit
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <Link
+                            href={`/dashboard/finance/course-fees/${c._id || c.id}`}
+                            className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg text-xs transition-colors border border-indigo-200"
+                            title="Configure Fee Structure by Batch & Year"
+                          >
+                            Structure & Batches →
+                          </Link>
+                          <button
+                            onClick={() => {
+                              setEditingCourse(c);
+                              setCourseFeeForm({
+                                tuitionFee: String(c.tuitionFee || 0),
+                                semesterFee: "",
+                                applyToStudents: true
+                              });
+                              setIsCourseFeeModalOpen(true);
+                            }}
+                            className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer"
+                          >
+                            Edit
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -3324,8 +3629,13 @@ export default function FinanceDashboard() {
                 const currentYrDisc = Number(selectedYrObj?.discount) || 0;
                 const currentYrDue = Math.max(0, currentYrGross - currentYrDisc - currentYrPaid);
 
-                // Course feeStructureTemplate components for this year (from create course page)
-                const templateYear = courseObj?.feeStructureTemplate?.find((y: any) => y.year === feeForm.year);
+                // Course feeStructureTemplate components for this year (check student's specific batch first, then default template)
+                const studentBatchKey = getStudentBatch(selectedStudentForFee);
+                const batchTemplate = studentBatchKey && courseObj?.batchFeeTemplates?.[studentBatchKey] 
+                  ? courseObj.batchFeeTemplates[studentBatchKey] 
+                  : (courseObj?.feeStructureTemplate || []);
+
+                const templateYear = batchTemplate?.find((y: any) => y.year === feeForm.year) || courseObj?.feeStructureTemplate?.find((y: any) => y.year === feeForm.year);
                 const templateComps = templateYear?.components || [];
 
                 // Track components directly configured on this course in database with added prices
@@ -3523,6 +3833,68 @@ export default function FinanceDashboard() {
                               {pct}% Paid ({formatCurrency(paidTotal)} / {formatCurrency(netTotal)})
                             </span>
                           </div>
+
+                          {/* Last Payment Slip Information Bar */}
+                          {(() => {
+                            const studentId = selectedStudentForFee?._id || selectedStudentForFee?.id;
+                            const lastTxn = transactions.find(t => (t.studentId === studentId || t.student_id === studentId));
+                            if (!lastTxn) return null;
+
+                            const lastDateFormatted = lastTxn.paymentDate
+                              ? new Date(lastTxn.paymentDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+                              : "Recent";
+
+                            return (
+                              <div className="mt-2.5 p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-wrap justify-between items-center gap-2 text-xs">
+                                <div className="flex items-center gap-2">
+                                  <Receipt className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                  <span className="font-bold text-slate-700">
+                                    Last Receipt Slip:{" "}
+                                    <strong className="font-mono text-slate-900">{lastTxn.receiptNumber || lastTxn.receiptId || lastTxn.transactionId || "N/A"}</strong>
+                                  </span>
+                                  <span className="text-slate-400">•</span>
+                                  <span className="text-slate-500">
+                                    Date: <strong className="text-slate-800">{lastDateFormatted}</strong>
+                                  </span>
+                                  <span className="text-slate-400">•</span>
+                                  <span className="font-bold text-emerald-700 font-mono">
+                                    Amount: ₹{Number(lastTxn.amount || 0).toLocaleString("en-IN")}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const matched = combinedReceipts.find((r: any) =>
+                                      (r.id && (r.id === lastTxn.id || r.id === lastTxn._id)) ||
+                                      (r.receiptNumber && (r.receiptNumber === lastTxn.receiptNumber || r.receiptNumber === lastTxn.receiptId)) ||
+                                      (r.transactionId && (r.transactionId === lastTxn.transactionId))
+                                    ) || {
+                                      type: "student",
+                                      receiptType: "Student Fee Receipt",
+                                      receiptNumber: lastTxn.receiptNumber || lastTxn.receiptId || lastTxn.transactionId || `RCP-${Date.now()}`,
+                                      transactionId: lastTxn.transactionId || lastTxn.id,
+                                      date: lastTxn.paymentDate,
+                                      name: `${selectedStudentForFee?.firstName || ""} ${selectedStudentForFee?.lastName || ""}`.trim() || lastTxn.studentName || "Student",
+                                      idNumber: selectedStudentForFee?.enrollmentNumber || selectedStudentForFee?.admissionNumber || "N/A",
+                                      admissionNumber: selectedStudentForFee?.admissionNumber || "N/A",
+                                      enrollmentNumber: selectedStudentForFee?.enrollmentNumber || "N/A",
+                                      program: selectedStudentForFee?.selectedProgram?.name || selectedStudentForFee?.courseName || "Course",
+                                      academicYear: lastTxn.academicYear || `Year ${lastTxn.year || 1}`,
+                                      semester: lastTxn.semester || 1,
+                                      amount: Number(lastTxn.amount || 0),
+                                      paymentMethod: lastTxn.paymentMethod || "Cash",
+                                      notes: lastTxn.notes
+                                    };
+                                    setSelectedReceiptForModal(matched);
+                                    setIsReceiptModalOpen(true);
+                                  }}
+                                  className="text-[10px] font-black px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                                >
+                                  <FileText className="w-3 h-3 text-indigo-600" /> View Last Slip
+                                </button>
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
@@ -3855,112 +4227,259 @@ export default function FinanceDashboard() {
                           </div>
                         </div>
 
-                        {/* Interactive Course Fee Breakdown from Database */}
-                        {courseConfiguredComps.length > 0 && (
-                          <div className="bg-gradient-to-r from-indigo-50/70 via-slate-50 to-indigo-50/70 p-3.5 rounded-2xl border border-indigo-100/90 space-y-2">
-                            <div className="flex justify-between items-center">
-                              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-900 flex items-center gap-1.5">
-                                <GraduationCap className="w-3.5 h-3.5 text-indigo-600" />
-                                Database Added Fees for {courseName} (Year {feeForm.year})
+                        {/* Clean Year-Wise Student Fee Ledger Breakdown Table */}
+                        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+                          <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2">
+                            <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                              <Calendar className="w-4 h-4 text-indigo-600" />
+                              Year {feeForm.year} Fee Breakdown & Dues Status
+                            </span>
+                            <div className="flex items-center gap-3 text-xs">
+                              <span className="font-semibold text-slate-500">
+                                Total Gross: <strong className="text-slate-800 font-mono">₹{currentYrGross.toLocaleString('en-IN')}</strong>
                               </span>
-                              <span className="text-[10px] font-bold text-indigo-600">Click any component to pay</span>
+                              <span className="font-semibold text-emerald-700">
+                                Paid: <strong className="font-mono font-bold">₹{currentYrPaid.toLocaleString('en-IN')}</strong>
+                              </span>
+                              <span className="font-semibold text-amber-800">
+                                Year Due: <strong className="font-mono font-black">₹{currentYrDue.toLocaleString('en-IN')}</strong>
+                              </span>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                              {courseConfiguredComps.map((cc: any) => {
-                                const isSelected = feeForm.category === cc.code || feeForm.categoryName?.toLowerCase() === cc.name.toLowerCase();
+                          </div>
+
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-slate-100/80 text-slate-600 font-black text-[11px] uppercase tracking-wider border-b border-slate-200">
+                                <tr>
+                                  <th className="py-3 px-4">Fee Component</th>
+                                  <th className="py-3 px-3 text-right">Standard / Fixed</th>
+                                  <th className="py-3 px-3 text-right">Paid So Far</th>
+                                  <th className="py-3 px-3 text-right">Current Balance Due</th>
+                                  <th className="py-3 px-4 text-right">Pending After Pay</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 font-medium">
+                                {(() => {
+                                  if (!selectedYrObj?.components || selectedYrObj.components.length === 0) {
+                                    return (
+                                      <tr>
+                                        <td colSpan={5} className="py-6 text-center text-slate-400 text-xs italic">
+                                          No components configured for Year {feeForm.year}
+                                        </td>
+                                      </tr>
+                                    );
+                                  }
+
+                                  // Auto-calculate sequential deduction across components for the year
+                                  let enteredAmount = Math.max(0, Number(feeForm.amount) || 0);
+
+                                  return selectedYrObj.components.map((comp: any, idx: number) => {
+                                    const cAmt = Number(comp.amount) || 0;
+                                    const cPd = Number(comp.paid) || 0;
+                                    const cDue = Math.max(0, cAmt - cPd);
+
+                                    // Deduct sequentially from each component that has due
+                                    const deductForThisComp = Math.min(enteredAmount, cDue);
+                                    enteredAmount = Math.max(0, enteredAmount - deductForThisComp);
+                                    const pendingAfter = Math.max(0, cDue - deductForThisComp);
+
+                                    return (
+                                      <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                                        <td className="py-3 px-4">
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-slate-900 font-bold text-sm">{comp.category}</span>
+                                          </div>
+                                        </td>
+                                        <td className="py-3 px-3 text-right font-mono font-bold text-slate-700 text-sm">
+                                          ₹{cAmt.toLocaleString('en-IN')}
+                                        </td>
+                                        <td className="py-3 px-3 text-right font-mono font-bold text-emerald-700 text-sm">
+                                          ₹{cPd.toLocaleString('en-IN')}
+                                        </td>
+                                        <td className="py-3 px-3 text-right font-mono font-black text-sm text-slate-900">
+                                          ₹{cDue.toLocaleString('en-IN')}
+                                        </td>
+                                        <td className="py-3 px-4 text-right font-mono">
+                                          <span className={`font-black text-sm ${pendingAfter > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                            ₹{pendingAfter.toLocaleString('en-IN')}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  });
+                                })()}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Other Fees (Kit, Uniform, Tie, Books & Add-ons) */}
+                        <div className="bg-gradient-to-r from-amber-50/60 via-slate-50 to-orange-50/60 p-3.5 rounded-2xl border border-amber-200/80 space-y-2.5">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                              <Layers className="w-3.5 h-3.5 text-amber-600" />
+                              Other Fees (Kit, Uniform, Tie & Student Add-ons)
+                            </span>
+                            <span className="text-[10px] font-bold text-amber-700">Click to select item</span>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            {allAvailableCategories
+                              .filter((c: any) => ['Kit/Uniform', 'Facility/Lab', 'Fine/Penalty'].includes(c.type) || ['tie', 'uniform', 'blazer', 'bag', 'book', 'transport'].some(k => (c.code || '').includes(k) || (c.name || '').toLowerCase().includes(k)))
+                              .map((cat: any) => {
+                                const isSelected = feeForm.category === cat.code || feeForm.categoryName?.toLowerCase() === cat.name.toLowerCase();
                                 return (
                                   <button
-                                    key={`btn_${cc.code}`}
+                                    key={`other_${cat.code}`}
                                     type="button"
                                     onClick={() => {
-                                      const autoAmt = cc.due > 0 ? String(cc.due) : (cc.rate > 0 ? String(cc.rate) : feeForm.amount);
+                                      const autoAmt = cat.due && cat.due > 0 ? String(cat.due) : (cat.defaultAmount && cat.defaultAmount > 0 ? String(cat.defaultAmount) : feeForm.amount);
                                       setFeeForm(prev => ({
                                         ...prev,
-                                        category: cc.code,
-                                        categoryName: cc.name,
+                                        category: cat.code,
+                                        categoryName: cat.name,
                                         amount: autoAmt
                                       }));
                                     }}
-                                    className={`p-2.5 rounded-xl text-left transition-all border cursor-pointer ${
+                                    className={`p-2 rounded-xl text-left transition-all border cursor-pointer ${
                                       isSelected
-                                        ? "bg-indigo-600 text-white border-indigo-700 shadow-sm"
-                                        : "bg-white text-slate-800 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40 shadow-2xs"
+                                        ? "bg-amber-600 text-white border-amber-700 shadow-xs"
+                                        : "bg-white text-slate-800 border-amber-200/80 hover:border-amber-400 hover:bg-amber-50/40 shadow-2xs"
                                     }`}
                                   >
                                     <div className="flex justify-between items-center gap-1">
-                                      <span className="text-xs font-black truncate">{cc.name}</span>
-                                      <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md whitespace-nowrap ${
-                                        isSelected ? 'bg-indigo-700 text-white' : 'bg-indigo-100 text-indigo-800'
+                                      <span className="text-[11px] font-black truncate">{cat.name}</span>
+                                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md whitespace-nowrap ${
+                                        isSelected ? 'bg-amber-700 text-white' : 'bg-amber-100 text-amber-900'
                                       }`}>
-                                        ₹{cc.rate.toLocaleString('en-IN')}
+                                        ₹{Number(cat.defaultAmount || 0).toLocaleString('en-IN')}
                                       </span>
                                     </div>
-                                    <div className="flex justify-between items-center mt-1.5">
-                                      <span className={`text-[9px] font-semibold ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>
-                                        {cc.due > 0 ? `Due: ₹${cc.due.toLocaleString('en-IN')}` : (cc.paid > 0 ? 'Cleared ✓' : 'Full Rate')}
+                                    <div className="flex justify-between items-center mt-1">
+                                      <span className={`text-[8.5px] font-semibold ${isSelected ? 'text-amber-100' : 'text-slate-400'}`}>
+                                        {cat.due && cat.due > 0 ? `Due: ₹${cat.due.toLocaleString('en-IN')}` : 'One-Time Rate'}
                                       </span>
                                       {isSelected ? (
-                                        <span className="text-[9px] font-black text-emerald-300">Selected ✓</span>
-                                      ) : (
-                                        <span className="text-[9px] font-bold text-indigo-500">Pay →</span>
-                                      )}
+                                        <span className="text-[8.5px] font-black text-amber-200">Active</span>
+                                      ) : null}
                                     </div>
                                   </button>
                                 );
                               })}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Payment Amount with Quick Shortcuts */}
-                        <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200 space-y-2">
-                          <div className="flex justify-between items-center">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 pl-1">
-                              Payment Amount (₹) <span className="text-rose-500">*</span>
-                            </label>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {currentSelectedCat?.due && currentSelectedCat.due > 0 ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setFeeForm(prev => ({ ...prev, amount: String(currentSelectedCat.due) }))}
-                                  className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition-colors cursor-pointer"
-                                >
-                                  Fill Component Due (₹{currentSelectedCat.due.toLocaleString('en-IN')})
-                                </button>
-                              ) : null}
-                              {currentYrDue > 0 ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setFeeForm(prev => ({ ...prev, amount: String(currentYrDue) }))}
-                                  className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 hover:bg-amber-200 transition-colors cursor-pointer"
-                                >
-                                  Fill Year {feeForm.year} Due (₹{currentYrDue.toLocaleString('en-IN')})
-                                </button>
-                              ) : null}
-                              {dueTotal > 0 ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setFeeForm(prev => ({ ...prev, amount: String(dueTotal) }))}
-                                  className="text-[10px] font-black px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 hover:bg-emerald-200 transition-colors cursor-pointer"
-                                >
-                                  Fill Total Balance (₹{dueTotal.toLocaleString('en-IN')})
-                                </button>
-                              ) : null}
-                            </div>
-                          </div>
-                          <div className="relative">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-black text-slate-400">₹</span>
-                            <input
-                              type="number"
-                              required
-                              min="1"
-                              placeholder="e.g. 25000"
-                              value={feeForm.amount}
-                              onChange={e => setFeeForm(prev => ({ ...prev, amount: e.target.value }))}
-                              className="w-full pl-9 pr-4 py-3 bg-white border border-slate-300 rounded-xl font-black text-slate-900 text-lg outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
-                            />
                           </div>
                         </div>
+
+                        {/* Year Due Summary & Real-Time Amount Deduction Calculation */}
+                        {(() => {
+                          const payingAmountNum = Math.max(0, Number(feeForm.amount) || 0);
+                          const remainingYearDue = Math.max(0, currentYrDue - payingAmountNum);
+                          const remainingTotalDue = Math.max(0, dueTotal - payingAmountNum);
+
+                          return (
+                            <div className="bg-gradient-to-br from-slate-50 via-indigo-50/20 to-emerald-50/20 p-5 rounded-2xl border-2 border-indigo-100 space-y-4 shadow-xs">
+                              {/* Dues Status Header */}
+                              <div className="flex flex-wrap justify-between items-center gap-3 pb-3 border-b border-indigo-100">
+                                <div>
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-900 block">
+                                    Year {feeForm.year} Fee Due Status
+                                  </span>
+                                  <div className="flex items-baseline gap-3 mt-1">
+                                    <div>
+                                      <span className="text-xs text-slate-500 font-bold block">Current Year Due</span>
+                                      <span className="text-2xl font-black font-mono text-slate-900">
+                                        ₹{currentYrDue.toLocaleString('en-IN')}
+                                      </span>
+                                    </div>
+                                    {dueTotal > 0 && dueTotal !== currentYrDue && (
+                                      <div className="border-l border-slate-200 pl-3">
+                                        <span className="text-[10px] text-slate-500 font-semibold block">Total All Years Due</span>
+                                        <span className="text-base font-bold font-mono text-slate-700">
+                                          ₹{dueTotal.toLocaleString('en-IN')}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {currentYrDue > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setFeeForm(prev => ({ ...prev, amount: String(currentYrDue) }))}
+                                      className="text-xs font-black px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white shadow-xs transition-colors cursor-pointer"
+                                    >
+                                      Fill Year {feeForm.year} Due (₹{currentYrDue.toLocaleString('en-IN')})
+                                    </button>
+                                  )}
+                                  {dueTotal > 0 && dueTotal !== currentYrDue && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setFeeForm(prev => ({ ...prev, amount: String(dueTotal) }))}
+                                      className="text-xs font-black px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer"
+                                    >
+                                      Fill Total Balance (₹{dueTotal.toLocaleString('en-IN')})
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Manual Payment Input with Real-time Deduction Display */}
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-700 flex justify-between items-center">
+                                  <span>Enter Payment Amount to Collect (₹) <span className="text-rose-500">*</span></span>
+                                  {payingAmountNum > 0 && (
+                                    <span className="text-xs font-black text-emerald-700 flex items-center gap-1">
+                                      Paying: ₹{payingAmountNum.toLocaleString('en-IN')}
+                                    </span>
+                                  )}
+                                </label>
+                                <div className="relative">
+                                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-black text-slate-400">₹</span>
+                                  <input
+                                    type="number"
+                                    required
+                                    min="1"
+                                    placeholder="Enter amount to pay (e.g. 25000)"
+                                    value={feeForm.amount}
+                                    onChange={e => setFeeForm(prev => ({ ...prev, amount: e.target.value }))}
+                                    onWheel={(e) => (e.target as HTMLElement).blur()}
+                                    className="w-full pl-11 pr-4 py-3 bg-white border-2 border-indigo-300 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 rounded-xl font-mono font-black text-slate-900 text-2xl outline-none shadow-xs transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                  />
+                                </div>
+
+                                {/* Live Deduction Indicator */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                                  <div className="bg-white p-3 rounded-xl border border-slate-200 flex justify-between items-center">
+                                    <div>
+                                      <span className="text-[10px] uppercase font-black text-slate-400 block">Remaining Year {feeForm.year} Due</span>
+                                      <span className={`text-lg font-black font-mono ${remainingYearDue === 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                        ₹{remainingYearDue.toLocaleString('en-IN')}
+                                      </span>
+                                    </div>
+                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
+                                      remainingYearDue === 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-50 text-rose-700'
+                                    }`}>
+                                      {remainingYearDue === 0 ? 'Year Cleared ✓' : `- ₹${Math.min(currentYrDue, payingAmountNum).toLocaleString('en-IN')} Deducted`}
+                                    </span>
+                                  </div>
+
+                                  <div className="bg-white p-3 rounded-xl border border-slate-200 flex justify-between items-center">
+                                    <div>
+                                      <span className="text-[10px] uppercase font-black text-slate-400 block">Remaining Total Student Due</span>
+                                      <span className={`text-lg font-black font-mono ${remainingTotalDue === 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
+                                        ₹{remainingTotalDue.toLocaleString('en-IN')}
+                                      </span>
+                                    </div>
+                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
+                                      remainingTotalDue === 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-indigo-50 text-indigo-700'
+                                    }`}>
+                                      {remainingTotalDue === 0 ? 'All Dues Cleared' : `- ₹${payingAmountNum.toLocaleString('en-IN')} Total Paid`}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                         {/* Mode & Date */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

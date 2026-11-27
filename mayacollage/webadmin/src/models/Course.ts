@@ -29,6 +29,21 @@ const courseSchema = new mongoose.Schema({
     semester: Number,
     fee: Number,
   }],
+  batchFeeTemplates: {
+    type: Map,
+    of: [{
+      year: { type: Number, required: true },
+      totalYearlyFee: { type: Number, default: 0 },
+      components: [{
+        category: { type: String, required: true },
+        amount: { type: Number, default: 0 },
+        isMandatory: { type: Boolean, default: true },
+        frequency: { type: String, default: "Annual" },
+        months: [String]
+      }]
+    }],
+    default: {}
+  },
   feeStructureTemplate: [{
     year: { type: Number, required: true },
     totalYearlyFee: { type: Number, default: 0 },

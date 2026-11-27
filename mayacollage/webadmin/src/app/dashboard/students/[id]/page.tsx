@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -930,11 +930,18 @@ export default function StudentDetailScreen() {
     setIsEditFeeModalOpen(true);
   };
 
-  // Open Add Fee Payment Modal
-  const handleOpenPayFeeModal = (defaultYear = 1, defaultCategory = "tuition", defaultAmount?: number) => {
-    const matchedCategory = feeCategories.find(c => c.code === defaultCategory || c.name?.toLowerCase() === defaultCategory.toLowerCase());
+  // Open Add Fee Payment Modal / Route directly to Finance Collect Page
+  const handleOpenPayFeeModal = (defaultYear?: number, defaultCategory?: string, defaultAmount?: number) => {
+    // Navigate directly to Finance Collect page for this student
+    const studentTargetId = studentId || studentData?._id || studentData?.id;
+    if (studentTargetId) {
+      router.push(`/dashboard/finance?collectStudent=${studentTargetId}`);
+      return;
+    }
+
+    const matchedCategory = feeCategories.find(c => c.code === defaultCategory || c.name?.toLowerCase() === (defaultCategory || "").toLowerCase());
     const years = studentStatementData?.years || studentStatementData?.ledger?.years || studentData?.fees?.years || [];
-    const targetYr = years.find((y: any) => y.year === defaultYear);
+    const targetYr = years.find((y: any) => y.year === (defaultYear || 1));
 
     let initialAmount = "";
     if (defaultAmount !== undefined && defaultAmount > 0) {
@@ -948,8 +955,8 @@ export default function StudentDetailScreen() {
     }
 
     setPayFeeForm({
-      year: defaultYear,
-      category: matchedCategory?.code || defaultCategory,
+      year: defaultYear || 1,
+      category: matchedCategory?.code || defaultCategory || "tuition",
       amount: initialAmount,
       paymentMethod: "Cash",
       receiptNumber: "",

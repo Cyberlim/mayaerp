@@ -66,6 +66,7 @@ export async function GET(
       totalSemesters: Number(c.total_semesters) || 8,
       semesterFees: typeof c.semester_fees === 'string' ? JSON.parse(c.semester_fees) : (c.semester_fees || []),
       feeStructureTemplate: typeof c.fee_structure_template === 'string' ? JSON.parse(c.fee_structure_template) : (c.fee_structure_template || []),
+      batchFeeTemplates: typeof c.batch_fee_templates === 'string' ? JSON.parse(c.batch_fee_templates) : (c.batch_fee_templates || {}),
       curriculum: typeof c.curriculum === 'string' ? JSON.parse(c.curriculum) : (c.curriculum || []),
       createdAt: c.created_at,
       updatedAt: c.updated_at
@@ -118,6 +119,9 @@ export async function PATCH(
     const feeStructureTemplate = courseData.feeStructureTemplate !== undefined 
       ? JSON.stringify(courseData.feeStructureTemplate) 
       : (typeof existing.fee_structure_template === 'string' ? existing.fee_structure_template : JSON.stringify(existing.fee_structure_template || []));
+    const batchFeeTemplates = courseData.batchFeeTemplates !== undefined
+      ? JSON.stringify(courseData.batchFeeTemplates)
+      : (typeof existing.batch_fee_templates === 'string' ? existing.batch_fee_templates : JSON.stringify(existing.batch_fee_templates || {}));
     const curriculum = courseData.curriculum !== undefined 
       ? JSON.stringify(courseData.curriculum) 
       : (typeof existing.curriculum === 'string' ? existing.curriculum : JSON.stringify(existing.curriculum || []));
@@ -135,9 +139,10 @@ export async function PATCH(
         total_semesters = $9,
         semester_fees = $10,
         fee_structure_template = $11,
-        curriculum = $12,
+        batch_fee_templates = $12,
+        curriculum = $13,
         updated_at = NOW()
-      WHERE id = $13
+      WHERE id = $14
       RETURNING *
     `;
 
@@ -153,6 +158,7 @@ export async function PATCH(
       totalSemesters,
       semesterFees,
       feeStructureTemplate,
+      batchFeeTemplates,
       curriculum,
       id
     ]);

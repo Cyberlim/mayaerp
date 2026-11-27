@@ -11,6 +11,7 @@ import {
   Users,
   GraduationCap,
   CheckCircle,
+  CheckCircle2,
   Map,
   BookOpen,
   User,
@@ -25,8 +26,28 @@ import {
   Book,
   Trash2,
   X,
-  Zap
+  Zap,
+  Save,
+  DollarSign,
+  ChevronDown
 } from "lucide-react";
+
+const PREDEFINED_FEES = [
+  "Admission Fee",
+  "Tuition Fee",
+  "Exam Fee",
+  "Practical Fee",
+  "Bag Fee",
+  "Uniform Fee",
+  "Tie Fee",
+  "Lab Coat Fee",
+  "Book Fee",
+  "Blazer Fee",
+  "T-Shirt Fee",
+  "Transport Fee",
+  "Breakage Fine",
+  "Other Fee"
+];
 
 // Shimmer Skeleton for Course Detail
 function CourseDetailSkeleton() {
@@ -98,10 +119,20 @@ export default function CourseDetail() {
   const [course, setCourse] = useState<any>(null);
   const [students, setStudents] = useState<any[]>([]);
   const [selectedYear, setSelectedYear] = useState<string>("All");
-  const [activeTab, setActiveTab] = useState<"curriculum" | "students">("curriculum");
+  const [activeTab, setActiveTab] = useState<"curriculum" | "students" | "fees">("curriculum");
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [cacheSource, setCacheSource] = useState("Neon PostgreSQL");
+
+  // Fee Structure State
+  const [selectedFeeBatch, setSelectedFeeBatch] = useState<string>("default");
+  const [availableFeeBatches, setAvailableFeeBatches] = useState<string[]>([]);
+  const [batchFeeTemplates, setBatchFeeTemplates] = useState<Record<string, any[]>>({});
+  const [feeStructureTemplate, setFeeStructureTemplate] = useState<any[]>([]);
+  const [expandedFeeYears, setExpandedFeeYears] = useState<number[]>([]);
+  const [isSavingFees, setIsSavingFees] = useState(false);
+  const [applyFeesToStudents, setApplyFeesToStudents] = useState(true);
+  const [feeToastMsg, setFeeToastMsg] = useState("");
 
   // Modal states
   const [modalType, setModalType] = useState<"semester" | "section" | "subject" | null>(null);
@@ -166,6 +197,68 @@ export default function CourseDetail() {
         setCourse(data);
         setStudents(studentsList);
         syncCourseToLocalCache(data, studentsList);
+
+        // Initialize Fee Structure Templates & Batches based on actual course data and enrolled students
+        const bTemplates = data.batchFeeTemplates || {};
+        setBatchFeeTemplates(bTemplates);
+
+        const duration = Number(data.duration) || 4;
+        const generatedBatches = new Set<string>();
+
+        // 1. Existing saved batch fee templates (excluding future 2027+)
+        Object.keys(bTemplates).forEach(b => {
+          if (b && b !== 'default' && !b.startsWith('2027') && !b.startsWith('2028') && !b.startsWith('2029')) {
+            generatedBatches.add(b);
+          }
+        });
+
+        // 2. Add batches from enrolled students for this course
+        if (Array.isArray(studentsList)) {
+          studentsList.forEach((s: any) => {
+            const b = s.batch || s.sessionYear || s.session_year;
+            if (b && /^\d{4}\s*-\s*\d{4}$/.test(String(b).trim())) {
+              const cleaned = String(b).trim().replace(/\s+/g, "");
+              const startYr = parseInt(cleaned.slice(0, 4), 10);
+              if (startYr <= 2026) {
+                generatedBatches.add(cleaned);
+              }
+            } else if (s.admissionYear) {
+              const startYr = parseInt(String(s.admissionYear).trim(), 10);
+              if (startYr && startYr >= 2019 && startYr <= 2026) {
+                generatedBatches.add(`${startYr}-${startYr + duration}`);
+              }
+            }
+          });
+        }
+
+        // 3. Fallback: If no student enrolled yet, show actual recent batches up to 2026
+        if (generatedBatches.size === 0) {
+          for (let y = 2026; y >= 2023; y--) {
+            generatedBatches.add(`${y}-${y + duration}`);
+          }
+        }
+
+        const sortedBatches = Array.from(generatedBatches).sort().reverse();
+        setAvailableFeeBatches(sortedBatches);
+
+        if (data.feeStructureTemplate && data.feeStructureTemplate.length > 0) {
+          setFeeStructureTemplate(data.feeStructureTemplate);
+          setExpandedFeeYears([data.feeStructureTemplate[0].year]);
+        } else {
+          const yearsCount = data.duration || Math.ceil((data.totalSemesters || 8) / 2);
+          const initialTemplate = Array.from({ length: yearsCount }).map((_, idx) => ({
+            year: idx + 1,
+            totalYearlyFee: 0,
+            components: [
+              { category: "Tuition Fee", amount: 0, isMandatory: true, frequency: "Annual" }
+            ]
+          }));
+          if (initialTemplate.length > 0) {
+            initialTemplate[0].components.unshift({ category: "Admission Fee", amount: 0, isMandatory: true, frequency: "One-Time" });
+          }
+          setFeeStructureTemplate(initialTemplate);
+          setExpandedFeeYears([1]);
+        }
       }
     } catch (err) {
       console.error("fetchData error:", err);
@@ -217,6 +310,117 @@ export default function CourseDetail() {
   useEffect(() => {
     fetch('/api/faculty').then(res => res.json()).then(data => setFacultyList(Array.isArray(data) ? data : [])).catch(console.error);
   }, []);
+
+  // Fee Structure Handlers
+  const handleSelectFeeBatch = (batchKey: string) => {
+    setSelectedFeeBatch(batchKey);
+    if (batchKey !== "default" && batchFeeTemplates[batchKey] && batchFeeTemplates[batchKey].length > 0) {
+      setFeeStructureTemplate(batchFeeTemplates[batchKey]);
+      setExpandedFeeYears([batchFeeTemplates[batchKey][0].year]);
+    } else if (course?.feeStructureTemplate && course.feeStructureTemplate.length > 0) {
+      const cloned = JSON.parse(JSON.stringify(course.feeStructureTemplate));
+      setFeeStructureTemplate(cloned);
+      setExpandedFeeYears([cloned[0].year]);
+    }
+  };
+
+  const toggleFeeYear = (year: number) => {
+    setExpandedFeeYears(prev => prev.includes(year) ? prev.filter(y => y !== year) : [...prev, year]);
+  };
+
+  const showFeeToast = (msg: string) => {
+    setFeeToastMsg(msg);
+    setTimeout(() => setFeeToastMsg(""), 3500);
+  };
+
+  const handleAddFeeComponent = (yearIndex: number, category: string) => {
+    const newTemplate = [...feeStructureTemplate];
+    const newComponent: any = {
+      category,
+      amount: 0,
+      isMandatory: true,
+      frequency: "Annual"
+    };
+    if (category === "Transport Fee") {
+      newComponent.frequency = "Quarterly";
+      newComponent.months = ["Jan-Mar", "Apr-Jun", "Jul-Sep", "Oct-Dec"];
+    } else if (["Admission Fee", "Bag Fee", "Uniform Fee", "Tie Fee", "Blazer Fee", "T-Shirt Fee"].includes(category)) {
+      newComponent.frequency = "One-Time";
+    }
+    newTemplate[yearIndex].components.push(newComponent);
+    recalculateFeeTotals(newTemplate);
+  };
+
+  const handleRemoveFeeComponent = (yearIndex: number, compIndex: number) => {
+    const newTemplate = [...feeStructureTemplate];
+    newTemplate[yearIndex].components.splice(compIndex, 1);
+    recalculateFeeTotals(newTemplate);
+  };
+
+  const handleUpdateFeeComponent = (yearIndex: number, compIndex: number, field: string, value: any) => {
+    const newTemplate = [...feeStructureTemplate];
+    newTemplate[yearIndex].components[compIndex][field] = value;
+    recalculateFeeTotals(newTemplate);
+  };
+
+  const recalculateFeeTotals = (template: any[]) => {
+    template.forEach(yearObj => {
+      let total = 0;
+      yearObj.components.forEach((c: any) => {
+        if (c.frequency === "Quarterly") {
+          total += (Number(c.amount) || 0) * 4;
+        } else {
+          total += Number(c.amount) || 0;
+        }
+      });
+      yearObj.totalYearlyFee = total;
+    });
+    setFeeStructureTemplate([...template]);
+  };
+
+  const grandFeeTotal = feeStructureTemplate.reduce((sum, y) => sum + (y.totalYearlyFee || 0), 0);
+
+  const handleSaveFeeStructure = async () => {
+    setIsSavingFees(true);
+    try {
+      const payload: any = {
+        feeStructureTemplate,
+        batch: selectedFeeBatch !== "default" ? selectedFeeBatch : undefined,
+        applyToStudents: applyFeesToStudents
+      };
+
+      const res = await fetch(`/api/courses/${courseId}/fees`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        if (selectedFeeBatch !== "default") {
+          setBatchFeeTemplates(prev => ({
+            ...prev,
+            [selectedFeeBatch]: feeStructureTemplate
+          }));
+        } else {
+          setCourse((prev: any) => ({
+            ...prev,
+            feeStructureTemplate,
+            tuitionFee: grandFeeTotal
+          }));
+        }
+        showFeeToast(selectedFeeBatch !== "default"
+          ? `Batch ${selectedFeeBatch} fee structure saved!`
+          : "Base course fee structure saved!"
+        );
+      } else {
+        alert("Failed to save fee structure.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error saving fee structure.");
+    } finally {
+      setIsSavingFees(false);
+    }
+  };
 
   const updateCurriculum = async (newCurriculum: any[]) => {
     setIsUpdating(true);
@@ -328,6 +532,21 @@ export default function CourseDetail() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-20 relative font-sans">
 
+      {/* Toast Alert */}
+      <AnimatePresence>
+        {feeToastMsg && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold shadow-2xl flex items-center gap-3 border border-slate-700 text-sm"
+          >
+            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+            <span>{feeToastMsg}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* HERO BANNER SECTION */}
       <div className="relative w-full overflow-hidden">
         <div className="absolute inset-0 bg-[#0F172A]" />
@@ -430,6 +649,7 @@ export default function CourseDetail() {
         <div className="flex gap-2 p-2 bg-white rounded-2xl shadow-lg border border-slate-100 max-w-fit mb-10">
           <TabButton active={activeTab === 'curriculum'} onClick={() => setActiveTab('curriculum')} icon={<Map />} label="Curriculum Matrix" color={themeColor} />
           <TabButton active={activeTab === 'students'} onClick={() => setActiveTab('students')} icon={<Users />} label="Student Roster" color={themeColor} />
+          <TabButton active={activeTab === 'fees'} onClick={() => setActiveTab('fees')} icon={<Wallet />} label="Fee Structure & Batches" color={themeColor} />
         </div>
 
         <div className="min-h-[500px]">
@@ -610,6 +830,220 @@ export default function CourseDetail() {
                   </div>
                 </div>
               )}
+            </motion.div>
+          )}
+
+          {activeTab === 'fees' && (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+              {/* Fee Top Header Bar */}
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 p-6 bg-white rounded-[2rem] shadow-sm border border-slate-100">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
+                    <Wallet className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">Course Fee Structure</h2>
+                    <p className="text-slate-500 font-semibold text-sm">
+                      Manage year-wise fee breakdown and custom fees by academic batch
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto">
+                  {/* Select Batch Dropdown */}
+                  <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 px-4 py-2 rounded-2xl">
+                    <span className="text-xs font-black text-slate-500 uppercase tracking-wider">Select Batch:</span>
+                    <select
+                      value={selectedFeeBatch}
+                      onChange={(e) => handleSelectFeeBatch(e.target.value)}
+                      className="bg-white border border-slate-300 px-3 py-1.5 rounded-xl text-xs font-black text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-2xs"
+                    >
+                      <option value="default">Default / Base Template</option>
+                      {availableFeeBatches.map(b => (
+                        <option key={b} value={b}>
+                          Batch {b} {batchFeeTemplates[b] ? "★ (Custom Fee)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Grand Total */}
+                  <div className="bg-slate-50 border border-slate-100 px-4 py-2 rounded-2xl hidden sm:block text-right">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Program Fee</p>
+                    <p className="text-lg font-black text-slate-900 font-mono">₹{grandFeeTotal.toLocaleString('en-IN')}</p>
+                  </div>
+
+                  {/* Save Button */}
+                  <div className="flex flex-col items-end gap-1">
+                    <button
+                      onClick={handleSaveFeeStructure}
+                      disabled={isSavingFees}
+                      className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold shadow-lg hover:shadow-emerald-600/25 transition-all text-sm cursor-pointer"
+                    >
+                      {isSavingFees ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      Save Fee Structure
+                    </button>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[10px] font-bold text-slate-500">
+                      <input
+                        type="checkbox"
+                        checked={applyFeesToStudents}
+                        onChange={(e) => setApplyFeesToStudents(e.target.checked)}
+                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer"
+                      />
+                      <span>Sync with students</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Year Wise Cards */}
+              <div className="space-y-6">
+                {feeStructureTemplate.map((yearObj, yearIndex) => {
+                  const isExpanded = expandedFeeYears.includes(yearObj.year);
+
+                  return (
+                    <div key={yearObj.year} className="bg-white rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.03)] overflow-hidden transition-all">
+                      {/* Year Card Header */}
+                      <button
+                        type="button"
+                        onClick={() => toggleFeeYear(yearObj.year)}
+                        className="w-full px-7 py-5 flex items-center justify-between bg-slate-50/70 hover:bg-slate-100/70 transition-colors cursor-pointer text-left"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg transition-colors ${
+                            isExpanded ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' : 'bg-white border border-slate-200 text-slate-700'
+                          }`}>
+                            {yearObj.year}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-xl font-black text-slate-900">Academic Year {yearObj.year}</h3>
+                              <span className="px-2.5 py-0.5 bg-slate-200/70 text-slate-600 text-[10px] font-black rounded-lg uppercase tracking-wider">
+                                {yearObj.components?.length || 0} Components
+                              </span>
+                            </div>
+                            <p className="text-xs font-semibold text-slate-400 mt-0.5">
+                              Click to view and configure component breakdown
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-6">
+                          <div className="text-right">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Year {yearObj.year} Total</p>
+                            <p className="text-xl font-black text-slate-900 font-mono">
+                              ₹{(yearObj.totalYearlyFee || 0).toLocaleString('en-IN')}
+                            </p>
+                          </div>
+                          <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400">
+                            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                          </div>
+                        </div>
+                      </button>
+
+                      {/* Year Card Details */}
+                      {isExpanded && (
+                        <div className="p-7 border-t border-slate-100 space-y-4">
+                          {/* Table Header */}
+                          <div className="grid grid-cols-12 gap-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                            <div className="col-span-12 sm:col-span-5">Fee Category</div>
+                            <div className="col-span-6 sm:col-span-3">Frequency</div>
+                            <div className="col-span-4 sm:col-span-3">Amount (₹)</div>
+                            <div className="col-span-2 sm:col-span-1 text-right">Action</div>
+                          </div>
+
+                          {/* Components List */}
+                          <div className="space-y-2.5">
+                            {yearObj.components?.map((comp: any, compIndex: number) => (
+                              <div
+                                key={compIndex}
+                                className="grid grid-cols-12 gap-3 items-center bg-slate-50/70 hover:bg-slate-50 border border-slate-200/60 rounded-2xl p-3.5 transition-colors"
+                              >
+                                {/* Category */}
+                                <div className="col-span-12 sm:col-span-5">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                                      <DollarSign className="w-4 h-4" />
+                                    </div>
+                                    <select
+                                      value={comp.category}
+                                      onChange={e => handleUpdateFeeComponent(yearIndex, compIndex, "category", e.target.value)}
+                                      className="w-full bg-white border border-slate-200 text-xs font-bold text-slate-900 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                    >
+                                      <option value={comp.category}>{comp.category}</option>
+                                      {PREDEFINED_FEES.filter(f => f !== comp.category).map(f => (
+                                        <option key={f} value={f}>{f}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
+
+                                {/* Frequency */}
+                                <div className="col-span-6 sm:col-span-3">
+                                  <select
+                                    value={comp.frequency}
+                                    onChange={e => handleUpdateFeeComponent(yearIndex, compIndex, "frequency", e.target.value)}
+                                    className="w-full bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                  >
+                                    <option value="Annual">Annual (Yearly)</option>
+                                    <option value="Quarterly">Quarterly (×4)</option>
+                                    <option value="One-Time">One-Time (Kit / Admission)</option>
+                                    <option value="Monthly">Monthly</option>
+                                  </select>
+                                </div>
+
+                                {/* Amount */}
+                                <div className="col-span-4 sm:col-span-3 relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">₹</span>
+                                  <input
+                                    type="number"
+                                    value={comp.amount}
+                                    onChange={e => handleUpdateFeeComponent(yearIndex, compIndex, "amount", Number(e.target.value))}
+                                    placeholder="0"
+                                    className="w-full bg-white border border-slate-200 text-slate-900 text-xs font-black font-mono rounded-xl pl-7 pr-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                  />
+                                </div>
+
+                                {/* Delete */}
+                                <div className="col-span-2 sm:col-span-1 flex justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveFeeComponent(yearIndex, compIndex)}
+                                    className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                                    title="Delete component"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Add Fee Component Button */}
+                          <div className="pt-3 flex justify-center">
+                            <div className="relative">
+                              <select
+                                value=""
+                                onChange={e => handleAddFeeComponent(yearIndex, e.target.value)}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                              >
+                                <option value="" disabled>Add new fee component...</option>
+                                {PREDEFINED_FEES.map(f => (
+                                  <option key={f} value={f}>{f}</option>
+                                ))}
+                              </select>
+                              <div className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-2 transition-colors cursor-pointer">
+                                <Plus className="w-3.5 h-3.5 text-slate-600" />
+                                Add Fee Component to Year {yearObj.year}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </motion.div>
           )}
         </div>

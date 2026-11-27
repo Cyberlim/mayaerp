@@ -30,18 +30,70 @@ export default function CourseFeeStructureBuilder({ params }: { params: { id: st
   const [toastMsg, setToastMsg] = useState("");
   const [expandedYears, setExpandedYears] = useState<number[]>([]);
 
+  // Batch-Specific State
+  const [selectedBatch, setSelectedBatch] = useState<string>("default");
+  const [availableBatches, setAvailableBatches] = useState<string[]>([]);
+  const [batchFeeTemplates, setBatchFeeTemplates] = useState<Record<string, any[]>>({});
   const [feeStructureTemplate, setFeeStructureTemplate] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch(`/api/courses/${params.id}`)
-      .then(res => res.json())
-      .then(data => {
+    Promise.all([
+      fetch(`/api/courses/${params.id}`).then(res => res.json()),
+      fetch(`/api/students?selectedProgram=${params.id}`).then(res => res.json()).catch(() => [])
+    ])
+      .then(([data, studentsData]) => {
         setCourse(data);
+
+        // Load existing batch templates
+        const bTemplates = data.batchFeeTemplates || {};
+        setBatchFeeTemplates(bTemplates);
+
+        // Calculate available batches based on course duration and enrolled students
+        const duration = Number(data.duration) || 4;
+        const generatedBatches = new Set<string>();
+
+        // 1. Include any batches already saved in batchFeeTemplates
+        Object.keys(bTemplates).forEach(b => {
+          if (b && b !== 'default' && !b.startsWith('2027') && !b.startsWith('2028') && !b.startsWith('2029')) {
+            generatedBatches.add(b);
+          }
+        });
+
+        // 2. Add batches from enrolled students for this course
+        if (Array.isArray(studentsData)) {
+          studentsData.forEach((s: any) => {
+            const b = s.batch || s.sessionYear || s.session_year;
+            if (b && /^\d{4}\s*-\s*\d{4}$/.test(String(b).trim())) {
+              const cleaned = String(b).trim().replace(/\s+/g, "");
+              // Only existing/valid batches (not future 2027+)
+              const startYr = parseInt(cleaned.slice(0, 4), 10);
+              if (startYr <= 2026) {
+                generatedBatches.add(cleaned);
+              }
+            } else if (s.admissionYear) {
+              const startYr = parseInt(String(s.admissionYear).trim(), 10);
+              if (startYr && startYr >= 2019 && startYr <= 2026) {
+                generatedBatches.add(`${startYr}-${startYr + duration}`);
+              }
+            }
+          });
+        }
+
+        // 3. Fallback: If no student enrolled yet, show standard actual active college batches up to 2026
+        if (generatedBatches.size === 0) {
+          for (let y = 2026; y >= 2023; y--) {
+            generatedBatches.add(`${y}-${y + duration}`);
+          }
+        }
+
+        const sortedBatches = Array.from(generatedBatches).sort().reverse();
+        setAvailableBatches(sortedBatches);
+
+        // Initialize template for default or first batch
         if (data.feeStructureTemplate && data.feeStructureTemplate.length > 0) {
           setFeeStructureTemplate(data.feeStructureTemplate);
           setExpandedYears([data.feeStructureTemplate[0].year]);
         } else {
-          // Initialize empty years based on course duration
           const yearsCount = data.duration || Math.ceil((data.totalSemesters || 8) / 2);
           const initialTemplate = Array.from({ length: yearsCount }).map((_, idx) => ({
             year: idx + 1,
@@ -51,7 +103,7 @@ export default function CourseFeeStructureBuilder({ params }: { params: { id: st
             ]
           }));
           if (initialTemplate.length > 0) {
-              initialTemplate[0].components.unshift({ category: "Admission Fee", amount: 0, isMandatory: true, frequency: "One-Time" });
+            initialTemplate[0].components.unshift({ category: "Admission Fee", amount: 0, isMandatory: true, frequency: "One-Time" });
           }
           setFeeStructureTemplate(initialTemplate);
           setExpandedYears([1]);
@@ -60,6 +112,21 @@ export default function CourseFeeStructureBuilder({ params }: { params: { id: st
       .catch(console.error)
       .finally(() => setIsLoading(false));
   }, [params.id]);
+
+  // Handler to switch selected batch
+  const handleSelectBatch = (batchKey: string) => {
+    setSelectedBatch(batchKey);
+
+    if (batchKey !== "default" && batchFeeTemplates[batchKey] && batchFeeTemplates[batchKey].length > 0) {
+      setFeeStructureTemplate(batchFeeTemplates[batchKey]);
+      setExpandedYears([batchFeeTemplates[batchKey][0].year]);
+    } else if (course?.feeStructureTemplate && course.feeStructureTemplate.length > 0) {
+      // Fallback clone of base template for new batch
+      const cloned = JSON.parse(JSON.stringify(course.feeStructureTemplate));
+      setFeeStructureTemplate(cloned);
+      setExpandedYears([cloned[0].year]);
+    }
+  };
 
   const toggleYear = (year: number) => {
     setExpandedYears(prev => prev.includes(year) ? prev.filter(y => y !== year) : [...prev, year]);
@@ -126,13 +193,28 @@ export default function CourseFeeStructureBuilder({ params }: { params: { id: st
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      const payload: any = {
+        feeStructureTemplate,
+        batch: selectedBatch !== "default" ? selectedBatch : undefined,
+        applyToStudents
+      };
+
       const res = await fetch(`/api/courses/${params.id}/fees`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ feeStructureTemplate, applyToStudents })
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
-        showToast("Fee structure template saved successfully!");
+        if (selectedBatch !== "default") {
+          setBatchFeeTemplates(prev => ({
+            ...prev,
+            [selectedBatch]: feeStructureTemplate
+          }));
+        }
+        showToast(selectedBatch !== "default" 
+          ? `Batch ${selectedBatch} fee structure saved successfully!` 
+          : "Master default fee structure saved successfully!"
+        );
       } else {
         alert("Failed to save fee structure.");
       }
@@ -172,10 +254,28 @@ export default function CourseFeeStructureBuilder({ params }: { params: { id: st
               <ArrowLeft className="w-5 h-5 text-slate-600" />
             </button>
             <div>
-              <h1 className="text-xl font-black text-slate-900 leading-tight">Master Fee Structure</h1>
+              <h1 className="text-xl font-black text-slate-900 leading-tight">Course Fee Structure</h1>
               <p className="text-sm font-semibold text-indigo-600">{course?.name} ({course?.code})</p>
             </div>
           </div>
+
+          {/* Batch Selector Bar */}
+          <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 px-4 py-2 rounded-2xl">
+            <span className="text-xs font-black text-slate-500 uppercase tracking-wider">Select Batch:</span>
+            <select
+              value={selectedBatch}
+              onChange={(e) => handleSelectBatch(e.target.value)}
+              className="bg-white border border-slate-300 px-3 py-1.5 rounded-xl text-xs font-black text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
+            >
+              <option value="default">Default / Base Template</option>
+              {availableBatches.map(b => (
+                <option key={b} value={b}>
+                  Batch {b} {batchFeeTemplates[b] ? "★ (Custom Fee)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex items-center gap-6">
             <div className="text-right hidden sm:block">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Grand Total (Course)</p>

@@ -153,13 +153,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           const amt = Number(c.amount) || 0;
           let compPaid = Number(c.paid) || 0;
 
-          // Reconcile with transactions for this category if transaction sum is higher
-          const catTxns = yearTxns.filter((t: any) => {
-            const tCat = (t.categoryName || t.category || '').toLowerCase().trim();
-            return tCat === catKey || (tCat.includes(catKey) || catKey.includes(tCat));
-          });
-          const txnSumForCat = catTxns.reduce((sum: number, t: any) => sum + (Number(t.amount) || 0), 0);
-          compPaid = Math.max(compPaid, txnSumForCat);
+          // Component paid is taken from student configured ledger, capped at the component's standard amount
+          // (Excess amounts are already adjusted into subsequent years)
+          compPaid = Math.min(amt, compPaid);
+          if (compPaid === 0 && yearTxns.length > 0) {
+            const catTxns = yearTxns.filter((t: any) => {
+              const tCat = (t.categoryName || t.category || '').toLowerCase().trim();
+              return tCat === catKey || (tCat.includes(catKey) || catKey.includes(tCat));
+            });
+            const txnSumForCat = catTxns.reduce((sum: number, t: any) => sum + (Number(t.amount) || 0), 0);
+            compPaid = Math.min(amt, txnSumForCat);
+          }
 
           const due = Math.max(0, amt - compPaid);
           const isPaid = due === 0 && amt > 0;
@@ -283,9 +287,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       }
 
       // Also check if any general transactions in year not captured by specific categories
-      const yrTxnTotal = yearTxns.reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
-      if (yrTxnTotal > yrPaid) {
-        yrPaid = Math.min(yrGross, yrTxnTotal);
+      if (components.length === 0) {
+        const yrTxnTotal = yearTxns.reduce((s: number, t: any) => s + (Number(t.amount) || 0), 0);
+        if (yrTxnTotal > yrPaid) {
+          yrPaid = Math.min(yrGross, yrTxnTotal);
+        }
       }
 
       const yearNet = Math.max(0, yrGross - discount);

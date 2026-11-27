@@ -644,14 +644,20 @@ export default function StudentManagementDashboard() {
       });
     }
     if (filterYear !== "All") {
-      const qYear = filterYear.trim();
+      const qVal = filterYear.trim();
       result = result.filter(s => {
-        const startYr = getStudentStartYear(s);
-        if (startYr === qYear) return true;
-        const sy = String(s.sessionYear || "").trim();
-        const ay = String(s.admissionYear || "").trim();
         const bt = String(s.batch || "").trim();
-        return sy.startsWith(qYear) || ay.startsWith(qYear) || bt.startsWith(qYear);
+        const sy = String(s.sessionYear || s.session_year || "").trim();
+        const ay = String(s.admissionYear || s.admission_year || "").trim();
+        const startYr = getStudentStartYear(s);
+        return (
+          bt === qVal ||
+          sy === qVal ||
+          bt.startsWith(qVal) ||
+          sy.startsWith(qVal) ||
+          ay.startsWith(qVal) ||
+          startYr === qVal
+        );
       });
     }
     if (filterSemester !== "All") {
@@ -744,21 +750,42 @@ export default function StudentManagementDashboard() {
 
   const uniqueBatches = useMemo(() => {
     const batches = new Set<string>();
-    students.forEach((s: any) => {
-      if (s.batch && String(s.batch).trim()) batches.add(String(s.batch).trim());
-      if (s.sessionYear && String(s.sessionYear).trim()) batches.add(String(s.sessionYear).trim());
+    const targetStudents = filterCourse === "All"
+      ? students
+      : students.filter((s: any) => {
+          const pid = typeof s.selectedProgram === 'object' ? s.selectedProgram?._id : s.selectedProgram;
+          return pid === filterCourse;
+        });
+
+    targetStudents.forEach((s: any) => {
+      const b = (s.batch && String(s.batch).trim()) || (s.sessionYear && String(s.sessionYear).trim());
+      if (b) {
+        const startYr = parseInt(b.slice(0, 4), 10);
+        if (startYr && startYr <= 2026) {
+          batches.add(b);
+        } else if (!startYr) {
+          batches.add(b);
+        }
+      }
     });
     return Array.from(batches).sort().reverse();
-  }, [students]);
+  }, [students, filterCourse]);
 
   const uniqueStartYears = useMemo(() => {
     const yearsSet = new Set<string>();
-    students.forEach((s: any) => {
+    const targetStudents = filterCourse === "All"
+      ? students
+      : students.filter((s: any) => {
+          const pid = typeof s.selectedProgram === 'object' ? s.selectedProgram?._id : s.selectedProgram;
+          return pid === filterCourse;
+        });
+
+    targetStudents.forEach((s: any) => {
       const yr = getStudentStartYear(s);
       if (yr) yearsSet.add(yr);
     });
     return Array.from(yearsSet).sort().reverse();
-  }, [students]);
+  }, [students, filterCourse]);
 
   const dashboardMaxSemesters = useMemo(() => {
     let filteredCourses = courses;
@@ -772,6 +799,27 @@ export default function StudentManagementDashboard() {
     }
     return 8;
   }, [courses, filterBranch, filterCourse]);
+
+  const dashboardAvailableSemesters = useMemo(() => {
+    const semSet = new Set<number>();
+    const targetStudents = students.filter(s => {
+      const bid = typeof s.selectedBranch === 'object' ? s.selectedBranch?._id : s.selectedBranch;
+      const pid = typeof s.selectedProgram === 'object' ? s.selectedProgram?._id : s.selectedProgram;
+      const matchBranch = filterBranch === "All" || bid === filterBranch;
+      const matchCourse = filterCourse === "All" || pid === filterCourse;
+      return matchBranch && matchCourse;
+    });
+
+    targetStudents.forEach(s => {
+      const sem = Number(s.selectedSemester);
+      if (sem > 0 && sem <= dashboardMaxSemesters) semSet.add(sem);
+    });
+
+    if (semSet.size > 0) {
+      return Array.from(semSet).sort((a, b) => a - b);
+    }
+    return Array.from({ length: dashboardMaxSemesters }, (_, i) => i + 1);
+  }, [students, filterBranch, filterCourse, dashboardMaxSemesters]);
 
   const batchMaxSemesters = useMemo(() => {
     let filteredCourses = courses;
@@ -1000,10 +1048,16 @@ export default function StudentManagementDashboard() {
               onChange={e => setFilterYear(e.target.value)}
               className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500/20"
             >
-              <option value="All">All Years</option>
-              {uniqueStartYears.map((yr: string) => (
-                <option key={yr} value={yr}>{yr}</option>
-              ))}
+              <option value="All">All Batches</option>
+              {uniqueBatches.length > 0 ? (
+                uniqueBatches.map((b: string) => (
+                  <option key={b} value={b}>Batch {b}</option>
+                ))
+              ) : (
+                uniqueStartYears.map((yr: string) => (
+                  <option key={yr} value={yr}>Batch {yr}</option>
+                ))
+              )}
             </select>
 
             <select
@@ -1012,8 +1066,8 @@ export default function StudentManagementDashboard() {
               className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none"
             >
               <option value="All">All Semesters</option>
-              {[...Array(dashboardMaxSemesters)].map((_, i) => (
-                <option key={i + 1} value={i + 1}>Semester {i + 1}</option>
+              {dashboardAvailableSemesters.map((sm) => (
+                <option key={sm} value={sm}>Semester {sm}</option>
               ))}
             </select>
 

@@ -48,6 +48,20 @@ export default function ReceiptModal({ isOpen, onClose, receiptData }: ReceiptMo
 
   const amount = Number(receiptData.amount) || 0;
 
+  // Calculate table totals dynamically from breakdown if present
+  let tableTotalDue = 0;
+  let tableTotalPaid = 0;
+  if (Array.isArray(receiptData.breakdown) && receiptData.breakdown.length > 0) {
+    receiptData.breakdown.forEach((item: any, idx: number) => {
+      tableTotalDue += Number(item.due ?? item.amount ?? 0);
+      tableTotalPaid += Number(item.paid ?? item.received ?? (idx === 0 ? amount : 0));
+    });
+  } else {
+    tableTotalDue = Number(receiptData.totalDue || amount);
+    tableTotalPaid = Number(receiptData.totalPaid || amount);
+  }
+  const tableTotalBal = Math.max(0, tableTotalDue - tableTotalPaid);
+
   const handlePrint = () => {
     const printContent = printRef.current;
     if (!printContent) {
@@ -123,14 +137,30 @@ export default function ReceiptModal({ isOpen, onClose, receiptData }: ReceiptMo
     return `Rupees ${inWords(Math.floor(num)).trim()} Only`;
   };
 
+  // Helper to format ISO date strings cleanly into DD/MM/YYYY
+  const formatDate = (d: any) => {
+    if (!d) return dateStr;
+    try {
+      const parsed = new Date(d);
+      if (isNaN(parsed.getTime())) return String(d);
+      return parsed.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      });
+    } catch {
+      return String(d);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-[60] overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 print:p-0 print:bg-white">
+    <div className="fixed inset-0 z-[60] overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 print:p-0 print:bg-white">
       <style type="text/css" media="print">
         {`
-          @page { margin: 0; }
+          @page { margin: 8mm; size: A4 portrait; }
           html, body {
-            height: 100vh !important;
-            overflow: hidden !important;
+            height: auto !important;
+            overflow: visible !important;
             background: white !important;
           }
           body * {
@@ -154,39 +184,39 @@ export default function ReceiptModal({ isOpen, onClose, receiptData }: ReceiptMo
         initial={{ opacity: 0, scale: 0.95, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 15 }}
-        className={`bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden w-full printable-receipt ${
+        className={`bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-100 overflow-hidden w-full printable-receipt max-h-[96vh] flex flex-col ${
           thermalMode ? "max-w-md font-mono" : "max-w-3xl"
-        } print:max-w-none print:shadow-none print:border-none print:m-0`}
+        } print:max-w-none print:max-h-none print:shadow-none print:border-none print:m-0`}
       >
         {/* Top Control Bar (Hidden on Print) */}
-        <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between print:hidden">
+        <div className="bg-slate-900 text-white px-5 py-3 sm:px-6 sm:py-3.5 flex items-center justify-between print:hidden shrink-0">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-xl border border-indigo-500/30">
-              <ReceiptIcon className="w-5 h-5" />
+            <div className="p-1.5 bg-indigo-500/20 text-indigo-400 rounded-xl border border-indigo-500/30">
+              <ReceiptIcon className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-sm tracking-wide">
+              <h3 className="font-bold text-xs sm:text-sm tracking-wide">
                 {isStudent ? "STUDENT FEE RECEIPT" : "EMPLOYEE PAYMENT VOUCHER"}
               </h3>
-              <p className="text-xs text-slate-400 font-mono">{receiptNo}</p>
+              <p className="text-[10px] sm:text-xs text-slate-400 font-mono">{receiptNo}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={() => setThermalMode(!thermalMode)}
-              className={`text-xs px-3 py-1.5 rounded-lg border font-bold transition-all ${
+              className={`text-[11px] px-2.5 py-1 rounded-lg border font-bold transition-all ${
                 thermalMode
                   ? "bg-amber-500 text-slate-900 border-amber-400"
                   : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
               }`}
             >
-              {thermalMode ? "A4 Standard View" : "Thermal Slip"}
+              {thermalMode ? "A4 View" : "Thermal Slip"}
             </button>
 
             <button
               onClick={handleCopy}
-              className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all"
+              className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all"
               title="Copy Summary"
             >
               {copied ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
@@ -194,16 +224,16 @@ export default function ReceiptModal({ isOpen, onClose, receiptData }: ReceiptMo
 
             <button
               onClick={handlePrint}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-indigo-600/30"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-indigo-600/30 cursor-pointer"
             >
-              <Printer className="w-4 h-4" /> Print Receipt
+              <Printer className="w-3.5 h-3.5" /> Print Receipt
             </button>
 
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all ml-1"
+              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all ml-1 cursor-pointer"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -211,218 +241,300 @@ export default function ReceiptModal({ isOpen, onClose, receiptData }: ReceiptMo
         {/* ============================================================== */}
         {/* RECEIPT CONTENT AREA (PRINTABLE)                                */}
         {/* ============================================================== */}
-        <div ref={printRef} className={`p-8 ${thermalMode ? "p-4 text-xs" : "p-8 text-slate-800"}`}>
+        <div ref={printRef} className={`overflow-y-auto flex-1 p-5 sm:p-6 ${thermalMode ? "p-3 text-xs" : "text-slate-800"}`}>
           
           {/* Institutional Header */}
-          <div className="border-b-2 border-slate-800 pb-5 mb-6 text-center relative">
-            <div className="flex justify-center items-center gap-3 mb-2">
-              <div className="w-12 h-12 rounded-xl bg-indigo-900 text-white flex items-center justify-center font-black text-xl shadow-md">
-                M
+          <div className="border-b-2 border-slate-800 pb-3 mb-3 relative">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-900 text-white flex items-center justify-center font-black text-lg shadow-sm">
+                  M
+                </div>
+                <div>
+                  <h1 className="text-lg font-black text-slate-900 tracking-tight leading-none uppercase">
+                    Maya Group of Institutions
+                  </h1>
+                  <p className="text-[10px] font-bold text-slate-600 tracking-wider uppercase mt-0.5">
+                    Maya Institute of Technology & Management
+                  </p>
+                  <p className="text-[9px] text-slate-500">
+                    Mendu Road, Near Police Line, Hathras, U.P. 204101 • Phone: +91 9058479966, 9528077808
+                  </p>
+                </div>
               </div>
-              <div className="text-left">
-                <h1 className="text-xl font-black text-slate-900 tracking-tight leading-none uppercase">
-                  Maya Group of Institutions
-                </h1>
-                <p className="text-[11px] font-bold text-slate-600 tracking-wider uppercase mt-1">
-                  Department of Accounts & Institutional Finance
+
+              <div className="text-right sm:border-l sm:border-slate-200 sm:pl-3">
+                <span className="inline-block px-2.5 py-0.5 bg-slate-900 text-white font-mono font-black text-[11px] uppercase tracking-widest rounded-md shadow-xs">
+                  Fee Receipt
+                </span>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                  Student Copy / Office Record
                 </p>
               </div>
             </div>
 
-            <p className="text-[11px] text-slate-500 max-w-lg mx-auto">
-              Mendu Road, Near Police Line, Hathras (U.P.) • Phone: +91 9058479966, 9528077808
-            </p>
-
-            <div className="mt-3 inline-block px-4 py-1 rounded-full bg-slate-100 text-slate-800 border border-slate-300 text-xs font-black tracking-widest uppercase">
-              {isStudent ? "OFFICIAL STUDENT FEE RECEIPT" : "STAFF SALARY / DISBURSAL VOUCHER"}
+            {/* Barcode / Reference Strip */}
+            <div className="mt-2 pt-1.5 border-t border-dashed border-slate-200 flex justify-between items-center text-[9px] font-mono text-slate-500">
+              <span className="tracking-widest">||||||||||||||||||||||||||||||||||||||||||||||||||||||||</span>
+              <span className="font-bold text-slate-700">REF: {receiptNo}</span>
+              <span className="tracking-widest">||||||||||||||||||||||||||||||||||||||||||||||||||||||||</span>
             </div>
           </div>
 
-          {/* Receipt Meta Details Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200 mb-6 text-xs">
-            <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Receipt No</span>
-              <span className="font-mono font-bold text-slate-900 text-sm">{receiptNo}</span>
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Receipt Date</span>
-              <span className="font-semibold text-slate-800">{dateStr}</span>
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Transaction ID</span>
-              <span className="font-mono font-semibold text-slate-700 truncate block">{txnId}</span>
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Payment Mode</span>
-              <span className="inline-flex items-center gap-1 font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
-                {receiptData.paymentMethod || "Cash"}
-              </span>
-            </div>
-          </div>
-
-          {/* Beneficiary Information (Student vs Employee) */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-6">
-            <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-3 border-b border-slate-100 pb-2 flex items-center gap-2">
-              <User className="w-3.5 h-3.5 text-indigo-600" />
-              {isStudent ? "Student Academic Profile" : "Employee & Remuneration Details"}
-            </h4>
-
-            {isStudent ? (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-3 gap-x-6 text-xs">
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Student Full Name</span>
-                  <span className="font-black text-slate-900 text-sm">{receiptData.name}</span>
+          {/* Student & Academic Profile Grid (ABESIT Format) */}
+          <div className="bg-slate-50/80 rounded-xl border border-slate-200 p-3 mb-3 text-xs font-sans">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1">
+              {/* Left Column */}
+              <div className="space-y-1.5">
+                <div className="flex">
+                  <span className="w-36 text-slate-500 font-semibold">Receipt No</span>
+                  <span className="font-mono font-bold text-slate-900">: {receiptNo}</span>
                 </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Enrollment / Roll No</span>
-                  <span className="font-mono font-bold text-indigo-900">{receiptData.idNumber || receiptData.enrollmentNumber || "N/A"}</span>
+                <div className="flex">
+                  <span className="w-36 text-slate-500 font-semibold">Admission No</span>
+                  <span className="font-mono font-bold text-slate-900">: {receiptData.admissionNumber || receiptData.idNumber || "N/A"}</span>
                 </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Admission No</span>
-                  <span className="font-mono font-semibold text-slate-700">{receiptData.admissionNumber || "N/A"}</span>
+                <div className="flex">
+                  <span className="w-36 text-slate-500 font-semibold">Student Name</span>
+                  <span className="font-black text-slate-900 uppercase">: {receiptData.name}</span>
                 </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Academic Course</span>
-                  <span className="font-bold text-slate-800">{receiptData.program || "Course"}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Current Semester / Year</span>
-                  <span className="font-semibold text-slate-700">Semester {receiptData.semester || 1} ({receiptData.academicYear || "Year 1"})</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Department / Branch</span>
-                  <span className="font-semibold text-slate-700">{receiptData.branch || "Main Campus"}</span>
+                {receiptData.fatherName && (
+                  <div className="flex">
+                    <span className="w-36 text-slate-500 font-semibold">Guardian&apos;s Name</span>
+                    <span className="font-bold text-slate-800 uppercase">: {receiptData.fatherName}</span>
+                  </div>
+                )}
+                <div className="flex">
+                  <span className="w-36 text-slate-500 font-semibold">Address</span>
+                  <span className="font-medium text-slate-700 truncate">: {receiptData.address || "Hathras (Uttar Pradesh)"}</span>
                 </div>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-3 gap-x-6 text-xs">
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Employee Name</span>
-                  <span className="font-black text-slate-900 text-sm">{receiptData.name}</span>
+
+              {/* Right Column */}
+              <div className="space-y-1.5">
+                <div className="flex">
+                  <span className="w-36 text-slate-500 font-semibold">Receipt Date</span>
+                  <span className="font-bold text-slate-900">: {dateStr}</span>
                 </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Employee Code</span>
-                  <span className="font-mono font-bold text-indigo-900">{receiptData.idNumber || "EMP-001"}</span>
+                <div className="flex">
+                  <span className="w-36 text-slate-500 font-semibold">Enrollment / Roll No</span>
+                  <span className="font-mono font-bold text-slate-800">: {receiptData.enrollmentNumber || receiptData.rollNumber || receiptData.idNumber || "N/A"}</span>
                 </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Designation / Role</span>
-                  <span className="font-semibold text-slate-700">{receiptData.designation || "Staff Member"}</span>
+                <div className="flex">
+                  <span className="w-36 text-slate-500 font-semibold">Session / Batch</span>
+                  <span className="font-bold text-indigo-700">: {receiptData.batch || receiptData.sessionYear || receiptData.session || "2023-2026"}</span>
                 </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Department</span>
-                  <span className="font-semibold text-slate-700">{receiptData.department || "Academics"}</span>
+                <div className="flex">
+                  <span className="w-36 text-slate-500 font-semibold">Program / Course</span>
+                  <span className="font-bold text-slate-900">: {receiptData.program || "Course"}</span>
                 </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Voucher Type</span>
-                  <span className="font-bold text-slate-800">{receiptData.payoutType || "Salary"}</span>
+                <div className="flex">
+                  <span className="w-36 text-slate-500 font-semibold">Semester / Year</span>
+                  <span className="font-bold text-slate-800">: Sem {receiptData.semester || 1} ({receiptData.academicYear || "Year 1"})</span>
                 </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Disbursed By</span>
-                  <span className="font-semibold text-slate-700">{receiptData.disbursedBy || "Finance Controller"}</span>
+                <div className="flex">
+                  <span className="w-36 text-slate-500 font-semibold">Fee Category</span>
+                  <span className="font-bold text-slate-800">: {receiptData.categoryName || receiptData.category || "General"}</span>
                 </div>
+                {receiptData.lastSlipNumber && (
+                  <div className="flex">
+                    <span className="w-36 text-slate-500 font-semibold">Previous Receipt</span>
+                    <span className="font-mono text-slate-700 font-bold">: {receiptData.lastSlipNumber} {receiptData.lastSlipDate ? `(${formatDate(receiptData.lastSlipDate)})` : ""}</span>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
 
-          {/* Itemized Fee Breakdown Table */}
-          <div className="border border-slate-200 rounded-2xl overflow-hidden mb-6">
+          {/* Itemized Fee Breakdown Table (Dues, Received, Balance) */}
+          <div className="border border-slate-300 rounded-xl overflow-hidden mb-3">
+            <div className="bg-slate-100 px-4 py-1.5 border-b border-slate-300 font-black text-xs text-slate-800 uppercase tracking-wider flex justify-between items-center">
+              <span>Fee Detail ({receiptData.academicYear || "Current Year"})</span>
+              <span className="text-[10px] text-slate-500 font-bold lowercase">all values in INR (₹)</span>
+            </div>
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-900 text-white font-bold text-[11px] uppercase tracking-wider">
+              <thead className="bg-slate-50 text-slate-700 font-bold text-[11px] border-b border-slate-200">
                 <tr>
-                  <th className="p-3.5 pl-5">#</th>
-                  <th className="p-3.5">Fee Category / Description</th>
-                  <th className="p-3.5">Category Type</th>
-                  <th className="p-3.5 pr-5 text-right">Amount (INR)</th>
+                  <th className="py-2 px-3 w-10 text-center">S No</th>
+                  <th className="py-2 px-3 w-28">Due Date</th>
+                  <th className="py-2 px-3">Particulars</th>
+                  <th className="py-2 px-3 text-right">Dues (Rs.)</th>
+                  <th className="py-2 px-3 text-right">Received (Rs.)</th>
+                  <th className="py-2 px-3 text-right">Balance (Rs.)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {receiptData.items && receiptData.items.length > 0 ? (
-                  receiptData.items.map((item: any, idx: number) => (
-                    <tr key={idx} className="hover:bg-slate-50">
-                      <td className="p-3.5 pl-5 text-slate-400 font-mono">{idx + 1}</td>
-                      <td className="p-3.5 font-bold text-slate-800">{item.description}</td>
-                      <td className="p-3.5 text-slate-500">
-                        <span className="px-2 py-0.5 bg-slate-100 rounded-md font-semibold text-[10px]">
-                          {receiptData.categoryName || receiptData.category || "Institutional"}
-                        </span>
-                      </td>
-                      <td className="p-3.5 pr-5 text-right font-mono font-bold text-slate-900">
-                        ₹{Number(item.amount || amount).toLocaleString("en-IN")}
-                      </td>
-                    </tr>
-                  ))
+                {receiptData.breakdown && receiptData.breakdown.length > 0 ? (
+                  receiptData.breakdown.map((item: any, idx: number) => {
+                    const itemDue = Number(item.due ?? item.amount ?? 0);
+                    const itemPaid = Number(item.paid ?? item.received ?? (idx === 0 ? amount : 0));
+                    const itemBal = Math.max(0, itemDue - itemPaid);
+                    const formattedDueDate = item.dueDate ? formatDate(item.dueDate) : dateStr;
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50/70 font-medium text-slate-800">
+                        <td className="py-1.5 px-3 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                        <td className="py-1.5 px-3 text-slate-500 font-mono text-[11px]">{formattedDueDate}</td>
+                        <td className="py-1.5 px-3 font-bold text-slate-900">{item.particulars || item.description || item.category}</td>
+                        <td className="py-1.5 px-3 text-right font-mono font-semibold text-slate-800">
+                          {itemDue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-1.5 px-3 text-right font-mono font-bold text-emerald-700">
+                          {itemPaid.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-1.5 px-3 text-right font-mono text-slate-600">
+                          {itemBal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
-                  <tr>
-                    <td className="p-3.5 pl-5 text-slate-400 font-mono">1</td>
-                    <td className="p-3.5 font-bold text-slate-800">
-                      {receiptData.categoryName || receiptData.category || (isStudent ? "Tuition & Institutional Fee" : "Remuneration Disbursal")}
+                  <tr className="hover:bg-slate-50/70 font-medium text-slate-800">
+                    <td className="py-1.5 px-3 text-center text-slate-400 font-mono text-[11px]">1</td>
+                    <td className="py-1.5 px-3 text-slate-500 font-mono text-[11px]">{dateStr}</td>
+                    <td className="py-1.5 px-3 font-bold text-slate-900">
+                      {receiptData.categoryName || receiptData.category || "Tuition & Institutional Fee"}
                     </td>
-                    <td className="p-3.5 text-slate-500">
-                      <span className="px-2 py-0.5 bg-slate-100 rounded-md font-semibold text-[10px]">Standard</span>
+                    <td className="py-1.5 px-3 text-right font-mono font-semibold text-slate-800">
+                      {tableTotalDue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
-                    <td className="p-3.5 pr-5 text-right font-mono font-bold text-slate-900">
-                      ₹{amount.toLocaleString("en-IN")}
+                    <td className="py-1.5 px-3 text-right font-mono font-bold text-emerald-700">
+                      {tableTotalPaid.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-1.5 px-3 text-right font-mono text-slate-600">
+                      {tableTotalBal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                   </tr>
                 )}
               </tbody>
-              <tfoot className="bg-slate-50 border-t-2 border-slate-300 font-bold">
+              <tfoot className="bg-slate-100/90 border-t-2 border-slate-300 font-black text-xs">
                 <tr>
-                  <td colSpan={3} className="p-4 pl-5 text-slate-900 text-sm uppercase tracking-wide">
-                    Total Amount Received
+                  <td colSpan={3} className="py-2 px-3 uppercase tracking-wider text-slate-800 text-right">
+                    Total :
                   </td>
-                  <td className="p-4 pr-5 text-right font-mono text-base font-black text-indigo-900">
-                    ₹{amount.toLocaleString("en-IN")}
+                  <td className="py-2 px-3 text-right font-mono text-slate-900">
+                    {tableTotalDue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td className="py-2 px-3 text-right font-mono text-emerald-800">
+                    {tableTotalPaid.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td className="py-2 px-3 text-right font-mono text-slate-900">
+                    {tableTotalBal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                 </tr>
               </tfoot>
             </table>
           </div>
 
-          {/* Amount in Words */}
-          <div className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-4 mb-8 flex items-start gap-3">
-            <BadgeCheck className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 block">Amount in Words</span>
-              <p className="text-xs font-bold text-indigo-950 italic">{numberToWords(amount)}</p>
+          {/* Payment Details Table (Mode, Bank, Cheque / UPI Ref, Amount) */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
+            <div className="md:col-span-8 border border-slate-300 rounded-xl overflow-hidden">
+              <div className="bg-slate-100 px-3 py-1 border-b border-slate-300 font-black text-[11px] text-slate-800 uppercase tracking-wider flex justify-between items-center">
+                <span>Payment Details</span>
+                <span className="text-[10px] text-slate-500 font-normal">Recent Payments</span>
+              </div>
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-600 font-bold text-[10px] border-b border-slate-200">
+                  <tr>
+                    <th className="py-1.5 px-2.5">S No</th>
+                    <th className="py-1.5 px-2.5">Mode</th>
+                    <th className="py-1.5 px-2.5">Chq / Txn Ref</th>
+                    <th className="py-1.5 px-2.5">Date</th>
+                    <th className="py-1.5 px-2.5 text-right">Amount (₹)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {receiptData.paymentsList && receiptData.paymentsList.length > 0 ? (
+                    receiptData.paymentsList.map((p: any, pIdx: number) => (
+                      <tr key={pIdx} className={p.isCurrent ? "bg-emerald-50/50 font-bold" : ""}>
+                        <td className="py-1.5 px-2.5 text-slate-400 font-mono text-[11px]">{p.sNo || pIdx + 1}</td>
+                        <td className="py-1.5 px-2.5 font-bold text-slate-900">{p.mode || "Online"}</td>
+                        <td className="py-1.5 px-2.5 font-mono text-slate-700 truncate max-w-[130px]">{p.txnRef || "-"}</td>
+                        <td className="py-1.5 px-2.5 text-slate-600 font-mono text-[11px]">{p.date ? formatDate(p.date) : dateStr}</td>
+                        <td className="py-1.5 px-2.5 text-right font-mono font-bold text-emerald-800">
+                          ₹{Number(p.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td className="py-1.5 px-2.5 text-slate-400 font-mono text-[11px]">1</td>
+                      <td className="py-1.5 px-2.5 font-bold text-slate-900">{receiptData.paymentMethod || "Cash"}</td>
+                      <td className="py-1.5 px-2.5 font-mono text-slate-700 truncate max-w-[130px]">{txnId}</td>
+                      <td className="py-1.5 px-2.5 text-slate-600 font-mono text-[11px]">{dateStr}</td>
+                      <td className="py-1.5 px-2.5 text-right font-mono font-bold text-emerald-800">
+                        ₹{amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="md:col-span-4 border border-slate-300 rounded-xl p-3 flex flex-col justify-between bg-slate-50/50">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block mb-0.5">
+                  Adjusted / Paid Now
+                </span>
+                <span className="font-mono text-base font-black text-emerald-700">
+                  ₹{amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="pt-2 border-t border-slate-200">
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                  Remaining Year Due
+                </span>
+                <span className="font-mono text-base font-black text-rose-600">
+                  ₹{tableTotalBal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Signatures & Verification Footer */}
-          <div className="pt-6 border-t border-slate-200 grid grid-cols-2 sm:grid-cols-3 items-end gap-6 text-xs">
-            <div className="flex items-center gap-3">
-              <div className="w-14 h-14 bg-slate-100 border border-slate-300 rounded-xl flex items-center justify-center p-1">
-                <QrCode className="w-10 h-10 text-slate-700" />
-              </div>
-              <div className="text-[10px] text-slate-400">
-                <p className="font-bold text-slate-600 uppercase">Tamper Proof</p>
-                <p>Digitally Logged in ERP</p>
-              </div>
+          {/* Formal Acknowledgement & Amount in Words */}
+          <div className="border border-slate-200 rounded-xl p-3.5 bg-indigo-50/40 mb-4 space-y-1.5">
+            {receiptData.notes && (
+              <p className="text-xs text-slate-700">
+                <strong className="font-bold text-slate-900">Remark:</strong> {receiptData.notes}
+              </p>
+            )}
+            <p className="text-xs font-black text-indigo-950 uppercase tracking-wide">
+              WE THANKFULLY ACKNOWLEDGE THE RECEIPT OF ₹{amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <p className="text-xs font-bold text-indigo-900 italic">
+              ({numberToWords(amount)})
+            </p>
+          </div>
+
+          {/* Signatures & Seal Block */}
+          <div className="pt-3 border-t border-slate-300 flex justify-between items-end text-xs">
+            <div>
+              <p className="text-[10px] font-bold text-slate-500">
+                (Accountant / Accounts Officer)
+              </p>
+              <p className="text-[11px] font-black text-slate-800">
+                For Maya Group of Institutions
+              </p>
             </div>
 
             <div className="text-center">
-              <div className="h-10 flex items-center justify-center text-slate-300 italic text-[11px]">
-                [ Institutional Seal ]
+              <div className="w-12 h-12 border border-dashed border-slate-300 rounded-lg flex items-center justify-center text-[9px] text-slate-400 mx-auto mb-1">
+                SEAL
               </div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase border-t border-slate-200 pt-1">
-                College Accounts Office
-              </p>
+              <p className="text-[9px] text-slate-400 uppercase tracking-wider">Campus Accounts</p>
             </div>
 
             <div className="text-right">
-              <div className="h-10 flex items-end justify-end pb-1">
-                <span className="font-mono text-[11px] font-bold text-slate-700 underline">
-                  {receiptData.collectedBy || receiptData.disbursedBy || "Finance Officer"}
+              <div className="h-8 flex items-end justify-end">
+                <span className="font-mono text-xs font-bold text-slate-800 border-b border-slate-400 pb-0.5">
+                  {receiptData.collectedBy || "Authorized Signatory"}
                 </span>
               </div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase border-t border-slate-200 pt-1">
-                Authorized Signatory
-              </p>
+              <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">Authorized Signature</p>
             </div>
           </div>
 
-          <p className="text-[9px] text-center text-slate-400 mt-6 tracking-wider uppercase">
-            This is a computer generated institutional transaction receipt. No physical signature is required.
+          <p className="text-[9px] text-slate-400 text-center mt-3 pt-2 border-t border-slate-100">
+            &quot;Note: Merely depositing the fee online or on counter of the Institute by cheque or cash does not give candidate claim/make entitle for admission if otherwise not eligible.&quot;
           </p>
         </div>
       </motion.div>
