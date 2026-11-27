@@ -317,6 +317,12 @@ export default function FinanceDashboard() {
   const [feeCategorySearch, setFeeCategorySearch] = useState("");
   const [isFeeCatDropdownOpen, setIsFeeCatDropdownOpen] = useState(false);
   const feeCatDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Other Fees & Add-ons Multi-Select State
+  const [isOtherFeesModalOpen, setIsOtherFeesModalOpen] = useState(false);
+  const [selectedAddonFees, setSelectedAddonFees] = useState<Array<{ code: string; name: string; amount: number; type?: string }>>([]);
+  const [otherFeesSearch, setOtherFeesSearch] = useState("");
+
   const [feeForm, setFeeForm] = useState({
     studentId: "",
     year: 1,
@@ -1290,6 +1296,8 @@ export default function FinanceDashboard() {
 
       setFeeCategorySearch("");
       setIsFeeCatDropdownOpen(false);
+      setSelectedAddonFees([]);
+      setOtherFeesSearch("");
       setFeeForm({
         studentId,
         year: initialYear,
@@ -1605,7 +1613,12 @@ export default function FinanceDashboard() {
         receiptNumber: feeForm.receiptNumber?.trim() || undefined,
         category: finalCategory,
         categoryName: catLabel,
-        academicYear: `Year ${feeForm.year}`
+        academicYear: `Year ${feeForm.year}`,
+        addonItems: selectedAddonFees.map(a => ({
+          code: a.code,
+          name: a.name,
+          amount: Number(a.amount) || 0
+        }))
       };
 
       const res = await fetch("/api/finance/transactions", {
@@ -1681,9 +1694,27 @@ export default function FinanceDashboard() {
           let yearPaidTotal = 0;
           
           const submittingYearObj = editFeeYears.find(y => y.year === feeForm.year);
-          if (submittingYearObj && Array.isArray(submittingYearObj.components) && submittingYearObj.components.length > 0) {
+          // Combine standard components with any selected other add-on fee items
+          const componentsList: any[] = submittingYearObj && Array.isArray(submittingYearObj.components)
+            ? [...submittingYearObj.components]
+            : [];
+
+          selectedAddonFees.forEach(addon => {
+            const aNorm = addon.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const alreadyExists = componentsList.some(c => (c.category || '').toLowerCase().replace(/[^a-z0-9]/g, '') === aNorm);
+            if (!alreadyExists) {
+              componentsList.push({
+                category: addon.name,
+                amount: Number(addon.amount) || 0,
+                paid: 0,
+                frequency: "One Time"
+              });
+            }
+          });
+
+          if (componentsList.length > 0) {
             let remainToAllocate = paidAmount;
-            submittingYearObj.components.forEach((c: any) => {
+            componentsList.forEach((c: any) => {
               const cName = c.category || "Fee Item";
               const baseDue = Number(c.amount) || 0;
               const prevPaid = Number(c.paid) || 0;
@@ -3626,6 +3657,14 @@ export default function FinanceDashboard() {
                     currentYrPaid += Number(c.paid) || 0;
                   });
                 }
+
+                // Add newly selected addon fees to the year gross and student gross if not already in ledger
+                const existingCompNames = new Set((selectedYrObj?.components || []).map((c: any) => (c.category || '').toLowerCase().replace(/[^a-z0-9]/g, '')));
+                const addonGrossAdd = selectedAddonFees
+                  .filter(a => !existingCompNames.has(a.name.toLowerCase().replace(/[^a-z0-9]/g, '')))
+                  .reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
+
+                currentYrGross += addonGrossAdd;
                 const currentYrDisc = Number(selectedYrObj?.discount) || 0;
                 const currentYrDue = Math.max(0, currentYrGross - currentYrDisc - currentYrPaid);
 
@@ -4260,7 +4299,23 @@ export default function FinanceDashboard() {
                               </thead>
                               <tbody className="divide-y divide-slate-100 font-medium">
                                 {(() => {
-                                  if (!selectedYrObj?.components || selectedYrObj.components.length === 0) {
+                                  // Combine existing components with any selected other add-on fee items for real-time calculation
+                                  const baseComps: any[] = (selectedYrObj?.components || []).map((c: any) => ({ ...c }));
+                                  const baseCompNames = new Set(baseComps.map((c: any) => (c.category || '').toLowerCase().replace(/[^a-z0-9]/g, '')));
+
+                                  selectedAddonFees.forEach(addon => {
+                                    const aNorm = addon.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                                    if (!baseCompNames.has(aNorm)) {
+                                      baseComps.push({
+                                        category: addon.name,
+                                        amount: Number(addon.amount) || 0,
+                                        paid: 0,
+                                        isAddon: true
+                                      });
+                                    }
+                                  });
+
+                                  if (baseComps.length === 0) {
                                     return (
                                       <tr>
                                         <td colSpan={5} className="py-6 text-center text-slate-400 text-xs italic">
@@ -4273,7 +4328,7 @@ export default function FinanceDashboard() {
                                   // Auto-calculate sequential deduction across components for the year
                                   let enteredAmount = Math.max(0, Number(feeForm.amount) || 0);
 
-                                  return selectedYrObj.components.map((comp: any, idx: number) => {
+                                  return baseComps.map((comp: any, idx: number) => {
                                     const cAmt = Number(comp.amount) || 0;
                                     const cPd = Number(comp.paid) || 0;
                                     const cDue = Math.max(0, cAmt - cPd);
@@ -4284,10 +4339,15 @@ export default function FinanceDashboard() {
                                     const pendingAfter = Math.max(0, cDue - deductForThisComp);
 
                                     return (
-                                      <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                                      <tr key={idx} className={`transition-colors ${comp.isAddon ? 'bg-amber-50/40 hover:bg-amber-50/70' : 'hover:bg-slate-50/80'}`}>
                                         <td className="py-3 px-4">
                                           <div className="flex items-center gap-2">
                                             <span className="text-slate-900 font-bold text-sm">{comp.category}</span>
+                                            {comp.isAddon && (
+                                              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
+                                                Add-on
+                                              </span>
+                                            )}
                                           </div>
                                         </td>
                                         <td className="py-3 px-3 text-right font-mono font-bold text-slate-700 text-sm">
@@ -4313,66 +4373,79 @@ export default function FinanceDashboard() {
                           </div>
                         </div>
 
-                        {/* Other Fees (Kit, Uniform, Tie, Books & Add-ons) */}
-                        <div className="bg-gradient-to-r from-amber-50/60 via-slate-50 to-orange-50/60 p-3.5 rounded-2xl border border-amber-200/80 space-y-2.5">
-                          <div className="flex justify-between items-center">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
-                              <Layers className="w-3.5 h-3.5 text-amber-600" />
-                              Other Fees (Kit, Uniform, Tie & Student Add-ons)
-                            </span>
-                            <span className="text-[10px] font-bold text-amber-700">Click to select item</span>
+                        {/* Other Fees (Kit, Uniform, Tie, Books & Add-ons) Multi-Select Launcher */}
+                        <div className="bg-gradient-to-r from-amber-50/70 via-slate-50 to-orange-50/70 p-3.5 rounded-2xl border border-amber-200/90 space-y-3">
+                          <div className="flex flex-wrap justify-between items-center gap-2">
+                            <div>
+                              <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                                <Layers className="w-3.5 h-3.5 text-amber-600" />
+                                Other Fees & Student Add-ons (Kit, Uniform, Tie, Books)
+                              </span>
+                              <span className="text-[11px] text-slate-500 font-semibold block mt-0.5">
+                                Select single or multiple add-on charges to include in this collection
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOtherFeesSearch("");
+                                setIsOtherFeesModalOpen(true);
+                              }}
+                              className="px-3.5 py-1.5 rounded-xl text-xs font-black bg-amber-500 hover:bg-amber-600 text-white shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              {selectedAddonFees.length > 0
+                                ? `Manage Other Fees (${selectedAddonFees.length} Selected)`
+                                : "+ Select Other Fees / Add-ons"}
+                            </button>
                           </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            {allAvailableCategories
-                              .filter((c: any) => ['Kit/Uniform', 'Facility/Lab', 'Fine/Penalty'].includes(c.type) || ['tie', 'uniform', 'blazer', 'bag', 'book', 'transport'].some(k => (c.code || '').includes(k) || (c.name || '').toLowerCase().includes(k)))
-                              .map((cat: any) => {
-                                const isSelected = feeForm.category === cat.code || feeForm.categoryName?.toLowerCase() === cat.name.toLowerCase();
-                                return (
+
+                          {/* Selected Addon Pills / Summary */}
+                          {selectedAddonFees.length > 0 ? (
+                            <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-amber-100">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-amber-800">
+                                Selected ({selectedAddonFees.length}):
+                              </span>
+                              {selectedAddonFees.map(item => (
+                                <span
+                                  key={item.code}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-amber-900 text-xs font-bold shadow-2xs"
+                                >
+                                  <span>{item.name}</span>
+                                  <span className="font-mono text-emerald-700 font-black">
+                                    ₹{Number(item.amount || 0).toLocaleString('en-IN')}
+                                  </span>
                                   <button
-                                    key={`other_${cat.code}`}
                                     type="button"
-                                    onClick={() => {
-                                      const autoAmt = cat.due && cat.due > 0 ? String(cat.due) : (cat.defaultAmount && cat.defaultAmount > 0 ? String(cat.defaultAmount) : feeForm.amount);
-                                      setFeeForm(prev => ({
-                                        ...prev,
-                                        category: cat.code,
-                                        categoryName: cat.name,
-                                        amount: autoAmt
-                                      }));
-                                    }}
-                                    className={`p-2 rounded-xl text-left transition-all border cursor-pointer ${
-                                      isSelected
-                                        ? "bg-amber-600 text-white border-amber-700 shadow-xs"
-                                        : "bg-white text-slate-800 border-amber-200/80 hover:border-amber-400 hover:bg-amber-50/40 shadow-2xs"
-                                    }`}
+                                    onClick={() => setSelectedAddonFees(prev => prev.filter(x => x.code !== item.code))}
+                                    className="p-0.5 hover:bg-amber-100 rounded-full text-slate-400 hover:text-rose-600 cursor-pointer ml-0.5"
+                                    title={`Remove ${item.name}`}
                                   >
-                                    <div className="flex justify-between items-center gap-1">
-                                      <span className="text-[11px] font-black truncate">{cat.name}</span>
-                                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md whitespace-nowrap ${
-                                        isSelected ? 'bg-amber-700 text-white' : 'bg-amber-100 text-amber-900'
-                                      }`}>
-                                        ₹{Number(cat.defaultAmount || 0).toLocaleString('en-IN')}
-                                      </span>
-                                    </div>
-                                    <div className="flex justify-between items-center mt-1">
-                                      <span className={`text-[8.5px] font-semibold ${isSelected ? 'text-amber-100' : 'text-slate-400'}`}>
-                                        {cat.due && cat.due > 0 ? `Due: ₹${cat.due.toLocaleString('en-IN')}` : 'One-Time Rate'}
-                                      </span>
-                                      {isSelected ? (
-                                        <span className="text-[8.5px] font-black text-amber-200">Active</span>
-                                      ) : null}
-                                    </div>
+                                    <X className="w-3 h-3" />
                                   </button>
-                                );
-                              })}
-                          </div>
+                                </span>
+                              ))}
+                              <button
+                                type="button"
+                                onClick={() => setSelectedAddonFees([])}
+                                className="text-[10px] font-bold text-rose-600 hover:text-rose-700 underline cursor-pointer ml-1"
+                              >
+                                Clear all
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="text-[11px] font-medium text-slate-400 italic">
+                              No add-ons selected. Click &quot;+ Select Other Fees / Add-ons&quot; to choose uniform, tie, kit, bag, etc.
+                            </div>
+                          )}
                         </div>
 
                         {/* Year Due Summary & Real-Time Amount Deduction Calculation */}
                         {(() => {
                           const payingAmountNum = Math.max(0, Number(feeForm.amount) || 0);
                           const remainingYearDue = Math.max(0, currentYrDue - payingAmountNum);
-                          const remainingTotalDue = Math.max(0, dueTotal - payingAmountNum);
+                          const effectiveDueTotal = dueTotal + addonGrossAdd;
+                          const remainingTotalDue = Math.max(0, effectiveDueTotal - payingAmountNum);
 
                           return (
                             <div className="bg-gradient-to-br from-slate-50 via-indigo-50/20 to-emerald-50/20 p-5 rounded-2xl border-2 border-indigo-100 space-y-4 shadow-xs">
@@ -4389,11 +4462,11 @@ export default function FinanceDashboard() {
                                         ₹{currentYrDue.toLocaleString('en-IN')}
                                       </span>
                                     </div>
-                                    {dueTotal > 0 && dueTotal !== currentYrDue && (
+                                    {effectiveDueTotal > 0 && effectiveDueTotal !== currentYrDue && (
                                       <div className="border-l border-slate-200 pl-3">
                                         <span className="text-[10px] text-slate-500 font-semibold block">Total All Years Due</span>
                                         <span className="text-base font-bold font-mono text-slate-700">
-                                          ₹{dueTotal.toLocaleString('en-IN')}
+                                          ₹{effectiveDueTotal.toLocaleString('en-IN')}
                                         </span>
                                       </div>
                                     )}
@@ -4410,13 +4483,13 @@ export default function FinanceDashboard() {
                                       Fill Year {feeForm.year} Due (₹{currentYrDue.toLocaleString('en-IN')})
                                     </button>
                                   )}
-                                  {dueTotal > 0 && dueTotal !== currentYrDue && (
+                                  {effectiveDueTotal > 0 && effectiveDueTotal !== currentYrDue && (
                                     <button
                                       type="button"
-                                      onClick={() => setFeeForm(prev => ({ ...prev, amount: String(dueTotal) }))}
+                                      onClick={() => setFeeForm(prev => ({ ...prev, amount: String(effectiveDueTotal) }))}
                                       className="text-xs font-black px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer"
                                     >
-                                      Fill Total Balance (₹{dueTotal.toLocaleString('en-IN')})
+                                      Fill Total Balance (₹{effectiveDueTotal.toLocaleString('en-IN')})
                                     </button>
                                   )}
                                 </div>
@@ -4814,6 +4887,178 @@ export default function FinanceDashboard() {
                   </>
                 );
               })()}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================================================= */}
+      {/* MODAL: OTHER FEES & STUDENT ADD-ONS MULTI-SELECT POPUP                    */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {isOtherFeesModalOpen && (
+          <div className="fixed inset-0 z-60 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[88vh]"
+            >
+              {/* Header */}
+              <div className="px-6 py-4 bg-gradient-to-r from-amber-500 to-orange-600 text-white flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white/20 backdrop-blur-xs rounded-xl text-white">
+                    <Layers className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-base tracking-tight">Select Other Fees & Student Add-ons</h3>
+                    <p className="text-xs text-amber-100 font-medium">
+                      Choose items to include (Uniform, Blazer, Bag, Books, Tie, etc.)
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsOtherFeesModalOpen(false)}
+                  className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Search Bar */}
+              <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center gap-2 shrink-0">
+                <Search className="w-4 h-4 text-slate-400 shrink-0 ml-1" />
+                <input
+                  type="text"
+                  placeholder="Search fee item (e.g. Uniform, Tie, Blazer, Bag, Bus)..."
+                  value={otherFeesSearch}
+                  onChange={e => setOtherFeesSearch(e.target.value)}
+                  className="w-full bg-transparent text-xs font-bold text-slate-800 outline-none placeholder:text-slate-400"
+                />
+                {otherFeesSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setOtherFeesSearch("")}
+                    className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Selection Items Grid */}
+              <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                {(() => {
+                  // Build other categories pool
+                  const pool = [
+                    ...COURSE_CREATION_CATEGORIES.filter(c => ['Kit/Uniform', 'Facility/Lab', 'Fine/Penalty'].includes(c.type) || ['tie', 'uniform', 'blazer', 'bag', 'book', 'transport'].some(k => c.code.includes(k) || c.name.toLowerCase().includes(k))),
+                    ...categories.filter(c => !['Academic'].includes(c.type) && !COURSE_CREATION_CATEGORIES.some(x => x.code === c.code))
+                  ];
+
+                  // Deduplicate by code
+                  const uniqueMap = new Map<string, any>();
+                  pool.forEach(item => {
+                    const code = (item.code || item.name || '').toLowerCase().replace(/[^a-z0-9]/g, '_');
+                    if (!uniqueMap.has(code)) {
+                      uniqueMap.set(code, {
+                        code,
+                        name: item.name,
+                        amount: Number(item.defaultAmount || item.default_amount || 0),
+                        type: item.type || "Add-on"
+                      });
+                    }
+                  });
+
+                  const filteredItems = Array.from(uniqueMap.values()).filter(item =>
+                    !otherFeesSearch || item.name.toLowerCase().includes(otherFeesSearch.toLowerCase())
+                  );
+
+                  if (filteredItems.length === 0) {
+                    return (
+                      <div className="py-12 text-center text-slate-400 text-xs italic">
+                        No fee categories found matching &quot;{otherFeesSearch}&quot;.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {filteredItems.map(item => {
+                        const isSelected = selectedAddonFees.some(x => x.code === item.code);
+                        return (
+                          <div
+                            key={item.code}
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedAddonFees(prev => prev.filter(x => x.code !== item.code));
+                              } else {
+                                setSelectedAddonFees(prev => [...prev, item]);
+                              }
+                            }}
+                            className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                              isSelected
+                                ? "bg-amber-50/80 border-amber-500 shadow-xs"
+                                : "bg-white hover:bg-slate-50 border-slate-200"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-colors shrink-0 ${
+                                isSelected ? "bg-amber-600 border-amber-600 text-white" : "border-slate-300 bg-white"
+                              }`}>
+                                {isSelected && <Check className="w-3.5 h-3.5" />}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="font-extrabold text-xs text-slate-900 block truncate">
+                                  {item.name}
+                                </span>
+                                <span className="text-[10px] font-semibold text-slate-400 uppercase">
+                                  {item.type}
+                                </span>
+                              </div>
+                            </div>
+                            <span className="font-mono font-black text-sm text-slate-900 bg-slate-100 px-2 py-1 rounded-lg shrink-0">
+                              ₹{Number(item.amount || 0).toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center shrink-0">
+                <div>
+                  <span className="text-xs font-black text-slate-800">
+                    {selectedAddonFees.length} Item{selectedAddonFees.length === 1 ? '' : 's'} Selected
+                  </span>
+                  {selectedAddonFees.length > 0 && (
+                    <span className="text-xs font-mono font-black text-amber-700 ml-2">
+                      (Total Add-on: ₹{selectedAddonFees.reduce((sum, i) => sum + (Number(i.amount) || 0), 0).toLocaleString('en-IN')})
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {selectedAddonFees.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAddonFees([])}
+                      className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-rose-600 transition-colors cursor-pointer"
+                    >
+                      Deselect All
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsOtherFeesModalOpen(false)}
+                    className="px-5 py-2 rounded-xl text-xs font-black bg-amber-500 hover:bg-amber-600 text-white shadow-xs transition-colors cursor-pointer"
+                  >
+                    Apply Selected ({selectedAddonFees.length})
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}

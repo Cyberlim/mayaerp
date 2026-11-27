@@ -119,7 +119,8 @@ export async function POST(request: Request) {
       notes,
       collectedBy = "Admin Finance",
       receiptNumber,
-      receiptId
+      receiptId,
+      addonItems
     } = body;
 
     if (!studentId || !amount) {
@@ -161,6 +162,7 @@ export async function POST(request: Request) {
     if (!feesObj.years.find((y: any) => y.year === yrNum)) {
       feesObj.years.push({
         year: yrNum,
+        components: [],
         tuition: { total: 0, paid: 0 },
         exam:    { total: 0, paid: 0 },
         transport: { total: 0, paid: 0 },
@@ -170,6 +172,40 @@ export async function POST(request: Request) {
 
     // Sort years ascending so distribution flows Year 1 → Year 2 → Year 3 …
     feesObj.years.sort((a: any, b: any) => a.year - b.year);
+
+    // If any addon items (Uniform, Tie, Kit, Blazer, etc.) were passed from UI, ensure they exist in target year components
+    if (Array.isArray(addonItems) && addonItems.length > 0) {
+      const targetYearObj = feesObj.years.find((y: any) => y.year === yrNum);
+      if (targetYearObj) {
+        if (!Array.isArray(targetYearObj.components)) {
+          targetYearObj.components = [];
+        }
+        addonItems.forEach((ai: any) => {
+          const aiName = (ai.name || ai.title || ai.category || "Add-on").trim();
+          const aiCode = (ai.code || ai.category || aiName).toLowerCase().replace(/[^a-z0-9]/g, '');
+          const aiAmt = Number(ai.amount) || 0;
+          if (aiAmt > 0) {
+            const existingComp = targetYearObj.components.find((c: any) => {
+              const cNorm = (c.category || c.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              return cNorm === aiCode || cNorm === aiName.toLowerCase().replace(/[^a-z0-9]/g, '');
+            });
+            if (existingComp) {
+              if (Number(existingComp.amount || 0) < aiAmt) {
+                existingComp.amount = aiAmt;
+              }
+            } else {
+              targetYearObj.components.push({
+                category: aiName,
+                title: aiName,
+                amount: aiAmt,
+                paid: 0,
+                frequency: "One Time"
+              });
+            }
+          }
+        });
+      }
+    }
 
     // ─── Sequential Distribution ────────────────────────────────────────────
     // The payment starts at the specified year/component and fills each
