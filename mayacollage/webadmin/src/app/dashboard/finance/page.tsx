@@ -83,6 +83,7 @@ export const COURSE_CREATION_CATEGORIES = [
   { name: "Admission Fee", code: "admission", defaultAmount: 10000, type: "Academic" },
   { name: "Exam Fee", code: "exam", defaultAmount: 2500, type: "Academic" },
   { name: "Practical Fee", code: "practical", defaultAmount: 3000, type: "Academic" },
+  { name: "Student Kit Fee", code: "kit", defaultAmount: 3500, type: "Kit/Uniform" },
   { name: "Uniform Fee", code: "uniform", defaultAmount: 2200, type: "Kit/Uniform" },
   { name: "Blazer Fee", code: "blazer", defaultAmount: 2800, type: "Kit/Uniform" },
   { name: "Bag Fee", code: "bag", defaultAmount: 850, type: "Kit/Uniform" },
@@ -4412,9 +4413,19 @@ export default function FinanceDashboard() {
                                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-amber-900 text-xs font-bold shadow-2xs"
                                 >
                                   <span>{item.name}</span>
-                                  <span className="font-mono text-emerald-700 font-black">
-                                    ₹{Number(item.amount || 0).toLocaleString('en-IN')}
-                                  </span>
+                                  <div className="flex items-center bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                                    <span className="text-[10px] text-amber-700 font-bold mr-0.5">₹</span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={item.amount}
+                                      onChange={e => {
+                                        const newAmt = Math.max(0, Number(e.target.value) || 0);
+                                        setSelectedAddonFees(prev => prev.map(x => x.code === item.code ? { ...x, amount: newAmt } : x));
+                                      }}
+                                      className="w-14 bg-transparent font-mono font-black text-xs text-emerald-800 text-right outline-none"
+                                    />
+                                  </div>
                                   <button
                                     type="button"
                                     onClick={() => setSelectedAddonFees(prev => prev.filter(x => x.code !== item.code))}
@@ -4985,7 +4996,10 @@ export default function FinanceDashboard() {
                   return (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       {filteredItems.map(item => {
-                        const isSelected = selectedAddonFees.some(x => x.code === item.code);
+                        const selectedMatch = selectedAddonFees.find(x => x.code === item.code);
+                        const isSelected = Boolean(selectedMatch);
+                        const currentAmount = selectedMatch ? Number(selectedMatch.amount) : Number(item.amount || 0);
+
                         return (
                           <div
                             key={item.code}
@@ -4996,13 +5010,13 @@ export default function FinanceDashboard() {
                                 setSelectedAddonFees(prev => [...prev, item]);
                               }
                             }}
-                            className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                            className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
                               isSelected
                                 ? "bg-amber-50/80 border-amber-500 shadow-xs"
                                 : "bg-white hover:bg-slate-50 border-slate-200"
                             }`}
                           >
-                            <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
                               <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-colors shrink-0 ${
                                 isSelected ? "bg-amber-600 border-amber-600 text-white" : "border-slate-300 bg-white"
                               }`}>
@@ -5017,9 +5031,62 @@ export default function FinanceDashboard() {
                                 </span>
                               </div>
                             </div>
-                            <span className="font-mono font-black text-sm text-slate-900 bg-slate-100 px-2 py-1 rounded-lg shrink-0">
-                              ₹{Number(item.amount || 0).toLocaleString('en-IN')}
-                            </span>
+
+                            <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                              {/* Editable Price Input */}
+                              <div className="flex items-center bg-slate-100 border border-slate-200 focus-within:border-amber-500 focus-within:bg-white rounded-lg px-2 py-0.5 transition-colors">
+                                <span className="text-xs font-black text-slate-500 mr-1">₹</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={currentAmount}
+                                  onChange={e => {
+                                    const newAmt = Math.max(0, Number(e.target.value) || 0);
+                                    // Update in selectedAddonFees if selected, or select it automatically with custom amount
+                                    setSelectedAddonFees(prev => {
+                                      const exists = prev.some(x => x.code === item.code);
+                                      if (exists) {
+                                        return prev.map(x => x.code === item.code ? { ...x, amount: newAmt } : x);
+                                      } else {
+                                        return [...prev, { ...item, amount: newAmt }];
+                                      }
+                                    });
+                                  }}
+                                  className="w-18 bg-transparent text-right font-mono font-black text-xs text-slate-900 outline-none"
+                                />
+                              </div>
+
+                              {/* Edit Global Category button */}
+                              <button
+                                type="button"
+                                title="Edit master rate"
+                                onClick={() => {
+                                  const catToEdit = categories.find((c: any) =>
+                                    c.code === item.code || (c.name && item.name && c.name.toLowerCase() === item.name.toLowerCase())
+                                  ) || {
+                                    name: item.name,
+                                    code: item.code,
+                                    type: item.type || "Kit/Uniform",
+                                    defaultAmount: item.amount || 0,
+                                    frequency: "One-Time"
+                                  };
+                                  setEditingCategory(catToEdit);
+                                  setCategoryForm({
+                                    name: catToEdit.name || item.name,
+                                    code: catToEdit.code || item.code,
+                                    type: catToEdit.type || "Kit/Uniform",
+                                    defaultAmount: String(catToEdit.defaultAmount || item.amount || ""),
+                                    frequency: catToEdit.frequency || "One-Time",
+                                    isMandatory: Boolean(catToEdit.isMandatory),
+                                    description: catToEdit.description || ""
+                                  });
+                                  setIsCategoryModalOpen(true);
+                                }}
+                                className="p-1 rounded-md text-slate-400 hover:text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
